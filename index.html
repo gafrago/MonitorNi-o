@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas</title>
+    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas e Hidrometría</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
@@ -51,7 +51,7 @@
 
         /* 2. Panel Lateral y Formulario de Alta */
         #sidebar {
-            width: 360px;
+            width: 370px;
             background: #f4f6f7;
             border-right: 2px solid #bdc3c7;
             display: flex;
@@ -76,7 +76,7 @@
         }
         .kpi-card b {
             display: block;
-            font-size: 16px;
+            font-size: 15px;
             color: #f39c12;
         }
 
@@ -138,7 +138,7 @@
             align-self: flex-end;
         }
 
-        /* 3. Marcadores Tácticos Vectoriales por Institución (L.divIcon) */
+        /* 3. Marcadores Tácticos Vectoriales por Institución */
         .custom-div-icon {
             background: transparent;
             border: none;
@@ -167,7 +167,6 @@
             letter-spacing: 0.3px;
             text-shadow: 0 1px 2px rgba(0,0,0,0.6);
         }
-        /* Punto indicador del Estado SCI en el borde del pin */
         .pin-tactico .estado-dot {
             position: absolute;
             top: -3px;
@@ -179,7 +178,6 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.5);
         }
 
-        /* Etiqueta de Fuerza en las tarjetas del panel lateral */
         .badge-fuerza {
             display: inline-block;
             color: #fff;
@@ -194,15 +192,15 @@
         .info.legend {
             background: rgba(255, 255, 255, 0.96);
             padding: 10px 14px;
-            font-size: 11.5px;
-            line-height: 19px;
+            font-size: 11px;
+            line-height: 18px;
             color: #333;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.25);
         }
         .info.legend i {
-            width: 13px;
-            height: 13px;
+            width: 12px;
+            height: 12px;
             float: left;
             margin-right: 8px;
             margin-top: 2px;
@@ -211,7 +209,7 @@
         }
         .legend-divider {
             border-top: 1px solid #ddd;
-            margin: 6px 0;
+            margin: 5px 0;
         }
     </style>
 </head>
@@ -241,23 +239,23 @@
         <div class="kpi-box">
             <div class="kpi-card">
                 <b id="kpi-unidades">0</b>
-                Medios en Pantalla
+                Medios / Inc.
             </div>
             <div class="kpi-card">
                 <b id="kpi-efectivos">0</b>
-                Efectivos Afectados
+                Efectivos / Pers.
             </div>
         </div>
 
         <!-- Formulario Desplegable para Alta en Vivo -->
         <details class="form-panel" id="panel-alta">
-            <summary>➕ Desplegar Nuevo Recurso / Patrulla</summary>
+            <summary>➕ Registrar Recurso o Calle Anegada</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
                 <small style="color: #2980b9; font-weight: bold;">
-                    💡 Tip: Hacé clic en cualquier punto del mapa para capturar las coordenadas automáticamente.
+                    💡 Hacé clic en cualquier punto del mapa para capturar lat/lon automáticamente.
                 </small>
 
-                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla Radar / Grupo Electrógeno)" required />
+                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla / Corte Calle Anegada)" required />
 
                 <div style="display: flex; gap: 6px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
@@ -275,31 +273,31 @@
                 </div>
 
                 <div style="display: flex; gap: 6px;">
-                    <input type="text" id="nuevo-tipo" placeholder="Especialidad (ej. Com/Rescate)" style="flex: 2;" required />
-                    <input type="number" id="nuevos-efectivos" placeholder="Efectivos" min="1" value="4" style="flex: 1;" required />
+                    <input type="text" id="nuevo-tipo" placeholder="Tipo (ej. Anegamiento / Rescate)" style="flex: 2;" required />
+                    <input type="number" id="nuevos-efectivos" placeholder="Personal" min="0" value="4" style="flex: 1;" required />
                 </div>
 
-                <input type="text" id="nuevo-sector" placeholder="Zona / Sector (ej. Ribera Barranqueras)" required />
-                <textarea id="nueva-tarea" rows="2" placeholder="Tarea u orden asignada..." required></textarea>
+                <input type="text" id="nuevo-sector" placeholder="Sector (ej. Av. Soberanía y Alberdi)" required />
+                <textarea id="nueva-tarea" rows="2" placeholder="Detalle de novedad o tarea asignada..." required></textarea>
 
                 <div class="coords-row">
-                    <input type="number" step="any" id="nueva-lat" placeholder="Latitud (Clic mapa)" required />
-                    <input type="number" step="any" id="nueva-lon" placeholder="Longitud (Clic mapa)" required />
+                    <input type="number" step="any" id="nueva-lat" placeholder="Latitud" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Longitud" required />
                 </div>
 
-                <button type="submit" class="btn-submit">📍 Registrar y Desplegar en Mapa</button>
+                <button type="submit" class="btn-submit">📍 Desplegar en Mapa</button>
             </form>
         </details>
 
         <!-- Controles de Filtro -->
-        <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución:</label>
+        <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución / Organismo:</label>
         <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
-            <option value="FAA">🟦 Fuerza Aérea Argentina (FAA)</option>
-            <option value="EA">🟩 Ejército Argentino (EA)</option>
-            <option value="PNA">ネイビー Prefectura Naval (PNA)</option>
-            <option value="GN">🌲 Gendarmería Nacional (GN)</option>
-            <option value="DC">🟧 Defensa Civil (DC)</option>
+            <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
+            <option value="EA">Ejército Argentino (EA)</option>
+            <option value="PNA">Prefectura Naval (PNA)</option>
+            <option value="GN">Gendarmería Nacional (GN)</option>
+            <option value="DC">Defensa Civil (DC)</option>
         </select>
 
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Estado SCI:</label>
@@ -313,7 +311,7 @@
         <!-- Contenedor dinámico de tarjetas -->
         <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
 
-        <button class="btn-reset" onclick="restaurarDatosIniciales()">🔄 Restaurar padrón original de prueba</button>
+        <button class="btn-reset" onclick="restaurarDatosIniciales()">🔄 Restaurar padrón original</button>
     </div>
 
     <!-- Mapa -->
@@ -332,12 +330,11 @@
     };
 
     const COLOR_ESTADO_SCI = {
-        "ASIGNADO": "#22c55e",      // Verde
-        "DISPONIBLE": "#eab308",    // Amarillo
-        "NO_DISPONIBLE": "#ef4444"  // Rojo
+        "ASIGNADO": "#22c55e",
+        "DISPONIBLE": "#eab308",
+        "NO_DISPONIBLE": "#ef4444"
     };
 
-    // Generador de Pin Táctico Vectorial para Leaflet
     function crearIconoTactico(institucion, estado) {
         const conf = ESTILOS_INSTITUCION[institucion] || { color: "#64748b", nombre: institucion };
         const colorDot = COLOR_ESTADO_SCI[estado] || "#94a3b8";
@@ -347,7 +344,7 @@
             html: `
                 <div class="pin-tactico" style="background-color: ${conf.color};">
                     <span class="sigla">${institucion}</span>
-                    <div class="estado-dot" style="background-color: ${colorDot};" title="Estado SCI: ${estado}"></div>
+                    <div class="estado-dot" style="background-color: ${colorDot};" title="Estado: ${estado}"></div>
                 </div>
             `,
             iconSize: [38, 38],
@@ -356,7 +353,7 @@
         });
     }
 
-    // --- B. RELOJ EN TIEMPO REAL (Hora Local y UTC/Zulú) ---
+    // --- B. RELOJ EN TIEMPO REAL ---
     function actualizarReloj() {
         const ahora = new Date();
         const local = ahora.toLocaleString('es-AR', { hour12: false });
@@ -367,23 +364,23 @@
     actualizarReloj();
 
     // --- C. INICIALIZAR MAPA BASE ---
-    const map = L.map('map').setView([-27.45, -58.91], 11);
+    const map = L.map('map').setView([-27.46, -58.90], 11);
 
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap | Caudales: <a href="https://open-meteo.com/">Open-Meteo (CC BY 4.0)</a> | Satélite: NASA GIBS',
+        attribution: '© OpenStreetMap | Hidrometría: PNA/INA | Satélite: NASA GIBS',
         maxZoom: 18
     }).addTo(map);
 
-    // --- D. CAPA SATELITAL DE LLUVIA EN VIVO (NASA GIBS WMS - IMERG) ---
+    // --- D. CAPA SATELITAL DE LLUVIA (NASA GIBS WMS) ---
     const nasaLluviaLayer = L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
         layers: 'IMERG_Precipitation_Rate',
         format: 'image/png',
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.50,
         attribution: 'NASA EOSDIS GIBS'
     });
 
-    // --- E. ZONAS DE RIESGO ESTRUCTURADAS EN GEOJSON ---
+    // --- E. ZONAS DE RIESGO GEOJSON ---
     const zonasRiesgoGeoJSON = {
         "type": "FeatureCollection",
         "features": [
@@ -393,7 +390,7 @@
                     "nombre": "Ribera Barranqueras - Antequera (Chaco)",
                     "nivel_riesgo": "ALTO",
                     "color": "#e74c3c",
-                    "detalle": "Terreno bajo aluvial. Prioridad de evacuación y monitoreo de defensas."
+                    "detalle": "Terreno bajo aluvial. Monitoreo constante de defensas."
                 },
                 "geometry": {
                     "type": "Polygon",
@@ -407,7 +404,7 @@
             {
                 "type": "Feature",
                 "properties": {
-                    "nombre": "Costanera y Ribera Norte (Corrientes)",
+                    "nombre": "Costanera y Zona Baja (Corrientes)",
                     "nivel_riesgo": "MEDIO",
                     "color": "#f39c12",
                     "detalle": "Zona de prevención por escurrimiento y crecida del Paraná."
@@ -434,15 +431,77 @@
             };
         },
         onEachFeature: function(feature, layer) {
-            layer.bindPopup(`
-                <b>Zona:</b> ${feature.properties.nombre}<br>
-                <b>Riesgo:</b> ${feature.properties.nivel_riesgo}<br>
-                <b>Detalle:</b> ${feature.properties.detalle}
-            `);
+            layer.bindPopup(`<b>Zona:</b> ${feature.properties.nombre}<br><b>Riesgo:</b> ${feature.properties.nivel_riesgo}<br>${feature.properties.detalle}`);
         }
     }).addTo(map);
 
-    // --- F. MODELO DE DATOS SCI CON LAS 5 INSTITUCIONES PRECARGADAS ---
+    // --- F. ESTACIONES HIDROMÉTRICAS EN METROS (NIVELES Y UMBRALES) ---
+    const estacionesHidrometricas = [
+        {
+            nombre: "Puerto Barranqueras (Río Paraná)",
+            coords: [-27.4850, -58.9320],
+            altura_actual: 5.85,
+            alerta: 6.00,
+            evacuacion: 6.50,
+            tendencia: "Creciendo (+5 cm/día)"
+        },
+        {
+            nombre: "Puerto Corrientes (Río Paraná)",
+            coords: [-27.4680, -58.8340],
+            altura_actual: 6.20,
+            alerta: 6.50,
+            evacuacion: 7.00,
+            tendencia: "Estacionario"
+        },
+        {
+            nombre: "Isla del Cerrito (Confluencia)",
+            coords: [-27.2830, -58.6830],
+            altura_actual: 5.40,
+            alerta: 5.50,
+            evacuacion: 6.00,
+            tendencia: "Creciendo (+8 cm/día)"
+        }
+    ];
+
+    const grupoHidrometrosMts = L.layerGroup().addTo(map);
+
+    function renderizarHidrometrosMts() {
+        grupoHidrometrosMts.clearLayers();
+
+        estacionesHidrometricas.forEach(est => {
+            let colorHidro = "#22c55e"; // Normal
+            let estadoAlertaHidro = "Normal";
+
+            if (est.altura_actual >= est.evacuacion) {
+                colorHidro = "#ef4444"; // Evacuación
+                estadoAlertaHidro = "EVACUACIÓN (Desborde)";
+            } else if (est.altura_actual >= est.alerta) {
+                colorHidro = "#eab308"; // Alerta
+                estadoAlertaHidro = "ALERTA";
+            }
+
+            const marker = L.circleMarker(est.coords, {
+                radius: 12,
+                fillColor: colorHidro,
+                color: "#ffffff",
+                weight: 2.5,
+                fillOpacity: 0.95
+            }).addTo(grupoHidrometrosMts);
+
+            marker.bindPopup(`
+                <div style="border-bottom: 2px solid ${colorHidro}; padding-bottom: 3px; margin-bottom: 5px;">
+                    <b>🌊 ${est.nombre}</b>
+                </div>
+                <b>Altura Actual:</b> <span style="font-size: 14px; color: ${colorHidro}; font-weight: bold;">${est.altura_actual} m</span><br>
+                <b>Estado:</b> <span style="color: ${colorHidro}; font-weight: bold;">${estadoAlertaHidro}</span><br>
+                <b>Umbral Alerta:</b> ${est.alerta} m | <b>Evacuación:</b> ${est.evacuacion} m<br>
+                <b>Tendencia:</b> ${est.tendencia}
+            `);
+        });
+    }
+    renderizarHidrometrosMts();
+
+    // --- G. PADRÓN DE RECURSOS E INCIDENTES (INCLUYE CALLES ANEGADAS) ---
     const datosInicialesSCI = {
         "type": "FeatureCollection",
         "features": [
@@ -452,17 +511,14 @@
                     "id": "REC-01",
                     "nombre": "Escalón Comunicaciones Móvil VHF/HF",
                     "institucion": "FAA",
-                    "tipo": "Comunicaciones e Informática",
+                    "tipo": "Comunicaciones",
                     "estado": "ASIGNADO",
                     "efectivos": 4,
                     "sector": "Puente Gral. Belgrano / Cabecera Chaco",
-                    "tarea_asignada": "Asegurar enlace radioeléctrico redundante para el Puesto Comando Móvil",
+                    "tarea_asignada": "Enlace radioeléctrico redundante para Comando",
                     "hora_reporte": "2026-10-21T22:45:00-03:00"
                 },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [-58.8850, -27.4650]
-                }
+                "geometry": { "type": "Point", "coordinates": [-58.8850, -27.4650] }
             },
             {
                 "type": "Feature",
@@ -474,13 +530,10 @@
                     "estado": "ASIGNADO",
                     "efectivos": 12,
                     "sector": "Isla del Cerrito",
-                    "tarea_asignada": "Evacuación preventiva de familias ribereñas y traslado de ganado",
+                    "tarea_asignada": "Evacuación preventiva de familias ribereñas",
                     "hora_reporte": "2026-10-21T21:30:00-03:00"
                 },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [-58.6833, -27.2917]
-                }
+                "geometry": { "type": "Point", "coordinates": [-58.6833, -27.2917] }
             },
             {
                 "type": "Feature",
@@ -488,17 +541,14 @@
                     "id": "REC-03",
                     "nombre": "Guardacostas y Patrulla Fluvial",
                     "institucion": "PNA",
-                    "tipo": "Seguridad Náutica y Rescate",
+                    "tipo": "Rescate Náutico",
                     "estado": "DISPONIBLE",
                     "efectivos": 8,
                     "sector": "Puerto Barranqueras",
-                    "tarea_asignada": "En apresto para relevamiento hidrométrico y rescate fluvial",
+                    "tarea_asignada": "Apresto para patrullaje fluvial y rescate",
                     "hora_reporte": "2026-10-21T23:00:00-03:00"
                 },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [-58.9320, -27.4850]
-                }
+                "geometry": { "type": "Point", "coordinates": [-58.9320, -27.4850] }
             },
             {
                 "type": "Feature",
@@ -506,42 +556,36 @@
                     "id": "REC-04",
                     "nombre": "Patrulla Seguridad Vial RN 16",
                     "institucion": "GN",
-                    "tipo": "Control de Ruta y Tránsito",
+                    "tipo": "Control de Tránsito",
                     "estado": "ASIGNADO",
                     "efectivos": 6,
-                    "sector": "Acceso Norte / RN 16 km 14",
-                    "tarea_asignada": "Control de transitabilidad por anegamiento de banquinas y escolta logística",
+                    "sector": "RN 16 km 14",
+                    "tarea_asignada": "Control por acumulación de agua en banquinas",
                     "hora_reporte": "2026-10-21T23:10:00-03:00"
                 },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [-58.9950, -27.4120]
-                }
+                "geometry": { "type": "Point", "coordinates": [-58.9950, -27.4120] }
             },
             {
                 "type": "Feature",
                 "properties": {
                     "id": "REC-05",
-                    "nombre": "Base de Alojamiento y Asistencia",
+                    "nombre": "Calle Anegada / Corte Preventivo",
                     "institucion": "DC",
-                    "tipo": "Asistencia Humanitaria y Sanidad",
+                    "tipo": "Anegamiento Urbano",
                     "estado": "ASIGNADO",
-                    "efectivos": 10,
-                    "sector": "Puerto Vilelas",
-                    "tarea_asignada": "Recepción de familias autoevacuadas y distribución de raciones calientes",
-                    "hora_reporte": "2026-10-21T23:20:00-03:00"
+                    "efectivos": 3,
+                    "sector": "Av. Soberanía Nacional y Av. Alberdi",
+                    "tarea_asignada": "Corte total de calzada por 40 cm de agua acumulada",
+                    "hora_reporte": "2026-10-21T23:40:00-03:00"
                 },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [-58.9390, -27.5130]
-                }
+                "geometry": { "type": "Point", "coordinates": [-58.9830, -27.4710] }
             }
         ]
     };
 
-    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v2')) || structuredClone(datosInicialesSCI);
+    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v3')) || structuredClone(datosInicialesSCI);
 
-    // --- G. SINCRONIZACIÓN DE PANEL LATERAL, CONTADORES Y PINES PERSONALIZADOS ---
+    // --- H. SINCRONIZACIÓN DE PANEL Y PINES ---
     const capaRecursosSCI = L.layerGroup().addTo(map);
 
     function renderizarRecursosSCI() {
@@ -569,7 +613,6 @@
                 const estiloFuerza = ESTILOS_INSTITUCION[p.institucion] || { color: "#64748b", nombre: p.institucion };
                 const colorEstado = COLOR_ESTADO_SCI[p.estado] || "#94a3b8";
 
-                // 1. Crear marcador en el mapa con el ícono propio de la Fuerza
                 const marker = L.marker([coords[1], coords[0]], {
                     icon: crearIconoTactico(p.institucion, p.estado)
                 }).addTo(capaRecursosSCI);
@@ -579,16 +622,14 @@
                         <span class="badge-fuerza" style="background-color: ${estiloFuerza.color};">${p.institucion}</span>
                         <b>${p.nombre}</b>
                     </div>
-                    <b>Institución:</b> ${estiloFuerza.nombre}<br>
-                    <b>ID Recurso:</b> ${p.id} | <b>Efectivos:</b> ${p.efectivos}<br>
-                    <b>Especialidad:</b> ${p.tipo}<br>
+                    <b>Organismo:</b> ${estiloFuerza.nombre}<br>
+                    <b>Tipo:</b> ${p.tipo} | <b>Personal:</b> ${p.efectivos}<br>
                     <b>Estado SCI:</b> <span style="color:${colorEstado}; font-weight:bold;">● ${p.estado}</span><br>
                     <b>Sector:</b> ${p.sector}<br>
-                    <b>Tarea:</b> ${p.tarea_asignada}<br>
-                    <b>Último reporte:</b> ${p.hora_reporte}
+                    <b>Detalle:</b> ${p.tarea_asignada}<br>
+                    <b>Reporte:</b> ${p.hora_reporte}
                 `);
 
-                // 2. Crear tarjeta en el Panel Lateral con distintivo de Fuerza y borde de Estado
                 const tarjeta = document.createElement('div');
                 tarjeta.style = `background: white; border-left: 5px solid ${colorEstado}; padding: 8px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer; font-size: 12px;`;
                 tarjeta.innerHTML = `
@@ -596,7 +637,7 @@
                         <span class="badge-fuerza" style="background-color: ${estiloFuerza.color};">${p.institucion}</span>
                         <strong>${p.nombre}</strong>
                     </div>
-                    <span>Estado: <b>${p.estado}</b> | Efectivos: <b>${p.efectivos}</b></span><br>
+                    <span>Estado: <b>${p.estado}</b> | Personal: <b>${p.efectivos}</b></span><br>
                     <span style="color: #555;">📍 ${p.sector}</span><br>
                     <small style="color: #7f8c8d;">🕒 ${p.hora_reporte.slice(11,16)} hs - ${p.tarea_asignada}</small>
                 `;
@@ -612,7 +653,7 @@
         document.getElementById('kpi-efectivos').textContent = totalEfectivos;
     }
 
-    // --- H. CAPTURA DE COORDENADAS CON CLIC EN EL MAPA Y ALTA EN VIVO ---
+    // --- I. CAPTURA DE COORDENADAS CON CLIC ---
     let marcadorTemporal = null;
 
     map.on('click', function(e) {
@@ -631,7 +672,7 @@
             color: '#e67e22',
             fillColor: '#f39c12',
             fillOpacity: 0.9
-        }).addTo(map).bindPopup("📍 Coordenada capturada para nuevo recurso").openPopup();
+        }).addTo(map).bindPopup("📍 Coordenada capturada").openPopup();
     });
 
     function agregarRecursoEnVivo(event) {
@@ -658,14 +699,11 @@
                 "tarea_asignada": document.getElementById('nueva-tarea').value,
                 "hora_reporte": timestampLocal
             },
-            "geometry": {
-                "type": "Point",
-                "coordinates": [lon, lat]
-            }
+            "geometry": { "type": "Point", "coordinates": [lon, lat] }
         };
 
         recursosGeoJSON.features.unshift(nuevoRecurso);
-        localStorage.setItem('cop_recursos_sci_v2', JSON.stringify(recursosGeoJSON));
+        localStorage.setItem('cop_recursos_sci_v3', JSON.stringify(recursosGeoJSON));
 
         document.getElementById('form-recurso').reset();
         if (marcadorTemporal) {
@@ -678,54 +716,20 @@
     }
 
     function restaurarDatosIniciales() {
-        localStorage.removeItem('cop_recursos_sci_v2');
+        localStorage.removeItem('cop_recursos_sci_v3');
         recursosGeoJSON = structuredClone(datosInicialesSCI);
         renderizarRecursosSCI();
     }
 
     renderizarRecursosSCI();
 
-    // --- I. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
-    const grupoHidrometria = L.layerGroup().addTo(map);
-
-    async function cargarCaudalRio() {
-        const lat = -27.475;
-        const lon = -58.865;
-        const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lon}&daily=river_discharge&forecast_days=3`;
-
-        try {
-            const respuesta = await fetch(url);
-            const datos = await respuesta.json();
-            const caudalHoy = datos.daily.river_discharge[0];
-            const caudalManana = datos.daily.river_discharge[1];
-            const fechaHoy = datos.daily.time[0];
-
-            L.circleMarker([lat, lon], {
-                radius: 9,
-                fillColor: "#0055ff",
-                color: "#ffffff",
-                weight: 2,
-                fillOpacity: 0.9
-            }).addTo(grupoHidrometria).bindPopup(`
-                <b>🌊 Telemetría Hídrica (Open-Meteo GloFAS)</b><br>
-                <b>Punto:</b> Eje Paraná (Barranqueras / Corrientes)<br>
-                <b>Fecha:</b> ${fechaHoy}<br>
-                <b>Caudal actual estimado:</b> ${caudalHoy} m³/s<br>
-                <b>Pronóstico 24 hs:</b> ${caudalManana} m³/s
-            `);
-        } catch (error) {
-            console.error("Error al obtener datos de Open-Meteo Flood API:", error);
-        }
-    }
-    cargarCaudalRio();
-
-    // --- J. CONTROL DE CAPAS Y LEYENDA MULTIFUERZA ---
+    // --- J. CONTROL DE CAPAS Y LEYENDA ---
     L.control.layers(
         { "Mapa Base (OpenStreetMap)": osmBase },
         {
-            "Recursos Desplegados (SCI)": capaRecursosSCI,
+            "Recursos e Incidentes (SCI)": capaRecursosSCI,
+            "Hidrómetros (Nivel en Metros)": grupoHidrometrosMts,
             "Zonas de Riesgo (GeoJSON)": capaGeoJSON,
-            "Telemetría Caudal (Open-Meteo)": grupoHidrometria,
             "Lluvia Satelital IMERG (NASA GIBS)": nasaLluviaLayer
         },
         { collapsed: false }
@@ -740,12 +744,13 @@
             <i style="background: #4d7c0f; border-radius: 3px;"></i> <b>EA</b> - Ejército Argentino<br>
             <i style="background: #1e3a8a; border-radius: 3px;"></i> <b>PNA</b> - Prefectura Naval<br>
             <i style="background: #15803d; border-radius: 3px;"></i> <b>GN</b> - Gendarmería Nac.<br>
-            <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil<br>
+            <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil / Anegamientos<br>
             <div class="legend-divider"></div>
-            <strong>Riesgo Hídrico y Telemetría</strong><br>
-            <i style="background: #e74c3c"></i> Zona de Riesgo Alto<br>
-            <i style="background: #f39c12"></i> Zona de Prevención<br>
-            <i style="background: #0055ff; border-radius: 50%;"></i> Aforo Caudal Paraná (GloFAS)
+            <strong>Hidrometría y Riesgos</strong><br>
+            <i style="background: #22c55e; border-radius: 50%;"></i> Río Normal<br>
+            <i style="background: #eab308; border-radius: 50%;"></i> Río en Alerta<br>
+            <i style="background: #ef4444; border-radius: 50%;"></i> Río en Evacuación / Desborde<br>
+            <i style="background: #e74c3c"></i> Zona de Riesgo Alto
         `;
         return div;
     };
