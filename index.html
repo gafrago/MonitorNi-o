@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Monitor Operativo Total</title>
+    <title>COP Hídrico NEA - Monitor Operativo Total (con PDF)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Librerías para generar el PDF (jsPDF y autoTable) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
@@ -26,6 +31,12 @@
         .btn-submit { background-color: #27ae60; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 4px; }
         .btn-ruta { background-color: #8e44ad; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 4px; }
         
+        .btn-pdf { background-color: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-block; }
+        .btn-pdf:hover { background-color: #e74c3c; }
+
+        .smn-link { background-color: #2980b9; color: white; text-decoration: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .smn-link:hover { background-color: #3498db; }
+
         /* 3. Marcadores Tácticos y POIs */
         .custom-div-icon { background: transparent; border: none; }
         .pin-tactico { position: relative; width: 36px; height: 36px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.45); border: 2px solid #ffffff; }
@@ -41,8 +52,15 @@
 <body>
 
 <div id="top-banner">
-    <div><span class="badge-proto">Prototipo SCI</span><strong>MONITOR OPERATIVO HÍDRICO (COP)</strong></div>
-    <div id="reloj-operativo"></div>
+    <div>
+        <span class="badge-proto">Prototipo SCI</span>
+        <strong>MONITOR OPERATIVO HÍDRICO (COP)</strong>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span id="reloj-operativo" style="margin-right: 5px;"></span>
+        <a href="https://www.smn.gob.ar/alertas" target="_blank" rel="noopener" class="smn-link">⚠️ Alertas SMN</a>
+        <button onclick="generarSITREP()" class="btn-pdf">📄 Descargar SITREP (PDF)</button>
+    </div>
 </div>
 
 <div style="display: flex; flex: 1; overflow: hidden;">
@@ -115,7 +133,7 @@
     const map = L.map('map').setView([-27.45, -58.95], 11);
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
-    // --- 1. CAPA DE DEPARTAMENTOS (HOVER) ---
+    // --- 1. CAPA DE DEPARTAMENTOS ---
     const deptosGeoJSON = {
         "type": "FeatureCollection",
         "features": [
@@ -131,7 +149,6 @@
             }
         ]
     };
-
     const capaDeptos = L.geoJSON(deptosGeoJSON, {
         style: function(feature) { return { color: feature.properties.color, weight: 2, fillOpacity: 0.15 }; },
         onEachFeature: function(feature, layer) {
@@ -146,7 +163,7 @@
         }
     }).addTo(map);
 
-    // --- 2. RADAR METEOROLÓGICO EN VIVO (RAINVIEWER) ---
+    // --- 2. RADAR RAINVIEWER ---
     const grupoRadar = L.layerGroup().addTo(map);
     fetch('https://api.rainviewer.com/public/weather-maps.json')
         .then(res => res.json())
@@ -157,7 +174,7 @@
                     opacity: 0.65, attribution: 'Radar: RainViewer'
                 }).addTo(grupoRadar);
             }
-        }).catch(err => console.log("Error cargando radar:", err));
+        }).catch(e => console.log(e));
 
     // --- 3. HOSPITALES Y POIs ---
     const puntosInteresPOIs = [
@@ -172,7 +189,7 @@
         L.marker(poi.coords, { icon: poiIcon }).addTo(grupoPOIs).bindPopup(`<b>${poi.nombre}</b><br>Tipo: ${poi.tipo}`);
     });
 
-    // --- 4. RECURSOS Y CORTES DE RUTA (SCI) CON LOCALSTORAGE ---
+    // --- 4. RECURSOS SCI ---
     const ESTILOS_INSTITUCION = { "FAA": { color: "#0284c7" }, "EA": { color: "#4d7c0f" }, "PNA": { color: "#1e3a8a" }, "GN": { color: "#15803d" }, "DC": { color: "#ea580c" } };
 
     function crearIcono(inst, estado) {
@@ -190,8 +207,7 @@
         { id: "REC-01", inst: "FAA", nombre: "Comunicaciones Móvil", estado: "ASIGNADO", lat: -27.465, lon: -58.885, sector: "Puente Belgrano", efectivos: 4 },
         { id: "INC-01", inst: "VIALIDAD", nombre: "Corte por Agua", estado: "NO_DISPONIBLE", lat: -27.412, lon: -58.995, sector: "RN 16 km 14", efectivos: 0 }
     ];
-    
-    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v6')) || datosIniciales;
+    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v7')) || datosIniciales;
     const capaRecursos = L.layerGroup().addTo(map);
 
     function renderizarRecursos() {
@@ -236,17 +252,16 @@
             lat: parseFloat(document.getElementById('nueva-lat').value),
             lon: parseFloat(document.getElementById('nueva-lon').value),
             sector: document.getElementById('nuevo-sector').value,
-            efectivos: document.getElementById('nueva-institucion').value === 'VIALIDAD' ? 0 : 4
+            efectivos: document.getElementById('nueva-institucion').value === 'VIALIDAD' ? 0 : document.getElementById('nuevos-efectivos').value
         });
-        localStorage.setItem('cop_recursos_v6', JSON.stringify(recursos));
+        localStorage.setItem('cop_recursos_v7', JSON.stringify(recursos));
         document.getElementById('form-recurso').reset();
         renderizarRecursos();
     }
 
-    // --- 5. RUTEO TÁCTICO CON GEOCODIFICACIÓN Y CLIMA ---
+    // --- 5. RUTEO TÁCTICO ---
     const capaRutaActiva = L.layerGroup().addTo(map);
 
-    // Helper: Interpretar Clima
     function interpretarClimaWMO(codigo) {
         if(codigo <= 3) return { desc: "Despejado/Nublado", icono: "⛅" };
         if(codigo === 45 || codigo === 48) return { desc: "Niebla", icono: "🌫️" };
@@ -256,18 +271,14 @@
         return { desc: "Variable", icono: "🌡️" };
     }
 
-    // Helper: Geocodificar texto a Lat/Lon
     async function geocodificarTextoOCoordenadas(input) {
         const txt = input.trim();
-        const regexCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/;
-        if (regexCoords.test(txt)) return txt.split(',').map(Number); // Ya es lat,lon
-
-        // Si es texto, busca en OpenStreetMap agregando Chaco/Corrientes para precisión
+        if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(txt)) return txt.split(',').map(Number);
         const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(txt + ', Argentina')}&limit=1`;
         const resp = await fetch(url);
         const data = await resp.json();
         if (data && data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-        return null; // No encontrado
+        return null;
     }
 
     async function calcularRutaTactica() {
@@ -276,59 +287,102 @@
         const resDiv = document.getElementById('resultado-ruta');
 
         if (!origenStr || !destinoStr) return alert("Ingrese origen y destino.");
-        
         resDiv.style.display = 'block';
-        resDiv.innerHTML = "⏳ Geocodificando direcciones y trazando ruta...";
+        resDiv.innerHTML = "⏳ Geocodificando y trazando ruta...";
 
         try {
             const orig = await geocodificarTextoOCoordenadas(origenStr);
             const dest = await geocodificarTextoOCoordenadas(destinoStr);
 
-            if (!orig || !dest) {
-                resDiv.innerHTML = "❌ No se encontró la dirección exacta. Intente agregar ciudad (ej: 'Hospital Perrando, Resistencia').";
-                return;
-            }
+            if (!orig || !dest) { resDiv.innerHTML = "❌ Dirección no encontrada."; return; }
 
-            // Llamada a OSRM usando [longitud, latitud]
             const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${orig[1]},${orig[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
             const resp = await fetch(urlOSRM);
             const data = await resp.json();
 
-            if (!data.routes || data.routes.length === 0) {
-                resDiv.innerHTML = "❌ No hay ruta terrestre disponible entre estos puntos.";
-                return;
-            }
+            if (!data.routes || data.routes.length === 0) { resDiv.innerHTML = "❌ No hay ruta terrestre."; return; }
 
             const ruta = data.routes[0];
             const distKm = (ruta.distance / 1000).toFixed(1);
             const durMin = Math.round(ruta.duration / 60);
 
-            // Clima en el centro del trayecto
             const coordMedio = ruta.geometry.coordinates[Math.floor(ruta.geometry.coordinates.length / 2)];
             const urlMeteo = `https://api.open-meteo.com/v1/forecast?latitude=${coordMedio[1]}&longitude=${coordMedio[0]}&current=temperature_2m,weather_code&timezone=America%2FArgentina%2FBuenos_Aires`;
             const respMeteo = await fetch(urlMeteo);
             const dataMeteo = await respMeteo.json();
             const climaInfo = interpretarClimaWMO(dataMeteo.current.weather_code);
 
-            // Dibujar Ruta
             capaRutaActiva.clearLayers();
             const linea = L.geoJSON(ruta.geometry, { style: { color: "#8e44ad", weight: 6, opacity: 0.8 } }).addTo(capaRutaActiva);
-            
-            // Pines de inicio y fin
             L.marker(orig).addTo(capaRutaActiva).bindPopup("🏁 Origen");
             L.marker(dest).addTo(capaRutaActiva).bindPopup("📍 Destino");
-            
             map.fitBounds(linea.getBounds(), { padding: [50, 50] });
 
             resDiv.innerHTML = `
                 <b>✅ Ruta Operativa Trazada:</b><br>
                 📏 <b>Distancia:</b> ${distKm} km | ⏱️ <b>Demora:</b> ${durMin} min<br>
-                🌤️ <b>Clima en Ruta:</b> ${climaInfo.icono} ${climaInfo.desc} (${dataMeteo.current.temperature_2m}°C)
+                🌤️ <b>Clima:</b> ${climaInfo.icono} ${climaInfo.desc} (${dataMeteo.current.temperature_2m}°C)
             `;
-        } catch(e) {
-            console.error(e);
-            resDiv.innerHTML = "❌ Error procesando la ruta o el clima.";
+        } catch(e) { resDiv.innerHTML = "❌ Error procesando ruta."; }
+    }
+
+    // --- 6. EXPORTACIÓN A PDF (SITREP) ---
+    function generarSITREP() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Encabezado
+        doc.setFontSize(16);
+        doc.setTextColor(41, 128, 185); // Azul oscuro
+        doc.text("PARTE DIARIO OPERATIVO (SITREP)", 14, 20);
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Monitor Operativo Hídrico - NEA", 14, 26);
+        
+        const fechaActual = new Date().toLocaleString('es-AR');
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Fecha y Hora de Emisión: ${fechaActual}`, 14, 34);
+        
+        let startY = 44;
+
+        // Capturar y sumar datos de Ruta si hay una activa
+        const rutaDiv = document.getElementById('resultado-ruta');
+        if (rutaDiv && rutaDiv.style.display !== 'none' && rutaDiv.innerText.includes('✅')) {
+            doc.setFontSize(12);
+            doc.text("Información de Ruteo Táctico", 14, startY);
+            doc.setFontSize(10);
+            
+            // Limpiar emojis y saltos de línea para el PDF
+            let rutaLimpiada = rutaDiv.innerText.replace(/[✅📏⏱️🌤️]/g, '').replace(/\n/g, ' | ');
+            doc.text(rutaLimpiada, 14, startY + 6, { maxWidth: 180 });
+            startY += 18;
         }
+
+        // Título de la tabla
+        doc.setFontSize(12);
+        doc.text("Despliegue de Medios e Incidentes (SCI)", 14, startY);
+        
+        // Preparar datos para autoTable
+        const tablaDatos = recursos.map(r => [
+            r.inst,
+            r.nombre,
+            r.sector,
+            r.estado,
+            r.efectivos
+        ]);
+
+        doc.autoTable({
+            startY: startY + 5,
+            head: [['Fuerza', 'Recurso / Incidente', 'Sector', 'Estado', 'Efectivos']],
+            body: tablaDatos,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
+            styles: { fontSize: 9, cellPadding: 3 },
+            alternateRowStyles: { fillColor: [245, 247, 250] }
+        });
+        
+        // Descargar archivo
+        doc.save(`SITREP_Operativo_${new Date().getTime()}.pdf`);
     }
 
     // --- RELOJ ---
