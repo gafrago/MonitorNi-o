@@ -36,6 +36,8 @@ details.form-panel summary{font-weight:bold;font-size:13px;color:#1e293b;cursor:
 .corte-ruta-badge{background:#c0392b;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
 .radar-legend{position:absolute;bottom:30px;right:30px;z-index:1000;background:rgba(0,0,0,.82);color:#fff;padding:10px;border-radius:8px;font-size:12px;max-width:290px;line-height:1.5}
 .radar-legend a{color:#7fb3ff}
+#panel-rios{position:absolute;bottom:30px;left:12px;z-index:1000;background:rgba(0,0,0,.85);color:#fff;padding:10px;border-radius:8px;font-size:11.5px;width:285px;max-height:60vh;overflow-y:auto;line-height:1.45}
+#panel-rios input{background:#fff;border:none;border-radius:3px;padding:2px;font-size:11px}
 </style>
 </head>
 <body>
@@ -108,12 +110,17 @@ details.form-panel summary{font-weight:bold;font-size:13px;color:#1e293b;cursor:
   <div id="map-radar"></div>
   <div class="radar-legend">
     <b>⛈️ Visor Estratégico</b><br>
-    Use el panel de capas (arriba a la derecha) para alternar fuentes.<br>
+    <button id="rv-play" class="btn-pdf" style="padding:3px 8px">▶</button>
+    <input type="range" id="rv-slider" min="0" max="0" value="0" style="width:170px;vertical-align:middle">
+    <div>Radar: <b id="radar-hora">—</b></div>
     <b>Estado de las fuentes:</b>
     <div id="estado-capas">⏳ Cargando…</div>
-    <small>Radar: <span id="radar-hora">—</span><br>
-    Radar con zoom máx. 7 (límite del servicio gratuito). Cobertura radar parcial en el NEA: contrastar con la capa satelital.<br>
-    Datos: <a href="https://www.rainviewer.com" target="_blank" rel="noopener">Weather data by Rain Viewer</a> · NASA GIBS (IMERG, GOES-East)</small>
+    <small>Radar gratuito: zoom máx. 7 y últimas 2 h. Cobertura parcial en el NEA: contrastar con satélite.<br>
+    <a href="https://www.rainviewer.com" target="_blank" rel="noopener">Weather data by Rain Viewer</a> · NASA GIBS · Open-Meteo</small>
+  </div>
+  <div id="panel-rios"><b>🌊 Ríos (cuenca del Paraná)</b>
+    <div id="lista-rios">⏳ Cargando…</div>
+    <small>Caudal: modelo GloFAS vía Open-Meteo (referencial, ubicación aprox.). Altura y umbral: cargar a mano desde el parte PNA/INA; se guardan en este navegador.</small>
   </div>
 </div>
 
@@ -250,71 +257,119 @@ function agregarRecursoEnVivo(e) {
   document.getElementById('form-recurso').reset(); renderizarRecursos();
 }
 
-// --- MAPA RADAR / SATÉLITE (CORREGIDO) ---
-// Causa del error "API key required": RainViewer limitó su capa gratuita a zoom 7 (desde 1/1/2026).
-// El código anterior permitía zoom 8, y esos tiles se rechazaban. Ahora: maxNativeZoom 7 (se amplía visualmente sin pedir tiles inválidos).
-const estadoCapas = {};
+// --- MAPA RADAR / SATÉLITE / RÍOS ---
+const estadoCapas = {}; let primerError = '';
 function pintarEstado() {
-  const html = Object.entries(estadoCapas).map(([n, s]) =>
-    `${s.ok > 0 ? '✅' : s.err > 0 ? '⚠️' : '⏳'} ${n}${s.ok === 0 && s.err > 0 ? ' (sin datos)' : ''}`).join('<br>');
-  document.getElementById('estado-capas').innerHTML = html;
+  document.getElementById('estado-capas').innerHTML = Object.entries(estadoCapas).map(([n, st]) =>
+    `${st.ok > 0 ? '✅' : st.err > 0 ? '⚠️' : '⏳'} ${n}${st.ok === 0 && st.err > 0 ? ' (sin datos)' : ''}`).join('<br>')
+    + (primerError ? `<br><small>Falló: ${esc(primerError)}</small>` : '');
 }
-function capaMonitoreada(nombre, url, opts) {
-  estadoCapas[nombre] = { ok: 0, err: 0 };
-  const l = L.tileLayer(url, opts);
+function vigilar(l, nombre) {
+  estadoCapas[nombre] = estadoCapas[nombre] || { ok: 0, err: 0 };
   l.on('tileload', () => { estadoCapas[nombre].ok++; pintarEstado(); });
-  l.on('tileerror', () => { estadoCapas[nombre].err++; pintarEstado(); });
+  l.on('tileerror', e => { estadoCapas[nombre].err++; if (!primerError) { try { primerError = new URL(e.tile.src).host; } catch (_) {} } pintarEstado(); });
   return l;
+}
+const RV = 'Radar RainViewer';
+
+// Ríos: caudal GloFAS (Open-Meteo, sin clave) + altura/umbral cargados a mano
+const estaciones = [
+  { n: 'Paso de la Patria', lat: -27.31, lon: -58.58 }, { n: 'Corrientes', lat: -27.4597, lon: -58.8333 },
+  { n: 'Empedrado', lat: -27.95, lon: -58.81 }, { n: 'Bella Vista', lat: -28.50, lon: -59.05 }, { n: 'Goya', lat: -29.14, lon: -59.26 }
+];
+let med = JSON.parse(localStorage.getItem('cop_alturas_v1')) || {};
+let rios = []; const rioGrupo = L.layerGroup();
+function guardarMed(i, k, v) {
+  med[i] = med[i] || {}; med[i][k] = v === '' ? null : parseFloat(v); med[i].fecha = new Date().toISOString();
+  localStorage.setItem('cop_alturas_v1', JSON.stringify(med)); dibujarRios();
+}
+function dibujarRios() {
+  rioGrupo.clearLayers(); const cont = document.getElementById('lista-rios'); cont.innerHTML = '';
+  rios.forEach((r, i) => {
+    const m = med[i] || {}, flecha = r.error ? '' : r.tend > 0.03 ? '▲' : r.tend < -0.03 ? '▼' : '▬';
+    const critico = m.a != null && m.u != null && m.a >= m.u;
+    const color = critico ? '#e74c3c' : r.tend > 0.03 ? '#f39c12' : r.tend < -0.03 ? '#2ecc71' : '#3498db';
+    const q = r.error ? 'sin datos' : `${r.hoy.toFixed(0)} m³/s ${flecha} · máx 7 d: ${r.max.toFixed(0)}`;
+    L.circleMarker([r.lat, r.lon], { radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(rioGrupo)
+      .bindPopup(`<b>${esc(r.n)}</b><br>Caudal: ${q}<br>Altura: ${m.a ?? '—'} m (umbral ${m.u ?? '—'} m)${critico ? '<br><b style="color:#c0392b">⚠ SOBRE UMBRAL</b>' : ''}`);
+    cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #555;padding:3px 0"><b>${critico ? '🔴 ' : ''}${esc(r.n)}</b><br>Q: ${q}<br>
+      Altura (m) <input type="number" step="0.01" style="width:55px" value="${m.a ?? ''}" onchange="guardarMed(${i},'a',this.value)">
+      Umbral <input type="number" step="0.01" style="width:55px" value="${m.u ?? ''}" onchange="guardarMed(${i},'u',this.value)"></div>`);
+  });
+}
+async function cargarRios() {
+  rios = await Promise.all(estaciones.map(async s => {
+    try {
+      const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
+      const d = j.daily.river_discharge, hoy = d[7], ref = d[4];
+      if (hoy == null) throw new Error('sin dato');
+      return { ...s, hoy, max: Math.max(...d.slice(7).filter(x => x != null)), tend: ref ? (hoy - ref) / ref : 0 };
+    } catch (e) { return { ...s, error: true }; }
+  }));
+  dibujarRios();
 }
 
 function inicializarMapaRadar() {
   mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© OpenStreetMap, © CARTO' }).addTo(mapRadar);
+  // Base por defecto: OpenStreetMap (sin clave). CARTO queda como opción.
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
+  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© OpenStreetMap, © CARTO' });
 
-  const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
-  const attrNasa = 'NASA GIBS / EOSDIS';
-
-  const goes = capaMonitoreada('Satélite GOES-East (nubes)',
-    `${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
-    { maxNativeZoom: 7, maxZoom: 9, opacity: 0.85, attribution: attrNasa });
-  const imerg = capaMonitoreada('Lluvia satelital NASA IMERG',
-    `${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
-    { maxNativeZoom: 6, maxZoom: 9, opacity: 0.75, attribution: attrNasa });
+  const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best', nasa = 'NASA GIBS / EOSDIS';
+  const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+    { maxNativeZoom: 7, maxZoom: 9, opacity: 0.85, attribution: nasa }), 'Satélite GOES-East');
+  const imerg = vigilar(L.tileLayer(`${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
+    { maxNativeZoom: 6, maxZoom: 9, opacity: 0.7, attribution: nasa }), 'Lluvia NASA IMERG');
+  estadoCapas[RV] = { ok: 0, err: 0 };
   const radarGrupo = L.layerGroup();
-  estadoCapas['Radar RainViewer (últimas 2 h)'] = { ok: 0, err: 0 };
 
-  imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar);
-  L.control.layers(null, {
-    'Radar RainViewer (últimas 2 h)': radarGrupo,
-    'Lluvia satelital NASA IMERG': imerg,
-    'Satélite GOES-East (nubes)': goes
+  imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar); rioGrupo.addTo(mapRadar);
+  L.control.layers({ 'Mapa base (OSM)': osm, 'Mapa oscuro (CARTO)': carto }, {
+    'Radar animado (RainViewer)': radarGrupo, 'Lluvia satelital NASA IMERG': imerg,
+    'Satélite GOES-East (nubes)': goes, 'Ríos: caudal y altura': rioGrupo
   }, { collapsed: false }).addTo(mapRadar);
 
-  async function cargarRadar() {
-    const n = 'Radar RainViewer (últimas 2 h)';
-    try {
-      const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-      const data = await res.json();
-      const past = data.radar && data.radar.past;
-      if (!past || !past.length) throw new Error('sin frames');
-      const ult = past[past.length - 1];
-      const host = data.host || 'https://tilecache.rainviewer.com';
-      radarGrupo.clearLayers();
-      const l = L.tileLayer(`${host}${ult.path}/256/{z}/{x}/{y}/2/1_1.png`, {
-        maxNativeZoom: 7, maxZoom: 9, opacity: 0.8, attribution: 'Weather data by <a href="https://www.rainviewer.com">Rain Viewer</a>'
-      });
-      l.on('tileload', () => { estadoCapas[n].ok++; pintarEstado(); });
-      l.on('tileerror', () => { estadoCapas[n].err++; pintarEstado(); });
-      radarGrupo.addLayer(l);
-      document.getElementById('radar-hora').innerText = new Date(ult.time * 1000).toLocaleString('es-AR');
-    } catch (err) {
-      estadoCapas[n].err++; pintarEstado();
-      document.getElementById('radar-hora').innerText = 'no disponible';
+  // --- Radar animado: 6 frames (última hora), carga diferida para respetar el límite de 100 solicitudes/min ---
+  let frames = [], idx = 0, timer = null;
+  const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
+  function capaFrame(f) {
+    if (!f.layer) {
+      f.layer = vigilar(L.tileLayer(`${f.host}${f.path}/256/{z}/{x}/{y}/2/0_0.png`, {
+        maxNativeZoom: 7, maxZoom: 9, opacity: 0, updateWhenZooming: false, keepBuffer: 1,
+        attribution: 'Weather data by <a href="https://www.rainviewer.com">Rain Viewer</a>' }), RV);
+      radarGrupo.addLayer(f.layer);
     }
+    return f.layer;
   }
-  cargarRadar();
-  setInterval(cargarRadar, 10 * 60 * 1000); // el radar se actualiza cada 10 min
-  pintarEstado();
+  function mostrar(i) {
+    idx = (i + frames.length) % frames.length;
+    frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? 0.8 : 0); });
+    capaFrame(frames[idx]).setOpacity(0.8);
+    slider.value = idx;
+    document.getElementById('radar-hora').innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function toggle() {
+    if (timer) { clearInterval(timer); timer = null; btn.innerText = '▶'; return; }
+    btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200);
+  }
+  btn.onclick = toggle; slider.oninput = () => { if (timer) toggle(); mostrar(+slider.value); };
+
+  async function cargarRadar() {
+    try {
+      const data = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
+      const past = (data.radar && data.radar.past || []).slice(-6);
+      if (!past.length) throw new Error('sin frames');
+      const host = data.host || 'https://tilecache.rainviewer.com', corriendo = !!timer;
+      if (corriendo) toggle();
+      radarGrupo.clearLayers(); estadoCapas[RV] = { ok: 0, err: 0 };
+      frames = past.map(p => ({ time: p.time, path: p.path, host }));
+      slider.max = frames.length - 1; mostrar(frames.length - 1);
+      if (corriendo) toggle();
+    } catch (e) { estadoCapas[RV].err++; document.getElementById('radar-hora').innerText = 'no disponible'; pintarEstado(); }
+  }
+  cargarRadar(); cargarRios(); pintarEstado();
+  setInterval(cargarRadar, 10 * 60 * 1000);
+  setInterval(cargarRios, 60 * 60 * 1000);
   radarCargado = true;
 }
 
