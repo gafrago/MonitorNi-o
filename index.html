@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas e Hidrometría</title>
+    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas, Hidrometría y Meteorología</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
@@ -16,7 +16,7 @@
             overflow: hidden;
         }
 
-        /* 1. Banner Superior de Prototipo y Fecha/Hora */
+        /* 1. Banner Superior */
         #top-banner {
             background-color: #1a252f;
             color: #ffffff;
@@ -49,7 +49,7 @@
         }
         .smn-link:hover { background-color: #3498db; }
 
-        /* 2. Panel Lateral y Formulario de Alta */
+        /* 2. Panel Lateral y Formulario */
         #sidebar {
             width: 370px;
             background: #f4f6f7;
@@ -80,7 +80,6 @@
             color: #f39c12;
         }
 
-        /* Formulario Desplegable */
         details.form-panel {
             background: #ffffff;
             border: 1px solid #cbd5e1;
@@ -138,7 +137,7 @@
             align-self: flex-end;
         }
 
-        /* 3. Marcadores Tácticos Vectoriales por Institución */
+        /* 3. Marcadores Tácticos y Meteorológicos */
         .custom-div-icon {
             background: transparent;
             border: none;
@@ -154,17 +153,12 @@
             justify-content: center;
             box-shadow: 0 3px 6px rgba(0,0,0,0.45);
             border: 2px solid #ffffff;
-            transition: transform 0.15s ease;
-        }
-        .pin-tactico:hover {
-            transform: rotate(-45deg) scale(1.12);
         }
         .pin-tactico span.sigla {
             transform: rotate(45deg);
             color: #ffffff;
             font-weight: 800;
             font-size: 10px;
-            letter-spacing: 0.3px;
             text-shadow: 0 1px 2px rgba(0,0,0,0.6);
         }
         .pin-tactico .estado-dot {
@@ -175,7 +169,22 @@
             height: 11px;
             border-radius: 50%;
             border: 1.5px solid #ffffff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        /* Estilo para Marcador Meteorológico */
+        .meteo-badge {
+            background: #ffffff;
+            border: 2px solid #2980b9;
+            border-radius: 20px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #1e293b;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
         }
 
         .badge-fuerza {
@@ -229,13 +238,12 @@
     </div>
 </div>
 
-<!-- Contenedor Principal (Panel Lateral SCI + Mapa) -->
+<!-- Contenedor Principal -->
 <div style="display: flex; flex: 1; overflow: hidden;">
     <!-- Panel Lateral SCI -->
     <div id="sidebar">
         <h3 style="margin-top: 0; margin-bottom: 8px; color: #2c3e50; font-size: 15px;">📋 Comando de Incidentes (SCI)</h3>
 
-        <!-- Resumen Táctico en Vivo -->
         <div class="kpi-box">
             <div class="kpi-card">
                 <b id="kpi-unidades">0</b>
@@ -247,15 +255,14 @@
             </div>
         </div>
 
-        <!-- Formulario Desplegable para Alta en Vivo -->
         <details class="form-panel" id="panel-alta">
             <summary>➕ Registrar Recurso o Calle Anegada</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
                 <small style="color: #2980b9; font-weight: bold;">
-                    💡 Hacé clic en cualquier punto del mapa para capturar lat/lon automáticamente.
+                    💡 Clic en el mapa para capturar coordenadas.
                 </small>
 
-                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla / Corte Calle Anegada)" required />
+                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla / Calle Anegada)" required />
 
                 <div style="display: flex; gap: 6px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
@@ -273,12 +280,12 @@
                 </div>
 
                 <div style="display: flex; gap: 6px;">
-                    <input type="text" id="nuevo-tipo" placeholder="Tipo (ej. Anegamiento / Rescate)" style="flex: 2;" required />
+                    <input type="text" id="nuevo-tipo" placeholder="Tipo (Anegamiento / Rescate)" style="flex: 2;" required />
                     <input type="number" id="nuevos-efectivos" placeholder="Personal" min="0" value="4" style="flex: 1;" required />
                 </div>
 
-                <input type="text" id="nuevo-sector" placeholder="Sector (ej. Av. Soberanía y Alberdi)" required />
-                <textarea id="nueva-tarea" rows="2" placeholder="Detalle de novedad o tarea asignada..." required></textarea>
+                <input type="text" id="nuevo-sector" placeholder="Sector (ej. Resistencia Centro)" required />
+                <textarea id="nueva-tarea" rows="2" placeholder="Detalle de novedad..." required></textarea>
 
                 <div class="coords-row">
                     <input type="number" step="any" id="nueva-lat" placeholder="Latitud" required />
@@ -289,7 +296,6 @@
             </form>
         </details>
 
-        <!-- Controles de Filtro -->
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución / Organismo:</label>
         <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
@@ -308,7 +314,6 @@
             <option value="NO_DISPONIBLE">🔴 No Disponible (Descanso/Mant.)</option>
         </select>
 
-        <!-- Contenedor dinámico de tarjetas -->
         <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
 
         <button class="btn-reset" onclick="restaurarDatosIniciales()">🔄 Restaurar padrón original</button>
@@ -367,7 +372,7 @@
     const map = L.map('map').setView([-27.46, -58.90], 11);
 
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap | Hidrometría: PNA/INA | Satélite: NASA GIBS',
+        attribution: '© OpenStreetMap | Clima: Open-Meteo | Hidrometría: PNA/INA',
         maxZoom: 18
     }).addTo(map);
 
@@ -435,7 +440,7 @@
         }
     }).addTo(map);
 
-    // --- F. ESTACIONES HIDROMÉTRICAS EN METROS (NIVELES Y UMBRALES) ---
+    // --- F. ESTACIONES HIDROMÉTRICAS EN METROS ---
     const estacionesHidrometricas = [
         {
             nombre: "Puerto Barranqueras (Río Paraná)",
@@ -467,16 +472,14 @@
 
     function renderizarHidrometrosMts() {
         grupoHidrometrosMts.clearLayers();
-
         estacionesHidrometricas.forEach(est => {
-            let colorHidro = "#22c55e"; // Normal
+            let colorHidro = "#22c55e";
             let estadoAlertaHidro = "Normal";
-
             if (est.altura_actual >= est.evacuacion) {
-                colorHidro = "#ef4444"; // Evacuación
+                colorHidro = "#ef4444";
                 estadoAlertaHidro = "EVACUACIÓN (Desborde)";
             } else if (est.altura_actual >= est.alerta) {
-                colorHidro = "#eab308"; // Alerta
+                colorHidro = "#eab308";
                 estadoAlertaHidro = "ALERTA";
             }
 
@@ -501,7 +504,102 @@
     }
     renderizarHidrometrosMts();
 
-    // --- G. PADRÓN DE RECURSOS E INCIDENTES (INCLUYE CALLES ANEGADAS) ---
+    // --- G. METEOROLOGÍA EN TIEMPO REAL Y LLUVIA CADA 24 HS (OPEN-METEO API) ---
+    const grupoMeteorologia = L.layerGroup().addTo(map);
+
+    // Traductor de códigos meteorológicos WMO a símbolos e íconos legibles
+    function interpretarClimaWMO(codigo) {
+        switch (codigo) {
+            case 0: return { desc: "Despejado", icono: "☀️" };
+            case 1:
+            case 2:
+            case 3: return { desc: "Parcialmente nublado", icono: "⛅" };
+            case 45:
+            case 48: return { desc: "Neblina / Niebla", icono: "🌫️" };
+            case 51:
+            case 53:
+            case 55:
+            case 56:
+            case 57: return { desc: "Llovizna", icono: "🌧️" };
+            case 61:
+            case 63:
+            case 65:
+            case 66:
+            case 67: return { desc: "Lluvia moderada/fuerte", iconotxt: "🌧️", icono: "🌧️" };
+            case 71:
+            case 73:
+            case 75:
+            case 77: return { desc: "Nieve", icono: "🌨️" };
+            case 80:
+            case 81:
+            case 82: return { desc: "Chaparrones de lluvia", icono: "🌦️" };
+            case 95:
+            case 96:
+            case 99: return { desc: "Tormenta eléctrica", icono: "⚡" };
+            default: return { desc: "Variable", icono: "🌡️" };
+        }
+    }
+
+    const estacionesMeteo = [
+        { nombre: "Resistencia / BAM Resistencia", coords: [-27.4514, -59.0500] },
+        { nombre: "Corrientes Capital", coords: [-27.4692, -58.8306] },
+        { nombre: "Paso de la Patria", coords: [-27.3115, -58.5620] },
+        { nombre: "Isla del Cerrito", coords: [-27.2830, -58.6830] }
+    ];
+
+    async function cargarMeteorologiaEnVivo() {
+        grupoMeteorologia.clearLayers();
+
+        for (const est of estacionesMeteo) {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${est.coords[0]}&longitude=${est.coords[1]}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires`;
+
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+                
+                const temp = data.current.temperature_2m;
+                const hum = data.current.relative_humidity_2m;
+                const viento = data.current.wind_speed_10m;
+                const wmoCode = data.current.weather_code;
+                
+                // Lluvia acumulada de las últimas 24 hs (día actual en el array daily)
+                const lluvia24hs = data.daily.precipitation_sum ? data.daily.precipitation_sum[0] : 0.0;
+                
+                const climaInfo = interpretarClimaWMO(wmoCode);
+
+                // Crear pin distintivo meteorológico
+                const meteoIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `
+                        <div class="meteo-badge">
+                            <span style="font-size: 15px;">${climaInfo.icono}</span>
+                            <span>${temp}°C | <b>🌧️ ${lluvia24hs} mm</b></span>
+                        </div>
+                    `,
+                    iconSize: [110, 32],
+                    iconAnchor: [55, 16],
+                    popupAnchor: [0, -18]
+                });
+
+                const marker = L.marker(est.coords, { icon: meteoIcon }).addTo(grupoMeteorologia);
+                marker.bindPopup(`
+                    <div style="border-bottom: 2px solid #2980b9; padding-bottom: 3px; margin-bottom: 5px;">
+                        <b>🌤️ Estación Met.: ${est.nombre}</b>
+                    </div>
+                    <b>Condición:</b> ${climaInfo.icono} ${climaInfo.desc}<br>
+                    <b>Temperatura:</b> ${temp} °C<br>
+                    <b>Humedad:</b> ${hum} %<br>
+                    <b>Viento:</b> ${viento} km/h<br>
+                    <b>Lluvia Acumulada (24 hs):</b> <span style="color: #2980b9; font-weight: bold;">${lluvia24hs} mm</span>
+                `);
+            } catch (err) {
+                console.error(`Error al consultar clima para ${est.nombre}:`, err);
+            }
+        }
+    }
+    cargarMeteorologiaEnVivo();
+
+    // --- H. PADRÓN DE RECURSOS E INCIDENTES ---
     const datosInicialesSCI = {
         "type": "FeatureCollection",
         "features": [
@@ -583,9 +681,9 @@
         ]
     };
 
-    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v3')) || structuredClone(datosInicialesSCI);
+    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v4')) || structuredClone(datosInicialesSCI);
 
-    // --- H. SINCRONIZACIÓN DE PANEL Y PINES ---
+    // --- I. SINCRONIZACIÓN DE PANEL Y PINES ---
     const capaRecursosSCI = L.layerGroup().addTo(map);
 
     function renderizarRecursosSCI() {
@@ -601,7 +699,7 @@
 
         recursosGeoJSON.features.forEach(recurso => {
             const p = recurso.properties;
-            const coords = recurso.geometry.coordinates; // [lon, lat]
+            const coords = recurso.geometry.coordinates;
 
             const coincideInst = (instSeleccionada === 'TODAS' || p.institucion === instSeleccionada);
             const coincideEstado = (estadoSeleccionado === 'TODOS' || p.estado === estadoSeleccionado);
@@ -653,7 +751,7 @@
         document.getElementById('kpi-efectivos').textContent = totalEfectivos;
     }
 
-    // --- I. CAPTURA DE COORDENADAS CON CLIC ---
+    // --- J. CAPTURA DE COORDENADAS CON CLIC ---
     let marcadorTemporal = null;
 
     map.on('click', function(e) {
@@ -703,7 +801,7 @@
         };
 
         recursosGeoJSON.features.unshift(nuevoRecurso);
-        localStorage.setItem('cop_recursos_sci_v3', JSON.stringify(recursosGeoJSON));
+        localStorage.setItem('cop_recursos_sci_v4', JSON.stringify(recursosGeoJSON));
 
         document.getElementById('form-recurso').reset();
         if (marcadorTemporal) {
@@ -716,18 +814,19 @@
     }
 
     function restaurarDatosIniciales() {
-        localStorage.removeItem('cop_recursos_sci_v3');
+        localStorage.removeItem('cop_recursos_sci_v4');
         recursosGeoJSON = structuredClone(datosInicialesSCI);
         renderizarRecursosSCI();
     }
 
     renderizarRecursosSCI();
 
-    // --- J. CONTROL DE CAPAS Y LEYENDA ---
+    // --- K. CONTROL DE CAPAS Y LEYENDA ---
     L.control.layers(
         { "Mapa Base (OpenStreetMap)": osmBase },
         {
             "Recursos e Incidentes (SCI)": capaRecursosSCI,
+            "Meteorología y Lluvia (Open-Meteo)": grupoMeteorologia,
             "Hidrómetros (Nivel en Metros)": grupoHidrometrosMts,
             "Zonas de Riesgo (GeoJSON)": capaGeoJSON,
             "Lluvia Satelital IMERG (NASA GIBS)": nasaLluviaLayer
@@ -739,6 +838,9 @@
     legend.onAdd = function () {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
+            <strong>Meteorología y Lluvia (24 hs)</strong><br>
+            <span>⛅ Símbolo + Temperatura + <b>🌧️ mm</b></span><br>
+            <div class="legend-divider"></div>
             <strong>Fuerzas y Organismos (SCI)</strong><br>
             <i style="background: #0284c7; border-radius: 3px;"></i> <b>FAA</b> - Fuerza Aérea<br>
             <i style="background: #4d7c0f; border-radius: 3px;"></i> <b>EA</b> - Ejército Argentino<br>
@@ -746,11 +848,10 @@
             <i style="background: #15803d; border-radius: 3px;"></i> <b>GN</b> - Gendarmería Nac.<br>
             <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil / Anegamientos<br>
             <div class="legend-divider"></div>
-            <strong>Hidrometría y Riesgos</strong><br>
+            <strong>Hidrometría en Metros</strong><br>
             <i style="background: #22c55e; border-radius: 50%;"></i> Río Normal<br>
             <i style="background: #eab308; border-radius: 50%;"></i> Río en Alerta<br>
-            <i style="background: #ef4444; border-radius: 50%;"></i> Río en Evacuación / Desborde<br>
-            <i style="background: #e74c3c"></i> Zona de Riesgo Alto
+            <i style="background: #ef4444; border-radius: 50%;"></i> Río en Evacuación
         `;
         return div;
     };
