@@ -87,7 +87,6 @@
             <div class="form-grid">
                 <small style="color: #c0392b; font-weight: bold; display: none;" id="alerta-geojson">⚠️ Usando datos de respaldo. Verifique 'mapa_nea.geojson' en la carpeta.</small>
                 
-                <!-- NUEVO BUSCADOR RÁPIDO POR TEXTO -->
                 <input type="text" id="input-buscar-depto" placeholder="🔍 Escriba departamento (ej. San Fernando)..." oninput="filtrarDepartamentosTexto()" />
                 
                 <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">1. Seleccionar Departamento...</option></select>
@@ -141,7 +140,7 @@
         <b>⛈️ Monitoreo Meteorológico Regional (NEA)</b><br>
         <span style="color: #3498db;">🟦 Capa Táctica Base</span> | 
         <span style="color: #e74c3c;">🟥 Cobertura de Alertas</span><br>
-        <small><i>* Visor estratégico operativo optimizado (Sin dependencias externas).</i></small>
+        <small><i>* Visor estratégico operativo optimizado (Sin errores de API).</i></small>
     </div>
 </div>
 
@@ -174,19 +173,28 @@
     let datosZonasGeoJSON = { "type": "FeatureCollection", "features": [] };
     let zonasLayerTactico = L.layerGroup().addTo(mapTactico);
 
-    // --- CARGA DE ARCHIVO EXTERNO (MAPA_NEA.GEOJSON) ---
+    // --- CARGA DE ARCHIVO EXTERNO (MAPA_NEA.GEOJSON) Y GOOGLE SHEETS OPCIONAL ---
     async function cargarZonasExternas() {
         try {
             const response = await fetch('mapa_nea.geojson');
             if (!response.ok) throw new Error("Archivo no encontrado");
             datosZonasGeoJSON = await response.json();
             document.getElementById('alerta-geojson').style.display = 'none';
+
+            // Opcional: Sincronizar con Google Sheets si se desea automatizar alertas
+            // const urlSheet = "URL_DE_TU_GOOGLE_SHEET_AQUÍ";
+            // const sheetData = await (await fetch(urlSheet)).json();
+            // datosZonasGeoJSON.features.forEach(f => {
+            //     const match = sheetData.find(s => s.departamento.toLowerCase() === (f.properties.nam || '').toLowerCase());
+            //     if(match) { f.properties.emergencia = match.emergencia; f.properties.color = match.color; f.properties.evacuados = match.evacuados; }
+            // });
+
         } catch (error) {
             document.getElementById('alerta-geojson').style.display = 'block';
             datosZonasGeoJSON = {
                 "type": "FeatureCollection",
                 "features": [
-                    { "type": "Feature", "properties": { "nam": "San Fernando", "fna": "San Fernando, Chaco", "emergencia": "Alerta Amarilla", "ente_emisor": "DC Chaco", "color": "#f39c12" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] } }
+                    { "type": "Feature", "properties": { "nam": "San Fernando", "fna": "San Fernando, Chaco", "emergencia": "Alerta Amarilla", "ente_emisor": "DC Chaco", "color": "#f39c12", "evacuados": 12 }, "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] } }
                 ]
             };
         }
@@ -203,18 +211,21 @@
 
         L.geoJSON({ type: "FeatureCollection", features: feats }, {
             style: function(f) { 
-                return { color: f.properties.color || f.properties.stroke || '#2980b9', weight: 2, fillOpacity: 0.22 }; 
+                return { color: f.properties.color || '#2980b9', weight: 2, fillOpacity: 0.25 }; 
             },
             onEachFeature: function(f, layer) {
                 layer.on({ mouseover: resaltarZona, mouseout: restaurarZona });
                 const nombre = f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || 'Zona';
                 const prov = f.properties.fna || f.properties.provincia || '';
+                const estado = f.properties.emergencia || 'En Observación';
+                const evacuados = f.properties.evacuados !== undefined ? f.properties.evacuados : 'Sin registro';
 
                 layer.bindTooltip(`
                     <div style="font-size: 12px; min-width: 180px;">
                         <b style="color: #2c3e50; font-size: 13px;">${nombre}</b><br>
                         <small>${prov}</small><br>
-                        <b>🚨 Estado:</b> ${f.properties.emergencia || 'En Observación'}<br>
+                        <b>🚨 Estado:</b> ${estado}<br>
+                        <b>👥 Evacuados:</b> ${evacuados}<br>
                         <b>🏢 Emisor:</b> ${f.properties.ente_emisor || 'Comando Conjunto'}
                     </div>
                 `, { sticky: true });
@@ -226,7 +237,6 @@
         const selDepto = document.getElementById('sel-depto');
         selDepto.innerHTML = '<option value="">1. Seleccionar Departamento...</option>';
         
-        // Obtener lista única de departamentos ordenados alfabéticamente
         const deptosSet = new Set();
         features.forEach(f => {
             const val = f.properties.nam || f.properties.departamento || f.properties.FNA;
@@ -237,7 +247,6 @@
         deptosOrdenados.forEach(d => selDepto.add(new Option(d, d)));
     }
 
-    // --- BUSCADOR EN TIEMPO REAL ---
     function filtrarDepartamentosTexto() {
         const texto = document.getElementById('input-buscar-depto').value.toLowerCase();
         const featuresFiltradas = datosZonasGeoJSON.features.filter(f => {
@@ -258,7 +267,6 @@
             const capaTemp = L.geoJSON(f);
             mapTactico.flyToBounds(capaTemp.getBounds(), { padding: [50, 50], duration: 1.5 });
             
-            // Actualizar selector secundario
             const selMuni = document.getElementById('sel-muni');
             selMuni.disabled = false;
             selMuni.innerHTML = `<option value="">2. ${deptoSel} (Seleccionado)</option>`;
@@ -315,7 +323,7 @@
         document.getElementById('form-recurso').reset(); renderizarRecursos();
     }
 
-    // --- MAPA RADAR ESTRATÉGICO SEGURO (SIN APIS EXTERNAS) ---
+    // --- MAPA RADAR ESTRATÉGICO SEGURO (SIN ERRORES DE API) ---
     function inicializarMapaRadar() {
         mapRadar = L.map('map-radar', { maxZoom: 9, minZoom: 5, zoomControl: true }).setView([-27.5, -59.0], 6);
         
@@ -323,12 +331,6 @@
             maxZoom: 9, 
             attribution: 'CartoDB / Centro de Comando NEA' 
         }).addTo(mapRadar);
-
-        // Capa de apoyo meteorológico sintética estable
-        let markerRadar = L.circleMarker([-27.45, -58.95], {
-            radius: 40, color: '#3498db', fillColor: '#2980b9', fillOpacity: 0.4
-        }).addTo(mapRadar);
-        markerRadar.bindPopup("<b>Centro Meteorológico Regional NEA</b><br>Monitoreo activo sin interrupciones.");
 
         radarCargado = true;
     }
