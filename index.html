@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas, Hidrometría y Meteorología</title>
+    <title>COP Hídrico NEA - Rutas, Clima, Hospitales y Medios SCI</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
@@ -49,9 +49,9 @@
         }
         .smn-link:hover { background-color: #3498db; }
 
-        /* 2. Panel Lateral y Formulario */
+        /* 2. Panel Lateral */
         #sidebar {
-            width: 370px;
+            width: 380px;
             background: #f4f6f7;
             border-right: 2px solid #bdc3c7;
             display: flex;
@@ -80,12 +80,13 @@
             color: #f39c12;
         }
 
+        /* Paneles Desplegables */
         details.form-panel {
             background: #ffffff;
             border: 1px solid #cbd5e1;
             border-left: 4px solid #2980b9;
             border-radius: 4px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             padding: 8px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
@@ -126,6 +127,19 @@
             margin-top: 4px;
         }
         .btn-submit:hover { background-color: #2ecc71; }
+        
+        .btn-ruta {
+            background-color: #8e44ad;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .btn-ruta:hover { background-color: #9b59b6; }
+
         .btn-reset {
             background: none;
             border: none;
@@ -171,7 +185,6 @@
             border: 1.5px solid #ffffff;
         }
 
-        /* Estilo para Marcador Meteorológico */
         .meteo-badge {
             background: #ffffff;
             border: 2px solid #2980b9;
@@ -185,6 +198,19 @@
             align-items: center;
             gap: 4px;
             white-space: nowrap;
+        }
+
+        .poi-badge {
+            background: #ffffff;
+            border: 2px solid #333;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
 
         .badge-fuerza {
@@ -240,7 +266,7 @@
 
 <!-- Contenedor Principal -->
 <div style="display: flex; flex: 1; overflow: hidden;">
-    <!-- Panel Lateral SCI -->
+    <!-- Panel Lateral -->
     <div id="sidebar">
         <h3 style="margin-top: 0; margin-bottom: 8px; color: #2c3e50; font-size: 15px;">📋 Comando de Incidentes (SCI)</h3>
 
@@ -255,15 +281,25 @@
             </div>
         </div>
 
+        <!-- Panel de Ruteo Táctico -->
+        <details class="form-panel">
+            <summary>🛣️ Calcular Ruta y Clima en Trayecto</summary>
+            <div class="form-grid">
+                <small style="color: #8e44ad; font-weight: bold;">
+                    Ingrese coordenadas o haga clic en el mapa para Origen y Destino.
+                </small>
+                <input type="text" id="ruta-origen" placeholder="Origen: Lat, Lon (ej. -27.45,-59.05)" />
+                <input type="text" id="ruta-destino" placeholder="Destino: Lat, Lon (ej. -27.28,-58.68)" />
+                <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta y Consultar Clima</button>
+                <div id="resultado-ruta" style="font-size: 11px; background: #f8fafc; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 4px; display: none;"></div>
+            </div>
+        </details>
+
+        <!-- Formulario Alta Recurso -->
         <details class="form-panel" id="panel-alta">
             <summary>➕ Registrar Recurso o Calle Anegada</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-                <small style="color: #2980b9; font-weight: bold;">
-                    💡 Clic en el mapa para capturar coordenadas.
-                </small>
-
                 <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla / Calle Anegada)" required />
-
                 <div style="display: flex; gap: 6px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
                         <option value="FAA">FAA - Fuerza Aérea</option>
@@ -278,26 +314,22 @@
                         <option value="NO_DISPONIBLE">🔴 No Disp.</option>
                     </select>
                 </div>
-
                 <div style="display: flex; gap: 6px;">
                     <input type="text" id="nuevo-tipo" placeholder="Tipo (Anegamiento / Rescate)" style="flex: 2;" required />
                     <input type="number" id="nuevos-efectivos" placeholder="Personal" min="0" value="4" style="flex: 1;" required />
                 </div>
-
                 <input type="text" id="nuevo-sector" placeholder="Sector (ej. Resistencia Centro)" required />
                 <textarea id="nueva-tarea" rows="2" placeholder="Detalle de novedad..." required></textarea>
-
                 <div class="coords-row">
                     <input type="number" step="any" id="nueva-lat" placeholder="Latitud" required />
                     <input type="number" step="any" id="nueva-lon" placeholder="Longitud" required />
                 </div>
-
                 <button type="submit" class="btn-submit">📍 Desplegar en Mapa</button>
             </form>
         </details>
 
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución / Organismo:</label>
-        <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
+        <select id="filtro-institucion" onchange="renderizarrecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
             <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
             <option value="EA">Ejército Argentino (EA)</option>
@@ -307,7 +339,7 @@
         </select>
 
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Estado SCI:</label>
-        <select id="filtro-estado" onchange="renderizarRecursosSCI()" style="margin-bottom: 10px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
+        <select id="filtro-estado" onchange="renderizarrecursosSCI()" style="margin-bottom: 10px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODOS">Todos los Estados</option>
             <option value="ASIGNADO">🟢 Asignado (Operando)</option>
             <option value="DISPONIBLE">🟡 Disponible (En Reserva)</option>
@@ -325,7 +357,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- A. CONFIGURACIÓN VISUAL POR INSTITUCIÓN Y ESTADO SCI ---
+    // --- A. CONFIGURACIÓN VISUAL INSTITUCIONAL ---
     const ESTILOS_INSTITUCION = {
         "FAA": { color: "#0284c7", nombre: "Fuerza Aérea Argentina" },
         "EA":  { color: "#4d7c0f", nombre: "Ejército Argentino" },
@@ -368,180 +400,60 @@
     setInterval(actualizarReloj, 1000);
     actualizarReloj();
 
-    // --- C. INICIALIZAR MAPA BASE ---
+    // --- C. INICIALIZAR MAPA ---
     const map = L.map('map').setView([-27.46, -58.90], 11);
 
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap | Clima: Open-Meteo | Hidrometría: PNA/INA',
+        attribution: '© OpenStreetMap | Ruteo: OSRP | Clima: Open-Meteo',
         maxZoom: 18
     }).addTo(map);
 
-    // --- D. CAPA SATELITAL DE LLUVIA (NASA GIBS WMS) ---
-    const nasaLluviaLayer = L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
-        layers: 'IMERG_Precipitation_Rate',
-        format: 'image/png',
-        transparent: true,
-        opacity: 0.50,
-        attribution: 'NASA EOSDIS GIBS'
-    });
-
-    // --- E. ZONAS DE RIESGO GEOJSON ---
-    const zonasRiesgoGeoJSON = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {
-                    "nombre": "Ribera Barranqueras - Antequera (Chaco)",
-                    "nivel_riesgo": "ALTO",
-                    "color": "#e74c3c",
-                    "detalle": "Terreno bajo aluvial. Monitoreo constante de defensas."
-                },
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [-58.96, -27.42], [-58.85, -27.42],
-                        [-58.88, -27.53], [-58.98, -27.53],
-                        [-58.96, -27.42]
-                    ]]
-                }
-            },
-            {
-                "type": "Feature",
-                "properties": {
-                    "nombre": "Costanera y Zona Baja (Corrientes)",
-                    "nivel_riesgo": "MEDIO",
-                    "color": "#f39c12",
-                    "detalle": "Zona de prevención por escurrimiento y crecida del Paraná."
-                },
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [-58.85, -27.43], [-58.75, -27.43],
-                        [-58.78, -27.52], [-58.86, -27.52],
-                        [-58.85, -27.43]
-                    ]]
-                }
-            }
-        ]
-    };
-
-    const capaGeoJSON = L.geoJSON(zonasRiesgoGeoJSON, {
-        style: function(feature) {
-            return {
-                color: feature.properties.color,
-                fillColor: feature.properties.color,
-                weight: 2,
-                fillOpacity: 0.30
-            };
-        },
-        onEachFeature: function(feature, layer) {
-            layer.bindPopup(`<b>Zona:</b> ${feature.properties.nombre}<br><b>Riesgo:</b> ${feature.properties.nivel_riesgo}<br>${feature.properties.detalle}`);
-        }
-    }).addTo(map);
-
-    // --- F. ESTACIONES HIDROMÉTRICAS EN METROS ---
-    const estacionesHidrometricas = [
-        {
-            nombre: "Puerto Barranqueras (Río Paraná)",
-            coords: [-27.4850, -58.9320],
-            altura_actual: 5.85,
-            alerta: 6.00,
-            evacuacion: 6.50,
-            tendencia: "Creciendo (+5 cm/día)"
-        },
-        {
-            nombre: "Puerto Corrientes (Río Paraná)",
-            coords: [-27.4680, -58.8340],
-            altura_actual: 6.20,
-            alerta: 6.50,
-            evacuacion: 7.00,
-            tendencia: "Estacionario"
-        },
-        {
-            nombre: "Isla del Cerrito (Confluencia)",
-            coords: [-27.2830, -58.6830],
-            altura_actual: 5.40,
-            alerta: 5.50,
-            evacuacion: 6.00,
-            tendencia: "Creciendo (+8 cm/día)"
-        }
+    // --- D. HOSPITALES Y ESTACIONES DE SERVICIO (POIs) ---
+    const puntosInteresPOIs = [
+        { nombre: "Hospital Pediátrico A. C. Varela", tipo: "Hospital", coords: [-27.4450, -58.9880], icono: "🏥" },
+        { nombre: "Hospital Perrando", tipo: "Hospital", coords: [-27.4520, -58.9750], icono: "🏥" },
+        { nombre: "Hospital J. C. Perrando - Emergencias", tipo: "Hospital", coords: [-27.4540, -58.9720], icono: "🏥" },
+        { nombre: "YPF Estación de Servicio (Acceso Norte)", tipo: "Combustible", coords: [-27.4100, -58.9900], icon: "⛽", icono: "⛽" },
+        { nombre: "Shell Estación de Servicio (Av. 9 de Julio)", tipo: "Combustible", coords: [-27.4580, -58.9810], icono: "⛽" },
+        { nombre: "Axion Energy (Puerto Barranqueras)", tipo: "Combustible", coords: [-27.4820, -58.9350], icono: "⛽" }
     ];
 
-    const grupoHidrometrosMts = L.layerGroup().addTo(map);
+    const grupoPOIs = L.layerGroup().addTo(map);
 
-    function renderizarHidrometrosMts() {
-        grupoHidrometrosMts.clearLayers();
-        estacionesHidrometricas.forEach(est => {
-            let colorHidro = "#22c55e";
-            let estadoAlertaHidro = "Normal";
-            if (est.altura_actual >= est.evacuacion) {
-                colorHidro = "#ef4444";
-                estadoAlertaHidro = "EVACUACIÓN (Desborde)";
-            } else if (est.altura_actual >= est.alerta) {
-                colorHidro = "#eab308";
-                estadoAlertaHidro = "ALERTA";
-            }
-
-            const marker = L.circleMarker(est.coords, {
-                radius: 12,
-                fillColor: colorHidro,
-                color: "#ffffff",
-                weight: 2.5,
-                fillOpacity: 0.95
-            }).addTo(grupoHidrometrosMts);
-
-            marker.bindPopup(`
-                <div style="border-bottom: 2px solid ${colorHidro}; padding-bottom: 3px; margin-bottom: 5px;">
-                    <b>🌊 ${est.nombre}</b>
-                </div>
-                <b>Altura Actual:</b> <span style="font-size: 14px; color: ${colorHidro}; font-weight: bold;">${est.altura_actual} m</span><br>
-                <b>Estado:</b> <span style="color: ${colorHidro}; font-weight: bold;">${estadoAlertaHidro}</span><br>
-                <b>Umbral Alerta:</b> ${est.alerta} m | <b>Evacuación:</b> ${est.evacuacion} m<br>
-                <b>Tendencia:</b> ${est.tendencia}
-            `);
+    function renderizarPOIs() {
+        grupoPOIs.clearLayers();
+        puntosInteresPOIs.forEach(poi => {
+            const poiIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="poi-badge" title="${poi.nombre}">${poi.icono}</div>`,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15],
+                popupAnchor: [0, -15]
+            });
+            L.marker(poi.coords, { icon: poiIcon }).addTo(grupoPOIs)
+              .bindPopup(`<b>${poi.nombre}</b><br>Tipo: ${poi.tipo}`);
         });
     }
-    renderizarHidrometrosMts();
+    renderizarPOIs();
 
-    // --- G. METEOROLOGÍA EN TIEMPO REAL Y LLUVIA CADA 24 HS (OPEN-METEO API) ---
+    // --- E. METEOROLOGÍA EN TIEMPO REAL ---
     const grupoMeteorologia = L.layerGroup().addTo(map);
 
-    // Traductor de códigos meteorológicos WMO a símbolos e íconos legibles
     function interpretarClimaWMO(codigo) {
         switch (codigo) {
             case 0: return { desc: "Despejado", icono: "☀️" };
-            case 1:
-            case 2:
-            case 3: return { desc: "Parcialmente nublado", icono: "⛅" };
-            case 45:
-            case 48: return { desc: "Neblina / Niebla", icono: "🌫️" };
-            case 51:
-            case 53:
-            case 55:
-            case 56:
-            case 57: return { desc: "Llovizna", icono: "🌧️" };
-            case 61:
-            case 63:
-            case 65:
-            case 66:
-            case 67: return { desc: "Lluvia moderada/fuerte", iconotxt: "🌧️", icono: "🌧️" };
-            case 71:
-            case 73:
-            case 75:
-            case 77: return { desc: "Nieve", icono: "🌨️" };
-            case 80:
-            case 81:
-            case 82: return { desc: "Chaparrones de lluvia", icono: "🌦️" };
-            case 95:
-            case 96:
-            case 99: return { desc: "Tormenta eléctrica", icono: "⚡" };
+            case 1: case 2: case 3: return { desc: "Parcialmente nublado", icono: "⛅" };
+            case 45: case 48: return { desc: "Niebla", icono: "🌫️" };
+            case 51: case 53: case 55: return { desc: "Llovizna", icono: "🌧️" };
+            case 61: case 63: case 65: return { desc: "Lluvia", icono: "🌧️" };
+            case 80: case 81: case 82: return { desc: "Chaparrones", icono: "🌦️" };
+            case 95: case 96: case 99: return { desc: "Tormenta", icono: "⚡" };
             default: return { desc: "Variable", icono: "🌡️" };
         }
     }
 
     const estacionesMeteo = [
-        { nombre: "Resistencia / BAM Resistencia", coords: [-27.4514, -59.0500] },
+        { nombre: "Resistencia / BAM", coords: [-27.4514, -59.0500] },
         { nombre: "Corrientes Capital", coords: [-27.4692, -58.8306] },
         { nombre: "Paso de la Patria", coords: [-27.3115, -58.5620] },
         { nombre: "Isla del Cerrito", coords: [-27.2830, -58.6830] }
@@ -549,57 +461,108 @@
 
     async function cargarMeteorologiaEnVivo() {
         grupoMeteorologia.clearLayers();
-
         for (const est of estacionesMeteo) {
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${est.coords[0]}&longitude=${est.coords[1]}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires`;
-
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${est.coords[0]}&longitude=${est.coords[1]}&current=temperature_2m,relative_humidity_2m,weather_code&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires`;
             try {
                 const resp = await fetch(url);
                 const data = await resp.json();
-                
                 const temp = data.current.temperature_2m;
-                const hum = data.current.relative_humidity_2m;
-                const viento = data.current.wind_speed_10m;
                 const wmoCode = data.current.weather_code;
-                
-                // Lluvia acumulada de las últimas 24 hs (día actual en el array daily)
                 const lluvia24hs = data.daily.precipitation_sum ? data.daily.precipitation_sum[0] : 0.0;
-                
                 const climaInfo = interpretarClimaWMO(wmoCode);
 
-                // Crear pin distintivo meteorológico
                 const meteoIcon = L.divIcon({
                     className: 'custom-div-icon',
-                    html: `
-                        <div class="meteo-badge">
-                            <span style="font-size: 15px;">${climaInfo.icono}</span>
-                            <span>${temp}°C | <b>🌧️ ${lluvia24hs} mm</b></span>
-                        </div>
-                    `,
-                    iconSize: [110, 32],
-                    iconAnchor: [55, 16],
-                    popupAnchor: [0, -18]
+                    html: `<div class="meteo-badge"><span>${climaInfo.icono}</span><span>${temp}°C | 🌧️${lluvia24hs}mm</span></div>`,
+                    iconSize: [110, 32], iconAnchor: [55, 16], popupAnchor: [0, -18]
                 });
 
-                const marker = L.marker(est.coords, { icon: meteoIcon }).addTo(grupoMeteorologia);
-                marker.bindPopup(`
-                    <div style="border-bottom: 2px solid #2980b9; padding-bottom: 3px; margin-bottom: 5px;">
-                        <b>🌤️ Estación Met.: ${est.nombre}</b>
-                    </div>
-                    <b>Condición:</b> ${climaInfo.icono} ${climaInfo.desc}<br>
-                    <b>Temperatura:</b> ${temp} °C<br>
-                    <b>Humedad:</b> ${hum} %<br>
-                    <b>Viento:</b> ${viento} km/h<br>
-                    <b>Lluvia Acumulada (24 hs):</b> <span style="color: #2980b9; font-weight: bold;">${lluvia24hs} mm</span>
-                `);
-            } catch (err) {
-                console.error(`Error al consultar clima para ${est.nombre}:`, err);
-            }
+                L.marker(est.coords, { icon: meteoIcon }).addTo(grupoMeteorologia)
+                  .bindPopup(`<b>Estación: ${est.nombre}</b><br>${climaInfo.icono} ${climaInfo.desc}<br>Temp: ${temp}°C<br>Lluvia 24hs: ${lluvia24hs} mm`);
+            } catch (err) { console.error(err); }
         }
     }
     cargarMeteorologiaEnVivo();
 
-    // --- H. PADRÓN DE RECURSOS E INCIDENTES ---
+    // --- F. RUTEO TÁCTICO CON OSRM Y CLIMA EN RUTA ---
+    let capaRutaActiva = L.layerGroup().addTo(map);
+
+    async function calcularRutaTactica() {
+        const origenStr = document.getElementById('ruta-origen').value.trim();
+        const destinoStr = document.getElementById('ruta-destino').value.trim();
+        const resDiv = document.getElementById('resultado-ruta');
+
+        if (!origenStr || !destinoStr) {
+            alert("Por favor ingrese las coordenadas de origen y destino (Lat, Lon).");
+            return;
+        }
+
+        const [latOrig, lonOrig] = origenStr.split(',').map(Number);
+        const [latDest, lonDest] = destinoStr.split(',').map(Number);
+
+        if (isNaN(latOrig) || isNaN(lonOrig) || isNaN(latDest) || isNaN(lonDest)) {
+            alert("Formato de coordenadas inválido. Use el formato: -27.45,-59.05");
+            return;
+        }
+
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = "⏳ Calculando ruta y consultando clima en trayecto...";
+
+        // OSRM Public Routing API
+        const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${lonOrig},${latOrig};${lonDest},${latDest}?overview=full&geometries=geojson`;
+
+        try {
+            const resp = await fetch(urlOSRM);
+            const data = await resp.json();
+
+            if (!data.routes || data.routes.length === 0) {
+                resDiv.innerHTML = "❌ No se encontró ruta terrestre disponible entre los puntos.";
+                return;
+            }
+
+            const ruta = data.routes[0];
+            const distanciaKm = (ruta.distance / 1000).toFixed(1);
+            const duracionMin = Math.round(ruta.duration / 60);
+
+            // Calcular clima en el punto medio de la ruta
+            const puntoMedioCoords = ruta.geometry.coordinates[Math.floor(ruta.geometry.coordinates.length / 2)];
+            const lonMedio = puntoMedioCoords[0];
+            const latMedio = puntoMedioCoords[1];
+
+            const urlMeteoRuta = `https://api.open-meteo.com/v1/forecast?latitude=${latMedio}&longitude=${lonMedio}&current=temperature_2m,weather_code&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires`;
+            const respMeteo = await fetch(urlMeteoRuta);
+            const dataMeteo = await respMeteo.json();
+            const climaRuta = interpretarClimaWMO(dataMeteo.current.weather_code);
+            const lluviaRuta = dataMeteo.daily.precipitation_sum ? dataMeteo.daily.precipitation_sum[0] : 0;
+
+            // Dibujar ruta en el mapa
+            capaRutaActiva.clearLayers();
+            const geojsonRuta = {
+                "type": "Feature",
+                "properties": {},
+                "geometry": ruta.geometry
+            };
+
+            const lineaRuta = L.geoJSON(geojsonRuta, {
+                style: { color: "#8e44ad", weight: 5, opacity: 0.85 }
+            }).addTo(capaRutaActiva);
+
+            map.fitBounds(lineaRuta.getBounds(), { padding: [50, 50] });
+
+            resDiv.innerHTML = `
+                <b>✅ Ruta Táctica Calculada:</b><br>
+                📏 <b>Distancia:</b> ${distanciaKm} km | ⏱️ <b>Demora Est.:</b> ${duracionMin} min<br>
+                🌤️ <b>Clima en Trayecto:</b> ${climaRuta.icono} ${climaRuta.desc} (${dataMeteo.current.temperature_2m}°C)<br>
+                🌧️ <b>Lluvia en Ruta (24hs):</b> ${lluviaRuta} mm
+            `;
+
+        } catch (err) {
+            console.error(err);
+            resDiv.innerHTML = "❌ Error al conectar con el servicio de ruteo OSRM.";
+        }
+    }
+
+    // --- G. PADRÓN DE RECURSOS SCI ---
     const datosInicialesSCI = {
         "type": "FeatureCollection",
         "features": [
@@ -607,13 +570,13 @@
                 "type": "Feature",
                 "properties": {
                     "id": "REC-01",
-                    "nombre": "Escalón Comunicaciones Móvil VHF/HF",
+                    "nombre": "Escalón Comunicaciones Móvil",
                     "institucion": "FAA",
                     "tipo": "Comunicaciones",
                     "estado": "ASIGNADO",
                     "efectivos": 4,
-                    "sector": "Puente Gral. Belgrano / Cabecera Chaco",
-                    "tarea_asignada": "Enlace radioeléctrico redundante para Comando",
+                    "sector": "Puente Gral. Belgrano",
+                    "tarea_asignada": "Enlace radioeléctrico",
                     "hora_reporte": "2026-10-21T22:45:00-03:00"
                 },
                 "geometry": { "type": "Point", "coordinates": [-58.8850, -27.4650] }
@@ -622,71 +585,24 @@
                 "type": "Feature",
                 "properties": {
                     "id": "REC-02",
-                    "nombre": "Sección Botes de Asalto e Ingenieros",
+                    "nombre": "Sección Botes de Asalto",
                     "institucion": "EA",
-                    "tipo": "Búsqueda y Evacuación",
+                    "tipo": "Evacuación",
                     "estado": "ASIGNADO",
                     "efectivos": 12,
                     "sector": "Isla del Cerrito",
-                    "tarea_asignada": "Evacuación preventiva de familias ribereñas",
+                    "tarea_asignada": "Evacuación ribereña",
                     "hora_reporte": "2026-10-21T21:30:00-03:00"
                 },
                 "geometry": { "type": "Point", "coordinates": [-58.6833, -27.2917] }
-            },
-            {
-                "type": "Feature",
-                "properties": {
-                    "id": "REC-03",
-                    "nombre": "Guardacostas y Patrulla Fluvial",
-                    "institucion": "PNA",
-                    "tipo": "Rescate Náutico",
-                    "estado": "DISPONIBLE",
-                    "efectivos": 8,
-                    "sector": "Puerto Barranqueras",
-                    "tarea_asignada": "Apresto para patrullaje fluvial y rescate",
-                    "hora_reporte": "2026-10-21T23:00:00-03:00"
-                },
-                "geometry": { "type": "Point", "coordinates": [-58.9320, -27.4850] }
-            },
-            {
-                "type": "Feature",
-                "properties": {
-                    "id": "REC-04",
-                    "nombre": "Patrulla Seguridad Vial RN 16",
-                    "institucion": "GN",
-                    "tipo": "Control de Tránsito",
-                    "estado": "ASIGNADO",
-                    "efectivos": 6,
-                    "sector": "RN 16 km 14",
-                    "tarea_asignada": "Control por acumulación de agua en banquinas",
-                    "hora_reporte": "2026-10-21T23:10:00-03:00"
-                },
-                "geometry": { "type": "Point", "coordinates": [-58.9950, -27.4120] }
-            },
-            {
-                "type": "Feature",
-                "properties": {
-                    "id": "REC-05",
-                    "nombre": "Calle Anegada / Corte Preventivo",
-                    "institucion": "DC",
-                    "tipo": "Anegamiento Urbano",
-                    "estado": "ASIGNADO",
-                    "efectivos": 3,
-                    "sector": "Av. Soberanía Nacional y Av. Alberdi",
-                    "tarea_asignada": "Corte total de calzada por 40 cm de agua acumulada",
-                    "hora_reporte": "2026-10-21T23:40:00-03:00"
-                },
-                "geometry": { "type": "Point", "coordinates": [-58.9830, -27.4710] }
             }
         ]
     };
 
-    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v4')) || structuredClone(datosInicialesSCI);
-
-    // --- I. SINCRONIZACIÓN DE PANEL Y PINES ---
+    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v5')) || structuredClone(datosInicialesSCI);
     const capaRecursosSCI = L.layerGroup().addTo(map);
 
-    function renderizarRecursosSCI() {
+    function renderizarrecursosSCI() {
         const instSeleccionada = document.getElementById('filtro-institucion').value;
         const estadoSeleccionado = document.getElementById('filtro-estado').value;
         const contenedorLista = document.getElementById('lista-recursos');
@@ -724,8 +640,7 @@
                     <b>Tipo:</b> ${p.tipo} | <b>Personal:</b> ${p.efectivos}<br>
                     <b>Estado SCI:</b> <span style="color:${colorEstado}; font-weight:bold;">● ${p.estado}</span><br>
                     <b>Sector:</b> ${p.sector}<br>
-                    <b>Detalle:</b> ${p.tarea_asignada}<br>
-                    <b>Reporte:</b> ${p.hora_reporte}
+                    <b>Detalle:</b> ${p.tarea_asignada}
                 `);
 
                 const tarjeta = document.createElement('div');
@@ -736,8 +651,7 @@
                         <strong>${p.nombre}</strong>
                     </div>
                     <span>Estado: <b>${p.estado}</b> | Personal: <b>${p.efectivos}</b></span><br>
-                    <span style="color: #555;">📍 ${p.sector}</span><br>
-                    <small style="color: #7f8c8d;">🕒 ${p.hora_reporte.slice(11,16)} hs - ${p.tarea_asignada}</small>
+                    <span style="color: #555;">📍 ${p.sector}</span>
                 `;
                 tarjeta.onclick = () => {
                     map.setView([coords[1], coords[0]], 14);
@@ -751,31 +665,26 @@
         document.getElementById('kpi-efectivos').textContent = totalEfectivos;
     }
 
-    // --- J. CAPTURA DE COORDENADAS CON CLIC ---
-    let marcadorTemporal = null;
-
+    // --- H. CLIC EN MAPA PARA COORDENADAS ---
     map.on('click', function(e) {
         const lat = e.latlng.lat.toFixed(5);
         const lon = e.latlng.lng.toFixed(5);
 
+        // Si el panel de ruteo está abierto, podemos rellenar origen o destino
+        const origenInput = document.getElementById('ruta-origen');
+        if (!origenInput.value) {
+            origenInput.value = `${lat},${lon}`;
+        } else if (!document.getElementById('ruta-destino').value) {
+            document.getElementById('ruta-destino').value = `${lat},${lon}`;
+        }
+
         document.getElementById('panel-alta').open = true;
         document.getElementById('nueva-lat').value = lat;
         document.getElementById('nueva-lon').value = lon;
-
-        if (marcadorTemporal) {
-            map.removeLayer(marcadorTemporal);
-        }
-        marcadorTemporal = L.circleMarker([lat, lon], {
-            radius: 7,
-            color: '#e67e22',
-            fillColor: '#f39c12',
-            fillOpacity: 0.9
-        }).addTo(map).bindPopup("📍 Coordenada capturada").openPopup();
     });
 
     function agregarRecursoEnVivo(event) {
         event.preventDefault();
-
         const ahora = new Date();
         const pad = n => String(n).padStart(2, '0');
         const timestampLocal = `${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}T${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:00-03:00`;
@@ -801,35 +710,28 @@
         };
 
         recursosGeoJSON.features.unshift(nuevoRecurso);
-        localStorage.setItem('cop_recursos_sci_v4', JSON.stringify(recursosGeoJSON));
-
+        localStorage.setItem('cop_recursos_sci_v5', JSON.stringify(recursosGeoJSON));
         document.getElementById('form-recurso').reset();
-        if (marcadorTemporal) {
-            map.removeLayer(marcadorTemporal);
-            marcadorTemporal = null;
-        }
-
-        renderizarRecursosSCI();
+        renderizarrecursosSCI();
         map.setView([lat, lon], 13);
     }
 
     function restaurarDatosIniciales() {
-        localStorage.removeItem('cop_recursos_sci_v4');
+        localStorage.removeItem('cop_recursos_sci_v5');
         recursosGeoJSON = structuredClone(datosInicialesSCI);
-        renderizarRecursosSCI();
+        renderizarrecursosSCI();
     }
 
-    renderizarRecursosSCI();
+    renderizarrecursosSCI();
 
-    // --- K. CONTROL DE CAPAS Y LEYENDA ---
+    // --- I. CONTROL DE CAPAS Y LEYENDA ---
     L.control.layers(
         { "Mapa Base (OpenStreetMap)": osmBase },
         {
             "Recursos e Incidentes (SCI)": capaRecursosSCI,
-            "Meteorología y Lluvia (Open-Meteo)": grupoMeteorologia,
-            "Hidrómetros (Nivel en Metros)": grupoHidrometrosMts,
-            "Zonas de Riesgo (GeoJSON)": capaGeoJSON,
-            "Lluvia Satelital IMERG (NASA GIBS)": nasaLluviaLayer
+            "Hospitales y Estaciones de Servicio (POIs)": grupoPOIs,
+            "Meteorología en Ruta y Zonas": grupoMeteorologia,
+            "Ruta Táctica Activa": capaRutaActiva
         },
         { collapsed: false }
     ).addTo(map);
@@ -838,20 +740,16 @@
     legend.onAdd = function () {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
-            <strong>Meteorología y Lluvia (24 hs)</strong><br>
-            <span>⛅ Símbolo + Temperatura + <b>🌧️ mm</b></span><br>
+            <strong>Puntos de Interés (POIs)</strong><br>
+            <span>🏥 Hospitales / Centros Salud</span><br>
+            <span>⛽ Estaciones de Servicio</span><br>
             <div class="legend-divider"></div>
             <strong>Fuerzas y Organismos (SCI)</strong><br>
             <i style="background: #0284c7; border-radius: 3px;"></i> <b>FAA</b> - Fuerza Aérea<br>
             <i style="background: #4d7c0f; border-radius: 3px;"></i> <b>EA</b> - Ejército Argentino<br>
             <i style="background: #1e3a8a; border-radius: 3px;"></i> <b>PNA</b> - Prefectura Naval<br>
             <i style="background: #15803d; border-radius: 3px;"></i> <b>GN</b> - Gendarmería Nac.<br>
-            <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil / Anegamientos<br>
-            <div class="legend-divider"></div>
-            <strong>Hidrometría en Metros</strong><br>
-            <i style="background: #22c55e; border-radius: 50%;"></i> Río Normal<br>
-            <i style="background: #eab308; border-radius: 50%;"></i> Río en Alerta<br>
-            <i style="background: #ef4444; border-radius: 50%;"></i> Río en Evacuación
+            <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil
         `;
         return div;
     };
