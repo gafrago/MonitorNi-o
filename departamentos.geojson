@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "nombre": "Departamento San Fernando (Chaco)",
+        "emergencia": "Alerta Roja (Desborde)",
+        "evacuados": 120,
+        "vias": "Rutas 11 y 16 con tramos anegados",
+        "color": "#e74c3c"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-59.10, -27.35],
+            [-58.85, -27.35],
+            [-58.85, -27.70],
+            [-59.10, -27.70],
+            [-59.10, -27.35]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "nombre": "Departamento Capital (Corrientes)",
+        "emergencia": "Alerta Amarilla (Prevención)",
+        "evacuados": 45,
+        "vias": "Costanera Norte restringida",
+        "color": "#f39c12"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-58.84, -27.40],
+            [-58.70, -27.40],
+            [-58.70, -27.55],
+            [-58.84, -27.55],
+            [-58.84, -27.40]
+          ]
+        ]
+      }
+    }
+  ]
+}
