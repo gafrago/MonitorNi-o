@@ -3,84 +3,233 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitor Operativo Hídrico - NEA</title>
-    
-    <!-- 1. Importar los estilos y la librería de Leaflet -->
+    <title>COP Hídrico NEA - Fase 1 (Prototipo)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        /* El mapa ocupará toda la pantalla */
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        #map { height: 100vh; width: 100vw; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* 1. Banner Superior de Prototipo y Fecha/Hora */
+        #top-banner {
+            background-color: #1a252f;
+            color: #ffffff;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            border-bottom: 3px solid #e67e22;
+            z-index: 1000;
+        }
+        .badge-proto {
+            background-color: #e67e22;
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+        .smn-link {
+            background-color: #2980b9;
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .smn-link:hover { background-color: #3498db; }
+
+        /* Contenedor del Mapa */
+        #map { flex: 1; width: 100%; }
+
+        /* 2. Estilo para la Leyenda Flotante */
+        .info.legend {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 14px;
+            font-size: 12px;
+            line-height: 20px;
+            color: #333;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .info.legend i {
+            width: 14px;
+            height: 14px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+            border: 1px solid #555;
+        }
     </style>
 </head>
 <body>
 
-<!-- Contenedor del Mapa -->
+<!-- Banner Operativo Superior -->
+<div id="top-banner">
+    <div>
+        <span class="badge-proto">Prototipo Demostrativo - Sin Backend</span>
+        <strong>MONITOR OPERATIVO HÍDRICO (COP) - CHACO Y CORRIENTES</strong>
+    </div>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <span id="reloj-operativo">Cargando hora...</span>
+        <a href="https://www.smn.gob.ar/alertas" target="_blank" rel="noopener" class="smn-link">
+            ⚠️ Ver Alertas Oficiales SMN
+        </a>
+    </div>
+</div>
+
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-    // 2. Inicializar el mapa centrado en el límite Chaco/Corrientes
-    // Coordenadas: Latitud -27.45, Longitud -58.98. Zoom 8 para vista regional.
-    const map = L.map('map').setView([-27.4514, -58.9867], 8);
+    // --- A. RELOJ EN TIEMPO REAL (Hora Local y UTC/Zulú) ---
+    function actualizarReloj() {
+        const ahora = new Date();
+        const local = ahora.toLocaleString('es-AR', { hour12: false });
+        const utc = ahora.toISOString().slice(11, 19) + 'Z';
+        document.getElementById('reloj-operativo').innerHTML = `🕒 Local: <b>${local}</b> | UTC: <b>${utc}</b>`;
+    }
+    setInterval(actualizarReloj, 1000);
+    actualizarReloj();
 
-    // 3. Cargar la capa base (El mapa de fondo físico/político)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
+    // --- B. INICIALIZAR MAPA BASE ---
+    const map = L.map('map').setView([-27.46, -58.90], 10);
+
+    const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap | Caudales: <a href="https://open-meteo.com/">Open-Meteo (CC BY 4.0)</a> | Satélite: NASA GIBS',
+        maxZoom: 18
     }).addTo(map);
 
-    // 4. Trazar Zonas de Riesgo (Polígonos vectoriales)
-    
-    // Zona Roja: Alta probabilidad de anegamiento (ej. márgenes del Paraná)
-    const zonaRojaCoords = [
-        [-27.20, -58.85], [-27.20, -58.60], 
-        [-27.60, -58.75], [-27.60, -58.95]
-    ];
-    const zonaRoja = L.polygon(zonaRojaCoords, {
-        color: 'red',
-        fillColor: '#f03',
-        fillOpacity: 0.4 // Transparencia para ver el terreno debajo
-    }).addTo(map).bindPopup("<b>Alerta Roja</b><br>Nivel de río crítico. Riesgo inminente.");
+    // --- C. CAPA SATELITAL DE LLUVIA EN VIVO (NASA GIBS WMS - IMERG) ---
+    const nasaLluviaLayer = L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
+        layers: 'IMERG_Precipitation_Rate',
+        format: 'image/png',
+        transparent: true,
+        opacity: 0.55,
+        attribution: 'NASA EOSDIS GIBS'
+    });
 
-    // Zona Amarilla: Área de prevención y monitoreo
-    const zonaAmarillaCoords = [
-        [-27.10, -59.50], [-27.10, -59.10], 
-        [-27.50, -59.30], [-27.50, -59.80]
-    ];
-    const zonaAmarilla = L.polygon(zonaAmarillaCoords, {
-        color: 'orange',
-        fillColor: 'orange',
-        fillOpacity: 0.4
-    }).addTo(map).bindPopup("<b>Alerta Amarilla</b><br>Prevención. Preparación de medios.");
-
-    // 5. Cargar Marcadores Tácticos (Posición de Medios y Personal)
-    // Inicialmente los cargamos fijos, luego se automatizarán.
-    
-    // Puesto de Comando Central
-    const baseMarker = L.marker([-27.4514, -59.05]).addTo(map)
-        .bindPopup("<b>Puesto de Comando</b><br>Base Aérea.<br><i>Enlace Satelital Activo</i>");
-
-    // Equipo desplegado en el terreno
-    const equipoMarker = L.marker([-27.35, -58.80]).addTo(map)
-        .bindPopup(`
-            <b>Equipo de Comunicaciones Alfa</b><br>
-            <b>Efectivos:</b> 4<br>
-            <b>Misión:</b> Relevamiento hídrico y enlace VHF<br>
-            <b>Estado:</b> Operativo
-        `);
-
-    // 6. Panel de Control de Capas (Permite a la superioridad filtrar lo que ve)
-    const capasSuperpuestas = {
-        "Áreas de Alerta Roja": zonaRoja,
-        "Áreas de Prevención Amarilla": zonaAmarilla,
-        "Medios Desplegados": L.layerGroup([baseMarker, equipoMarker])
+    // --- D. ZONAS DE RIESGO ESTRUCTURADAS EN GEOJSON ---
+    const zonasRiesgoGeoJSON = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "nombre": "Ribera Barranqueras - Antequera (Chaco)",
+                    "nivel_riesgo": "ALTO",
+                    "color": "#e74c3c",
+                    "detalle": "Terreno bajo aluvial. Prioridad de evacuación y monitoreo de defensas."
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [-58.96, -27.42], [-58.85, -27.42],
+                        [-58.88, -27.53], [-58.98, -27.53],
+                        [-58.96, -27.42]
+                    ]]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "nombre": "Costanera y Ribera Norte (Corrientes)",
+                    "nivel_riesgo": "MEDIO",
+                    "color": "#f39c12",
+                    "detalle": "Zona de prevención por escurrimiento y crecida del Paraná."
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [-58.85, -27.43], [-58.75, -27.43],
+                        [-58.78, -27.52], [-58.86, -27.52],
+                        [-58.85, -27.43]
+                    ]]
+                }
+            }
+        ]
     };
-    
-    L.control.layers(null, capasSuperpuestas, {collapsed: false}).addTo(map);
 
+    const capaGeoJSON = L.geoJSON(zonasRiesgoGeoJSON, {
+        style: function(feature) {
+            return {
+                color: feature.properties.color,
+                fillColor: feature.properties.color,
+                weight: 2,
+                fillOpacity: 0.35
+            };
+        },
+        onEachFeature: function(feature, layer) {
+            layer.bindPopup(`
+                <b>Zona:</b> ${feature.properties.nombre}<br>
+                <b>Riesgo:</b> ${feature.properties.nivel_riesgo}<br>
+                <b>Detalle:</b> ${feature.properties.detalle}
+            `);
+        }
+    }).addTo(map);
+
+    // --- E. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
+    const grupoHidrometria = L.layerGroup().addTo(map);
+
+    async function cargarCaudalRio() {
+        // Coordenadas del cauce principal del Río Paraná entre Barranqueras y Corrientes
+        const lat = -27.475;
+        const lon = -58.865;
+        const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lon}&daily=river_discharge&forecast_days=3`;
+
+        try {
+            const respuesta = await fetch(url);
+            const datos = await respuesta.json();
+            const caudalHoy = datos.daily.river_discharge[0];
+            const caudalManana = datos.daily.river_discharge[1];
+            const fechaHoy = datos.daily.time[0];
+
+            L.circleMarker([lat, lon], {
+                radius: 9,
+                fillColor: "#0055ff",
+                color: "#ffffff",
+                weight: 2,
+                fillOpacity: 0.9
+            }).addTo(grupoHidrometria).bindPopup(`
+                <b>🌊 Telemetría Hídrica (Open-Meteo GloFAS)</b><br>
+                <b>Punto:</b> Eje Paraná (Barranqueras / Corrientes)<br>
+                <b>Fecha:</b> ${fechaHoy}<br>
+                <b>Caudal actual estimado:</b> ${caudalHoy} m³/s<br>
+                <b>Pronóstico 24 hs:</b> ${caudalManana} m³/s
+            `).openPopup();
+        } catch (error) {
+            console.error("Error al obtener datos de Open-Meteo Flood API:", error);
+        }
+    }
+    cargarCaudalRio();
+
+    // --- F. CONTROL DE CAPAS Y LEYENDA ---
+    L.control.layers(
+        { "Mapa Base (OpenStreetMap)": osmBase },
+        {
+            "Zonas de Riesgo (GeoJSON)": capaGeoJSON,
+            "Telemetría Caudal (Open-Meteo)": grupoHidrometria,
+            "Lluvia Satelital IMERG (NASA GIBS)": nasaLluviaLayer
+        },
+        { collapsed: false }
+    ).addTo(map);
+
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'info legend');
+        div.innerHTML = `
+            <strong>Referencias Operativas</strong><br>
+            <i style="background: #e74c3c"></i> Riesgo Alto (Alerta Roja)<br>
+            <i style="background: #f39c12"></i> Riesgo Medio (Prevención)<br>
+            <i style="background: #0055ff; border-radius: 50%;"></i> Punto de Aforo / Caudal (GloFAS)<br>
+            <small><i>Activar capa NASA GIBS arriba a la derecha para ver precipitación satelital.</i></small>
+        `;
+        return div;
+    };
+    legend.addTo(map);
 </script>
 </body>
+</html>
 </html>
