@@ -3,19 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Zonas Dinámicas y Comando Total</title>
+    <title>COP Hídrico NEA - Interfuerzas y Radar Estratégico</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #e2e8f0; }
         
-        #top-banner { background-color: #1a252f; color: #ffffff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 3px solid #e67e22; z-index: 1000; }
+        /* 1. Banner Superior y Pestañas */
+        #top-banner { background-color: #1a252f; color: #ffffff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; z-index: 1000; }
         .badge-proto { background-color: #e67e22; color: #fff; padding: 3px 8px; border-radius: 3px; font-weight: bold; margin-right: 10px; font-size: 11px; }
         
-        #sidebar { width: 395px; background: #f4f6f7; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-sizing: border-box; }
+        .tab-bar { background-color: #2c3e50; padding: 0 16px; display: flex; gap: 5px; border-bottom: 3px solid #e67e22; }
+        .tab-btn { background-color: #34495e; color: white; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; cursor: pointer; border-radius: 5px 5px 0 0; transition: 0.2s; opacity: 0.7; }
+        .tab-btn:hover { opacity: 1; background-color: #3b536b; }
+        .tab-btn.active { background-color: #e67e22; opacity: 1; color: #fff; }
+
+        .view-container { display: none; flex: 1; overflow: hidden; width: 100%; }
+        .view-container.active { display: flex; }
+
+        /* 2. Panel Lateral (Vista Táctica) */
+        #sidebar { width: 400px; background: #f8fafc; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-sizing: border-box; }
         .kpi-box { display: flex; gap: 8px; margin-bottom: 10px; }
         .kpi-card { flex: 1; background: #2c3e50; color: white; padding: 6px 8px; border-radius: 4px; text-align: center; font-size: 11px; }
         .kpi-card b { display: block; font-size: 15px; color: #f39c12; }
@@ -25,12 +35,17 @@
         .form-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; font-size: 12px; }
         .form-grid input, .form-grid select, .form-grid textarea { padding: 6px; border: 1px solid #cbd5e1; border-radius: 3px; font-size: 12px; }
         .coords-row { display: flex; gap: 6px; }
+        
         .btn-submit { background-color: #27ae60; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 4px; }
         .btn-ruta { background-color: #8e44ad; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 4px; }
         .btn-pdf { background-color: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
         .btn-pdf:hover { background-color: #e74c3c; }
-        .smn-link { background-color: #2980b9; color: white; text-decoration: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; }
-        .smn-link:hover { background-color: #3498db; }
+
+        .select-zona { background-color: #f1f5f9; border: 1px solid #94a3b8; font-weight: bold; color: #1e293b; }
+
+        /* 3. Marcadores y Mapas */
+        #map-tactico { flex: 1; cursor: crosshair; }
+        #map-radar { flex: 1; width: 100%; height: 100%; background: #1e293b; }
 
         .custom-div-icon { background: transparent; border: none; }
         .pin-tactico { position: relative; width: 36px; height: 36px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.45); border: 2px solid #ffffff; }
@@ -39,10 +54,7 @@
         .corte-ruta-badge { background: #c0392b; color: white; border: 2px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
         .poi-badge { background: #ffffff; border: 2px solid #333; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 
-        .info.legend { background: rgba(255, 255, 255, 0.96); padding: 10px; font-size: 11px; line-height: 18px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.25); }
-
-        /* Estilos para buscador en cascada */
-        .select-zona { background-color: #f8fafc; border: 1px solid #94a3b8; font-weight: bold; color: #1e293b; }
+        .radar-legend { position: absolute; bottom: 30px; right: 30px; z-index: 1000; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 8px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -54,12 +66,18 @@
     </div>
     <div style="display: flex; align-items: center; gap: 10px;">
         <span id="reloj-operativo" style="margin-right: 5px;"></span>
-        <a href="https://www.smn.gob.ar/alertas" target="_blank" class="smn-link">⚠️ Alertas SMN</a>
-        <button onclick="generarSITREP()" class="btn-pdf">📄 Descargar SITREP (PDF)</button>
+        <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
     </div>
 </div>
 
-<div style="display: flex; flex: 1; overflow: hidden;">
+<!-- MENÚ DE PESTAÑAS -->
+<div class="tab-bar">
+    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Terreno y Medios)</button>
+    <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar Lluvia)</button>
+</div>
+
+<!-- VISTA 1: TÁCTICA -->
+<div id="vista-tactica" class="view-container active">
     <div id="sidebar">
         <h3 style="margin-top: 0; margin-bottom: 8px; color: #2c3e50; font-size: 15px;">📋 Comando de Incidentes</h3>
         
@@ -68,401 +86,288 @@
             <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
         </div>
 
-        <!-- NUEVO: Buscador de Zonas Administrativas -->
         <details class="form-panel" open>
-            <summary>📍 Navegación por Zonas y Barrios</summary>
+            <summary>📍 Navegación por Zonas (Datos Externos)</summary>
             <div class="form-grid">
-                <select id="sel-depto" class="select-zona" onchange="filtrarMunicipios()">
-                    <option value="">1. Seleccione Departamento...</option>
-                </select>
-                <select id="sel-muni" class="select-zona" onchange="filtrarBarrios()" disabled>
-                    <option value="">2. Seleccione Municipio...</option>
-                </select>
-                <select id="sel-barrio" class="select-zona" onchange="volarAZona()" disabled>
-                    <option value="">3. Seleccione Barrio / Zona...</option>
-                </select>
+                <small style="color: #c0392b; font-weight: bold; display: none;" id="alerta-geojson">⚠️ Cargando datos de prueba. Coloque 'mapa_nea.geojson' en la carpeta para ver toda la provincia.</small>
+                <select id="sel-depto" class="select-zona" onchange="filtrarMunicipios()"><option value="">1. Departamento...</option></select>
+                <select id="sel-muni" class="select-zona" onchange="filtrarBarrios()" disabled><option value="">2. Municipio...</option></select>
+                <select id="sel-barrio" class="select-zona" onchange="volarAZona()" disabled><option value="">3. Barrio / Zona...</option></select>
             </div>
         </details>
 
         <details class="form-panel">
             <summary>🛣️ Calcular Ruta Táctica y Clima</summary>
             <div class="form-grid">
-                <small style="color: #8e44ad; font-weight: bold;">Ingresá dirección, lugar conocido o coordenadas.</small>
-                <input type="text" id="ruta-origen" placeholder="Origen: Ej. Base Aérea Resistencia" />
+                <input type="text" id="ruta-origen" placeholder="Origen: Ej. Hospital Perrando" />
                 <input type="text" id="ruta-destino" placeholder="Destino: Ej. Isla del Cerrito" />
                 <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
-                <div id="resultado-ruta" style="display:none; font-size: 11.5px; background:#f8fafc; padding:8px; margin-top:4px; border: 1px solid #cbd5e1; border-radius: 4px;"></div>
+                <div id="resultado-ruta" style="display:none; font-size: 11.5px; background:#f8fafc; padding:8px; margin-top:4px; border: 1px solid #cbd5e1;"></div>
             </div>
         </details>
 
         <details class="form-panel" id="panel-alta">
             <summary>➕ Alta Recurso / Corte de Ruta</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla / Corte Ruta 11)" required />
+                <input type="text" id="nuevo-nombre" placeholder="Nombre" required />
                 <div style="display: flex; gap: 6px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
-                        <option value="FAA">FAA - Fuerza Aérea</option>
-                        <option value="EA">EA - Ejército</option>
-                        <option value="PNA">PNA - Prefectura</option>
-                        <option value="GN">GN - Gendarmería</option>
-                        <option value="DC">DC - Defensa Civil</option>
-                        <option value="VIALIDAD">VIALIDAD - Corte Ruta</option>
+                        <option value="FAA">FAA</option><option value="EA">EA</option><option value="PNA">PNA</option><option value="GN">GN</option><option value="DC">DC</option><option value="VIALIDAD">VIALIDAD - Corte</option>
                     </select>
                     <select id="nuevo-estado" style="flex: 1;" required>
-                        <option value="ASIGNADO">🟢 Asignado / Activo</option>
-                        <option value="DISPONIBLE">🟡 Disponible</option>
-                        <option value="NO_DISPONIBLE">🔴 No Disp. / Bloqueado</option>
+                        <option value="ASIGNADO">🟢 Activo</option><option value="DISPONIBLE">🟡 Disp.</option><option value="NO_DISPONIBLE">🔴 Bloqueado</option>
                     </select>
                 </div>
                 <div class="coords-row">
-                    <input type="number" step="any" id="nueva-lat" placeholder="Latitud (Clic mapa)" required />
-                    <input type="number" step="any" id="nueva-lon" placeholder="Longitud (Clic mapa)" required />
+                    <input type="number" step="any" id="nueva-lat" placeholder="Latitud" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Longitud" required />
                 </div>
                 <input type="text" id="nuevo-sector" placeholder="Sector" required />
-                <textarea id="nueva-tarea" rows="2" placeholder="Detalles..."></textarea>
-                <button type="submit" class="btn-submit">📍 Desplegar en Mapa</button>
+                <button type="submit" class="btn-submit">📍 Desplegar</button>
             </form>
         </details>
 
-        <label style="font-size: 11px; font-weight: bold; color: #34495e; margin-top: 5px;">Filtrar Padrón SCI:</label>
         <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom: 8px; padding: 5px; border-radius: 4px;">
-            <option value="TODAS">Todas las Fuerzas / Organismos</option>
-            <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
-            <option value="EA">Ejército Argentino (EA)</option>
-            <option value="PNA">Prefectura Naval (PNA)</option>
-            <option value="GN">Gendarmería Nacional (GN)</option>
-            <option value="DC">Defensa Civil / Vialidad</option>
+            <option value="TODAS">Todos los Organismos</option><option value="FAA">FAA</option><option value="EA">EA</option><option value="PNA">PNA</option><option value="GN">GN</option><option value="DC">Defensa Civil / Cortes</option>
         </select>
-
         <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
     </div>
-    <div id="map" style="flex: 1; cursor: crosshair;"></div>
+    <div id="map-tactico"></div>
+</div>
+
+<!-- VISTA 2: ESTRATÉGICA (RADAR) -->
+<div id="vista-radar" class="view-container">
+    <div id="map-radar"></div>
+    <div class="radar-legend">
+        <b>⛈️ Intensidad de Precipitación (RainViewer)</b><br>
+        <span style="color: #3498db;">🟦 Lluvias Leves</span> | 
+        <span style="color: #f1c40f;">🟨 Moderadas</span> | 
+        <span style="color: #e74c3c;">🟥 Tormenta Fuerte</span> | 
+        <span style="color: #9b59b6;">🟪 Granizo/Severa</span><br>
+        <small><i>* El zoom está bloqueado para evitar cortes de servidor.</i></small>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- MAPA BASE ---
-    const map = L.map('map').setView([-27.45, -58.95], 11);
-    const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+    // --- CONTROL DE PESTAÑAS ---
+    let mapTactico, mapRadar;
+    let radarCargado = false;
 
-    // --- 1. ZONAS ADMINISTRATIVAS Y BARRIOS (GEOJSON INTEGRADO) ---
-    const geojsonZonasData = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": { 
-                    "departamento": "San Fernando (Chaco)", "municipio": "Resistencia", "barrio": "Microcentro / Macrocentro",
-                    "emergencia": "Alerta Amarilla", "ente_emisor": "Defensa Civil Provincial", "evacuados": 0, "vias": "Anegamientos parciales temporales", "color": "#f39c12" 
-                },
-                "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] }
-            },
-            {
-                "type": "Feature",
-                "properties": { 
-                    "departamento": "San Fernando (Chaco)", "municipio": "Barranqueras", "barrio": "Ribera Av. Gaboto",
-                    "emergencia": "Alerta Roja", "ente_emisor": "Prefectura Naval Argentina", "evacuados": 120, "vias": "Corte total por desborde fluvial", "color": "#e74c3c" 
-                },
-                "geometry": { "type": "Polygon", "coordinates": [[[-58.960, -27.480], [-58.930, -27.480], [-58.930, -27.500], [-58.960, -27.500], [-58.960, -27.480]]] }
-            },
-            {
-                "type": "Feature",
-                "properties": { 
-                    "departamento": "Capital (Corrientes)", "municipio": "Corrientes", "barrio": "Cambá Cuá / Costanera",
-                    "emergencia": "Alerta Naranja", "ente_emisor": "Bomberos Voluntarios", "evacuados": 45, "vias": "Costanera Norte restringida preventivamente", "color": "#d35400" 
-                },
-                "geometry": { "type": "Polygon", "coordinates": [[[-58.840, -27.400], [-58.825, -27.400], [-58.825, -27.415], [-58.840, -27.415], [-58.840, -27.400]]] }
-            }
-        ]
-    };
-
-    let zonasLayer; // Variable para almacenar la capa dibujada
-
-    // Efectos tácticos de Hover (Mouse encima)
-    function resaltarZona(e) {
-        var layer = e.target;
-        layer.setStyle({ weight: 4, fillOpacity: 0.55, color: '#2c3e50', dashArray: '' }); // Aumenta brillo y borde
-        layer.bringToFront();
-    }
-    function restaurarZona(e) { zonasLayer.resetStyle(e.target); }
-
-    // Dibujar Zonas en el mapa
-    zonasLayer = L.geoJSON(geojsonZonasData, {
-        style: function(feature) { 
-            return { color: feature.properties.color, weight: 2, fillOpacity: 0.25 }; 
-        },
-        onEachFeature: function(feature, layer) {
-            // Eventos de Hover
-            layer.on({ mouseover: resaltarZona, mouseout: restaurarZona });
-            // Tooltip con información detallada
-            layer.bindTooltip(`
-                <div style="font-size: 12px; min-width: 220px;">
-                    <div style="border-bottom: 2px solid ${feature.properties.color}; padding-bottom: 4px; margin-bottom: 4px;">
-                        <b style="color: #2c3e50; font-size: 13px;">${feature.properties.barrio}</b><br>
-                        <small>${feature.properties.municipio}, ${feature.properties.departamento}</small>
-                    </div>
-                    <b>🚨 Estado:</b> <span style="color: ${feature.properties.color}; font-weight: bold;">${feature.properties.emergencia}</span><br>
-                    <b>🏢 Reportó:</b> ${feature.properties.ente_emisor}<br>
-                    <b>👥 Evacuados:</b> ${feature.properties.evacuados}<br>
-                    <b>🚧 Vías:</b> ${feature.properties.vias}
-                </div>
-            `, { sticky: true });
+    function cambiarPestana(vista) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+        
+        if (vista === 'tactica') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('vista-tactica').classList.add('active');
+            mapTactico.invalidateSize();
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('vista-radar').classList.add('active');
+            if (!radarCargado) inicializarMapaRadar();
+            mapRadar.invalidateSize();
         }
-    }).addTo(map);
+    }
 
-    // Lógica para el Buscador en Cascada (Depto -> Muni -> Barrio)
-    const selDepto = document.getElementById('sel-depto');
-    const selMuni = document.getElementById('sel-muni');
-    const selBarrio = document.getElementById('sel-barrio');
+    // --- INICIALIZAR MAPA TÁCTICO (Vista 1) ---
+    mapTactico = L.map('map-tactico').setView([-27.45, -58.95], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
 
-    // Poblamos los departamentos al iniciar
-    const departamentosSet = [...new Set(geojsonZonasData.features.map(f => f.properties.departamento))];
-    departamentosSet.forEach(d => {
-        let opt = document.createElement('option'); opt.value = d; opt.text = d; selDepto.add(opt);
-    });
+    // Variables globales para GeoJSON Externo
+    let datosZonasGeoJSON = { "type": "FeatureCollection", "features": [] };
+    let zonasLayerTactico = L.layerGroup().addTo(mapTactico);
+
+    // --- CARGA DE ARCHIVO EXTERNO (DEPARTAMENTOS, MUNICIPIOS, BARRIOS) ---
+    async function cargarZonasExternas() {
+        try {
+            // Intentamos buscar un archivo gigante llamado mapa_nea.geojson
+            const response = await fetch('mapa_nea.geojson');
+            if (!response.ok) throw new Error("No se encontró mapa_nea.geojson");
+            datosZonasGeoJSON = await response.json();
+            document.getElementById('alerta-geojson').style.display = 'none';
+        } catch (error) {
+            // Si el archivo no existe, cargamos datos de prueba para que no se rompa el sistema
+            document.getElementById('alerta-geojson').style.display = 'block';
+            datosZonasGeoJSON = {
+                "type": "FeatureCollection",
+                "features": [
+                    { "type": "Feature", "properties": { "departamento": "San Fernando (Chaco)", "municipio": "Resistencia", "barrio": "Microcentro", "emergencia": "Alerta Amarilla", "ente_emisor": "DC Chaco", "evacuados": 0, "vias": "Anegamientos 20cm", "color": "#f39c12" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] } },
+                    { "type": "Feature", "properties": { "departamento": "San Fernando (Chaco)", "municipio": "Barranqueras", "barrio": "La Toma", "emergencia": "Alerta Roja", "ente_emisor": "PNA", "evacuados": 45, "vias": "Corte Total", "color": "#e74c3c" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.960, -27.480], [-58.930, -27.480], [-58.930, -27.500], [-58.960, -27.500], [-58.960, -27.480]]] } },
+                    { "type": "Feature", "properties": { "departamento": "Capital (Corrientes)", "municipio": "Corrientes", "barrio": "Cambá Cuá", "emergencia": "Alerta Naranja", "ente_emisor": "Bomberos", "evacuados": 12, "vias": "Precaución", "color": "#d35400" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.840, -27.400], [-58.825, -27.400], [-58.825, -27.415], [-58.840, -27.415], [-58.840, -27.400]]] } }
+                ]
+            };
+        }
+        dibujarZonasYCascada();
+    }
+
+    function dibujarZonasYCascada() {
+        zonasLayerTactico.clearLayers();
+        
+        // Efectos Hover
+        function resaltarZona(e) { e.target.setStyle({ weight: 4, fillOpacity: 0.55, color: '#2c3e50' }); e.target.bringToFront(); }
+        function restaurarZona(e) { L.geoJSON().resetStyle(e.target); e.target.setStyle({ weight: 2, fillOpacity: 0.25, color: e.target.feature.properties.color || '#3498db' }); }
+
+        const capaGeo = L.geoJSON(datosZonasGeoJSON, {
+            style: function(f) { return { color: f.properties.color || '#3498db', weight: 2, fillOpacity: 0.25 }; },
+            onEachFeature: function(f, layer) {
+                layer.on({ mouseover: resaltarZona, mouseout: restaurarZona });
+                layer.bindTooltip(`
+                    <div style="font-size: 12px; min-width: 200px;">
+                        <b style="color: ${f.properties.color || '#333'}; font-size: 13px;">${f.properties.barrio || f.properties.nombre || 'Zona'}</b><br>
+                        <small>${f.properties.municipio || '-'}, ${f.properties.departamento || '-'}</small><br>
+                        <b>🚨 Estado:</b> ${f.properties.emergencia || 'Sin datos'}<br>
+                        <b>🏢 Emisor:</b> ${f.properties.ente_emisor || 'N/A'}<br>
+                        <b>👥 Evacuados:</b> ${f.properties.evacuados || 0}
+                    </div>
+                `, { sticky: true });
+            }
+        }).addTo(zonasLayerTactico);
+
+        // Poblar Buscador Cascada
+        const selDepto = document.getElementById('sel-depto');
+        const deptos = [...new Set(datosZonasGeoJSON.features.map(f => f.properties.departamento).filter(Boolean))];
+        deptos.forEach(d => selDepto.add(new Option(d, d)));
+    }
 
     function filtrarMunicipios() {
-        const depto = selDepto.value;
-        selMuni.innerHTML = '<option value="">2. Seleccione Municipio...</option>';
-        selBarrio.innerHTML = '<option value="">3. Seleccione Barrio / Zona...</option>';
-        selMuni.disabled = !depto; selBarrio.disabled = true;
+        const depto = document.getElementById('sel-depto').value;
+        const selMuni = document.getElementById('sel-muni');
+        selMuni.innerHTML = '<option value="">2. Municipio...</option>';
+        document.getElementById('sel-barrio').innerHTML = '<option value="">3. Barrio / Zona...</option>';
+        selMuni.disabled = !depto; document.getElementById('sel-barrio').disabled = true;
+        
         if (!depto) return;
-
-        const municipios = [...new Set(geojsonZonasData.features.filter(f => f.properties.departamento === depto).map(f => f.properties.municipio))];
-        municipios.forEach(m => { let opt = document.createElement('option'); opt.value = m; opt.text = m; selMuni.add(opt); });
+        const munis = [...new Set(datosZonasGeoJSON.features.filter(f => f.properties.departamento === depto).map(f => f.properties.municipio).filter(Boolean))];
+        munis.forEach(m => selMuni.add(new Option(m, m)));
     }
 
     function filtrarBarrios() {
-        const muni = selMuni.value;
-        selBarrio.innerHTML = '<option value="">3. Seleccione Barrio / Zona...</option>';
+        const muni = document.getElementById('sel-muni').value;
+        const selBarrio = document.getElementById('sel-barrio');
+        selBarrio.innerHTML = '<option value="">3. Barrio / Zona...</option>';
         selBarrio.disabled = !muni;
         if (!muni) return;
 
-        const barrios = geojsonZonasData.features.filter(f => f.properties.municipio === muni);
-        barrios.forEach(f => { let opt = document.createElement('option'); opt.value = f.properties.barrio; opt.text = f.properties.barrio; selBarrio.add(opt); });
-    }
-
-    function volarAZona() {
-        const barrioSel = selBarrio.value;
-        if (!barrioSel) return;
-        // Buscar el polígono correspondiente
-        const feature = geojsonZonasData.features.find(f => f.properties.barrio === barrioSel);
-        if (feature) {
-            // Convertir la geometría GeoJSON a límites Leaflet y hacer zoom automático
-            const tempLayer = L.geoJSON(feature);
-            map.flyToBounds(tempLayer.getBounds(), { padding: [50, 50], duration: 1.5 });
-        }
-    }
-
-    // --- 2. RADAR RAINVIEWER OPTIMIZADO (Sin Error de Zoom) ---
-    const grupoRadar = L.layerGroup().addTo(map);
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-        .then(res => res.json())
-        .then(data => {
-            if (data?.radar?.past?.length > 0) {
-                const latestFrame = data.radar.past[data.radar.past.length - 1].path;
-                L.tileLayer(`https://tilecache.rainviewer.com${latestFrame}/512/{z}/{x}/{y}/2/1_1.png`, {
-                    opacity: 0.65, 
-                    attribution: 'Radar: RainViewer',
-                    tileSize: 256,
-                    zoomOffset: -1,
-                    maxNativeZoom: 9, // Clave: detiene llamadas excesivas al servidor
-                    maxZoom: 18       // Clave: estira la última imagen al acercarse a las calles
-                }).addTo(grupoRadar);
-            }
-        }).catch(e => console.log(e));
-
-    // --- 3. HOSPITALES Y POIs ---
-    const puntosInteresPOIs = [
-        { nombre: "Hospital Pediátrico A. C. Varela", tipo: "Hospital", coords: [-27.4450, -58.9880], icono: "🏥" },
-        { nombre: "Hospital Perrando", tipo: "Hospital", coords: [-27.4520, -58.9750], icono: "🏥" },
-        { nombre: "YPF (Acceso Norte)", tipo: "Combustible", coords: [-27.4100, -58.9900], icono: "⛽" },
-        { nombre: "Axion (Pto. Barranqueras)", tipo: "Combustible", coords: [-27.4820, -58.9350], icono: "⛽" }
-    ];
-    const grupoPOIs = L.layerGroup().addTo(map);
-    puntosInteresPOIs.forEach(poi => {
-        const poiIcon = L.divIcon({ className: 'custom-div-icon', html: `<div class="poi-badge" title="${poi.nombre}">${poi.icono}</div>`, iconSize: [26, 26] });
-        L.marker(poi.coords, { icon: poiIcon }).addTo(grupoPOIs).bindPopup(`<b>${poi.nombre}</b><br>Tipo: ${poi.tipo}`);
-    });
-
-    // --- 4. RECURSOS SCI ---
-    const ESTILOS_INSTITUCION = { "FAA": { color: "#0284c7" }, "EA": { color: "#4d7c0f" }, "PNA": { color: "#1e3a8a" }, "GN": { color: "#15803d" }, "DC": { color: "#ea580c" } };
-
-    function crearIcono(inst, estado) {
-        if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28,28] });
-        const color = ESTILOS_INSTITUCION[inst]?.color || "#64748b";
-        const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
-        return L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div class="pin-tactico" style="background-color: ${color};"><span class="sigla">${inst}</span><div class="estado-dot" style="background-color: ${dot};"></div></div>`,
-            iconSize: [36, 36], iconAnchor: [18, 36]
+        const barrios = datosZonasGeoJSON.features.filter(f => f.properties.municipio === muni);
+        barrios.forEach(f => {
+            const nombre = f.properties.barrio || f.properties.nombre;
+            if(nombre) selBarrio.add(new Option(nombre, nombre));
         });
     }
 
-    let datosIniciales = [
+    function volarAZona() {
+        const barrioSel = document.getElementById('sel-barrio').value;
+        if (!barrioSel) return;
+        const f = datosZonasGeoJSON.features.find(x => x.properties.barrio === barrioSel || x.properties.nombre === barrioSel);
+        if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [50, 50], duration: 1.5 });
+    }
+
+    cargarZonasExternas();
+
+    // --- RECURSOS SCI TÁCTICOS ---
+    function crearIcono(inst, estado) {
+        if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28,28] });
+        const color = {"FAA":"#0284c7", "EA":"#4d7c0f", "PNA":"#1e3a8a", "GN":"#15803d", "DC":"#ea580c"}[inst] || "#64748b";
+        const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
+        return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color: ${color};"><span class="sigla">${inst}</span><div class="estado-dot" style="background-color: ${dot};"></div></div>`, iconSize: [36, 36], iconAnchor: [18, 36] });
+    }
+
+    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v10')) || [
         { id: "REC-01", inst: "FAA", nombre: "Comunicaciones Móvil", estado: "ASIGNADO", lat: -27.465, lon: -58.885, sector: "Puente Belgrano", efectivos: 4 },
         { id: "INC-01", inst: "VIALIDAD", nombre: "Corte por Agua", estado: "NO_DISPONIBLE", lat: -27.412, lon: -58.995, sector: "RN 16 km 14", efectivos: 0 }
     ];
-    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v9')) || datosIniciales;
-    const capaRecursos = L.layerGroup().addTo(map);
+    const capaRecursos = L.layerGroup().addTo(mapTactico);
 
     function renderizarRecursos() {
         capaRecursos.clearLayers();
         const lista = document.getElementById('lista-recursos');
-        const filtroInst = document.getElementById('filtro-institucion').value;
-        lista.innerHTML = '';
-        let totalUnidades = 0, totalEfectivos = 0;
+        const fInst = document.getElementById('filtro-institucion').value;
+        lista.innerHTML = ''; let u = 0, e = 0;
         
         recursos.forEach(r => {
-            if (filtroInst === 'TODAS' || r.inst === filtroInst || (filtroInst === 'DC' && r.inst === 'VIALIDAD')) {
-                totalUnidades++;
-                totalEfectivos += Number(r.efectivos) || 0;
-
-                const marker = L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos);
-                marker.bindPopup(`<b>[${r.inst}] ${r.nombre}</b><br>Sector: ${r.sector}<br>Estado: ${r.estado}`);
-                
-                const tarjeta = document.createElement('div');
-                tarjeta.style = `background: white; border-left: 5px solid ${r.inst === 'VIALIDAD' ? '#c0392b' : '#2980b9'}; padding: 8px; margin-bottom: 8px; font-size: 12px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1);`;
-                tarjeta.innerHTML = `<b>${r.inst === 'VIALIDAD' ? '🚧' : ''} [${r.inst}] ${r.nombre}</b><br><span style="color:#555;">📍 ${r.sector}</span>`;
-                tarjeta.onclick = () => { map.setView([r.lat, r.lon], 14); marker.openPopup(); };
-                lista.appendChild(tarjeta);
+            if (fInst === 'TODAS' || r.inst === fInst || (fInst === 'DC' && r.inst === 'VIALIDAD')) {
+                u++; e += Number(r.efectivos) || 0;
+                const m = L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos);
+                m.bindPopup(`<b>[${r.inst}] ${r.nombre}</b><br>Sector: ${r.sector}<br>Estado: ${r.estado}`);
+                const tj = document.createElement('div');
+                tj.style = `background: white; border-left: 5px solid ${r.inst === 'VIALIDAD' ? '#c0392b' : '#2980b9'}; padding: 8px; margin-bottom: 8px; font-size: 12px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1);`;
+                tj.innerHTML = `<b>${r.inst==='VIALIDAD'?'🚧':''} [${r.inst}] ${r.nombre}</b><br><span style="color:#555;">📍 ${r.sector}</span>`;
+                tj.onclick = () => { mapTactico.setView([r.lat, r.lon], 14); m.openPopup(); };
+                lista.appendChild(tj);
             }
         });
-        document.getElementById('kpi-unidades').innerText = totalUnidades;
-        document.getElementById('kpi-efectivos').innerText = totalEfectivos;
+        document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-efectivos').innerText = e;
     }
     renderizarRecursos();
 
-    map.on('click', function(e) {
-        document.getElementById('nueva-lat').value = e.latlng.lat.toFixed(5);
-        document.getElementById('nueva-lon').value = e.latlng.lng.toFixed(5);
-    });
+    mapTactico.on('click', e => { document.getElementById('nueva-lat').value = e.latlng.lat.toFixed(5); document.getElementById('nueva-lon').value = e.latlng.lng.toFixed(5); });
 
     function agregarRecursoEnVivo(e) {
         e.preventDefault();
         recursos.unshift({
-            id: `REC-${Date.now()}`,
-            nombre: document.getElementById('nuevo-nombre').value,
-            inst: document.getElementById('nueva-institucion').value,
-            estado: document.getElementById('nuevo-estado').value,
-            lat: parseFloat(document.getElementById('nueva-lat').value),
-            lon: parseFloat(document.getElementById('nueva-lon').value),
-            sector: document.getElementById('nuevo-sector').value,
-            efectivos: document.getElementById('nueva-institucion').value === 'VIALIDAD' ? 0 : document.getElementById('nuevos-efectivos').value
+            id: `REC-${Date.now()}`, nombre: document.getElementById('nuevo-nombre').value, inst: document.getElementById('nueva-institucion').value,
+            estado: document.getElementById('nuevo-estado').value, lat: parseFloat(document.getElementById('nueva-lat').value), lon: parseFloat(document.getElementById('nueva-lon').value),
+            sector: document.getElementById('nuevo-sector').value, efectivos: document.getElementById('nueva-institucion').value === 'VIALIDAD' ? 0 : document.getElementById('nuevos-efectivos').value
         });
-        localStorage.setItem('cop_recursos_v9', JSON.stringify(recursos));
-        document.getElementById('form-recurso').reset();
-        renderizarRecursos();
+        localStorage.setItem('cop_recursos_v10', JSON.stringify(recursos));
+        document.getElementById('form-recurso').reset(); renderizarRecursos();
     }
 
-    // --- 5. RUTEO TÁCTICO ---
-    const capaRutaActiva = L.layerGroup().addTo(map);
+    // --- INICIALIZAR MAPA RADAR ESTRATÉGICO (Vista 2) ---
+    function inicializarMapaRadar() {
+        // Bloqueamos el zoom estricto entre 5 y 8 para evitar errores de RainViewer
+        mapRadar = L.map('map-radar', { maxZoom: 8, minZoom: 5, zoomControl: true }).setView([-27.5, -59.0], 6);
+        
+        // Mapa base oscuro para resaltar la tormenta
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap, © CartoDB', maxZoom: 8
+        }).addTo(mapRadar);
 
-    function interpretarClimaWMO(codigo) {
-        if(codigo <= 3) return { desc: "Despejado/Nublado", icono: "⛅" };
-        if(codigo === 45 || codigo === 48) return { desc: "Niebla", icono: "🌫️" };
-        if(codigo >= 51 && codigo <= 67) return { desc: "Lluvia", icono: "🌧️" };
-        if(codigo >= 80 && codigo <= 82) return { desc: "Chaparrones", icono: "🌦️" };
-        if(codigo >= 95) return { desc: "Tormenta", icono: "⚡" };
-        return { desc: "Variable", icono: "🌡️" };
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(res => res.json())
+            .then(data => {
+                if (data?.radar?.past?.length > 0) {
+                    const latestFrame = data.radar.past[data.radar.past.length - 1].path;
+                    L.tileLayer(`https://tilecache.rainviewer.com${latestFrame}/512/{z}/{x}/{y}/2/1_1.png`, {
+                        opacity: 0.85, attribution: 'Radar en Vivo: RainViewer',
+                        maxNativeZoom: 8 // Seguro
+                    }).addTo(mapRadar);
+                }
+            }).catch(e => console.log(e));
+        
+        radarCargado = true;
     }
 
-    async function geocodificarTextoOCoordenadas(input) {
-        const txt = input.trim();
-        if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(txt)) return txt.split(',').map(Number);
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(txt + ', Argentina')}&limit=1`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        if (data && data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-        return null;
-    }
-
+    // --- RUTEO ---
+    const capaRutaActiva = L.layerGroup().addTo(mapTactico);
     async function calcularRutaTactica() {
-        const origenStr = document.getElementById('ruta-origen').value;
-        const destinoStr = document.getElementById('ruta-destino').value;
-        const resDiv = document.getElementById('resultado-ruta');
-
-        if (!origenStr || !destinoStr) return alert("Ingrese origen y destino.");
-        resDiv.style.display = 'block';
-        resDiv.innerHTML = "⏳ Geocodificando y trazando ruta...";
-
+        const o = document.getElementById('ruta-origen').value.split(',');
+        const d = document.getElementById('ruta-destino').value.split(',');
+        if(o.length<2 || d.length<2) return alert("Ingrese lat,lon");
         try {
-            const orig = await geocodificarTextoOCoordenadas(origenStr);
-            const dest = await geocodificarTextoOCoordenadas(destinoStr);
-            if (!orig || !dest) { resDiv.innerHTML = "❌ Dirección no encontrada."; return; }
-
-            const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${orig[1]},${orig[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
-            const resp = await fetch(urlOSRM);
-            const data = await resp.json();
-            if (!data.routes || data.routes.length === 0) { resDiv.innerHTML = "❌ No hay ruta terrestre."; return; }
-
-            const ruta = data.routes[0];
-            const distKm = (ruta.distance / 1000).toFixed(1);
-            const durMin = Math.round(ruta.duration / 60);
-
-            const coordMedio = ruta.geometry.coordinates[Math.floor(ruta.geometry.coordinates.length / 2)];
-            const urlMeteo = `https://api.open-meteo.com/v1/forecast?latitude=${coordMedio[1]}&longitude=${coordMedio[0]}&current=temperature_2m,weather_code&timezone=America%2FArgentina%2FBuenos_Aires`;
-            const respMeteo = await fetch(urlMeteo);
-            const dataMeteo = await respMeteo.json();
-            const climaInfo = interpretarClimaWMO(dataMeteo.current.weather_code);
-
+            const url = `https://router.project-osrm.org/route/v1/driving/${o[1]},${o[0]};${d[1]},${d[0]}?geometries=geojson`;
+            const data = await (await fetch(url)).json();
             capaRutaActiva.clearLayers();
-            const linea = L.geoJSON(ruta.geometry, { style: { color: "#8e44ad", weight: 6, opacity: 0.8 } }).addTo(capaRutaActiva);
-            L.marker(orig).addTo(capaRutaActiva).bindPopup("🏁 Origen");
-            L.marker(dest).addTo(capaRutaActiva).bindPopup("📍 Destino");
-            map.fitBounds(linea.getBounds(), { padding: [50, 50] });
-
-            resDiv.innerHTML = `
-                <b>✅ Ruta Operativa Trazada:</b><br>
-                📏 <b>Distancia:</b> ${distKm} km | ⏱️ <b>Demora:</b> ${durMin} min<br>
-                🌤️ <b>Clima:</b> ${climaInfo.icono} ${climaInfo.desc} (${dataMeteo.current.temperature_2m}°C)
-            `;
-        } catch(e) { resDiv.innerHTML = "❌ Error procesando ruta."; }
+            const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6 } }).addTo(capaRutaActiva);
+            mapTactico.fitBounds(linea.getBounds());
+            document.getElementById('resultado-ruta').style.display = 'block';
+            document.getElementById('resultado-ruta').innerHTML = `<b>✅ Ruta Trazada</b><br>Distancia: ${(data.routes[0].distance/1000).toFixed(1)} km`;
+        } catch(e) { alert("Error al rutear"); }
     }
 
-    // --- 6. EXPORTACIÓN A PDF (SITREP) ---
+    // --- PDF ---
     function generarSITREP() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
         doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("PARTE DIARIO OPERATIVO (SITREP)", 14, 20);
-        doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text("Monitor Operativo Hídrico - NEA", 14, 26);
-        doc.setTextColor(0, 0, 0); doc.text(`Fecha y Hora de Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 34);
+        doc.setFontSize(10); doc.setTextColor(0); doc.text(`Fecha/Hora: ${new Date().toLocaleString('es-AR')}`, 14, 30);
         
-        let startY = 44;
-        const rutaDiv = document.getElementById('resultado-ruta');
-        if (rutaDiv && rutaDiv.style.display !== 'none' && rutaDiv.innerText.includes('✅')) {
-            doc.setFontSize(12); doc.text("Información de Ruteo Táctico", 14, startY);
-            doc.setFontSize(10);
-            let rutaLimpiada = rutaDiv.innerText.replace(/[✅📏⏱️🌤️]/g, '').replace(/\n/g, ' | ');
-            doc.text(rutaLimpiada, 14, startY + 6, { maxWidth: 180 });
-            startY += 18;
-        }
-
-        doc.setFontSize(12); doc.text("Despliegue de Medios e Incidentes (SCI)", 14, startY);
-        const tablaDatos = recursos.map(r => [ r.inst, r.nombre, r.sector, r.estado, r.efectivos ]);
-        doc.autoTable({
-            startY: startY + 5,
-            head: [['Fuerza', 'Recurso / Incidente', 'Sector', 'Estado', 'Efectivos']],
-            body: tablaDatos,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-            styles: { fontSize: 9, cellPadding: 3 }, alternateRowStyles: { fillColor: [245, 247, 250] }
-        });
-        doc.save(`SITREP_Operativo_${new Date().getTime()}.pdf`);
+        const tabla = recursos.map(r => [ r.inst, r.nombre, r.sector, r.estado, r.efectivos ]);
+        doc.autoTable({ startY: 40, head: [['Fuerza', 'Recurso', 'Sector', 'Estado', 'Efectivos']], body: tabla, headStyles: { fillColor: [41, 128, 185] }});
+        doc.save(`SITREP_${new Date().getTime()}.pdf`);
     }
 
-    // --- RELOJ Y LEYENDA ---
     setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
-
-    L.control.layers({ "Mapa Base": osmBase }, {
-        "Recursos y Cortes (SCI)": capaRecursos,
-        "Zonas Administrativas y Barrios": zonasLayer,
-        "Hospitales y POIs": grupoPOIs,
-        "Radar Lluvia en Vivo": grupoRadar,
-        "Ruta Activa": capaRutaActiva
-    }, { collapsed: false }).addTo(map);
-
 </script>
 </body>
 </html>
