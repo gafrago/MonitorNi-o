@@ -49,7 +49,6 @@
         .pin-tactico span.sigla { transform: rotate(45deg); color: #ffffff; font-weight: 800; font-size: 10px; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
         .pin-tactico .estado-dot { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #ffffff; }
         .corte-ruta-badge { background: #c0392b; color: white; border: 2px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
-        .poi-badge { background: #ffffff; border: 2px solid #333; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 
         .radar-legend { position: absolute; bottom: 30px; right: 30px; z-index: 1000; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 8px; font-size: 12px; }
     </style>
@@ -84,12 +83,12 @@
         </div>
 
         <details class="form-panel" open>
-            <summary>📍 Navegación por Zonas (GeoJSON Externo)</summary>
+            <summary>📍 Navegación por Zonas (Cartografía Oficial IGN)</summary>
             <div class="form-grid">
-                <small style="color: #c0392b; font-weight: bold; display: none;" id="alerta-geojson">⚠️ Usando datos internos de prueba. Coloque 'mapa_nea.geojson' en la carpeta para leer el archivo completo.</small>
-                <select id="sel-depto" class="select-zona" onchange="filtrarMunicipios()"><option value="">1. Seleccionar Zona / Depto...</option></select>
-                <select id="sel-muni" class="select-zona" onchange="filtrarBarrios()" disabled><option value="">2. Seleccionar Municipio...</option></select>
-                <select id="sel-barrio" class="select-zona" onchange="volarAZona()" disabled><option value="">3. Seleccionar Barrio / Localidad...</option></select>
+                <small style="color: #c0392b; font-weight: bold; display: none;" id="alerta-geojson">⚠️ Usando datos internos de respaldo. Verifique que 'mapa_nea.geojson' esté en la carpeta.</small>
+                <select id="sel-depto" class="select-zona" onchange="filtrarMunicipios()"><option value="">1. Seleccionar Departamento...</option></select>
+                <select id="sel-muni" class="select-zona" onchange="filtrarBarrios()" disabled><option value="">2. Seleccionar Municipio / Localidad...</option></select>
+                <select id="sel-barrio" class="select-zona" onchange="volarAZona()" disabled><option value="">3. Detalle Territorial...</option></select>
             </div>
         </details>
 
@@ -136,11 +135,11 @@
 <div id="vista-radar" class="view-container">
     <div id="map-radar"></div>
     <div class="radar-legend">
-        <b>⛈️ Intensidad de Precipitación (RainViewer)</b><br>
-        <span style="color: #3498db;">🟦 Lluvias Leves</span> | 
-        <span style="color: #f1c40f;">🟨 Moderadas</span> | 
-        <span style="color: #e74c3c;">🟥 Tormenta Fuerte</span><br>
-        <small><i>* Pestaña estratégica sin errores de zoom.</i></small>
+        <b>⛈️ Monitoreo de Precipitaciones (NEA)</b><br>
+        <span style="color: #3498db;">🟦 Zonas de Lluvia</span> | 
+        <span style="color: #f1c40f;">🟨 Núcleos Moderados</span> | 
+        <span style="color: #e74c3c;">🟥 Tormentas Fuertes</span><br>
+        <small><i>* Capa regional estable optimizada.</i></small>
     </div>
 </div>
 
@@ -185,8 +184,7 @@
             datosZonasGeoJSON = {
                 "type": "FeatureCollection",
                 "features": [
-                    { "type": "Feature", "properties": { "departamento": "San Fernando (Chaco)", "municipio": "Resistencia", "barrio": "Microcentro", "emergencia": "Alerta Amarilla", "ente_emisor": "DC Chaco", "evacuados": 0, "vias": "Normal", "color": "#f39c12" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] } },
-                    { "type": "Feature", "properties": { "departamento": "San Fernando (Chaco)", "municipio": "Barranqueras", "barrio": "Puerto", "emergencia": "Alerta Roja", "ente_emisor": "PNA", "evacuados": 45, "vias": "Corte Total", "color": "#e74c3c" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.960, -27.480], [-58.930, -27.480], [-58.930, -27.500], [-58.960, -27.500], [-58.960, -27.480]]] } }
+                    { "type": "Feature", "properties": { "departamento": "San Fernando (Chaco)", "municipio": "Resistencia", "emergencia": "Alerta Amarilla", "ente_emisor": "DC Chaco", "color": "#f39c12" }, "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] } }
                 ]
             };
         }
@@ -205,15 +203,14 @@
             },
             onEachFeature: function(f, layer) {
                 layer.on({ mouseover: resaltarZona, mouseout: restaurarZona });
-                // Soporte universal para etiquetas IGN, INDEC u OpenStreetMap (name)
-                const nombre = f.properties.name || f.properties.barrio || f.properties.nombre || 'Zona';
-                const muni = f.properties.municipio || f.properties.NAM || '';
-                const depto = f.properties.departamento || f.properties.FNA || '';
+                // Soporte universal para etiquetas IGN / OpenStreetMap
+                const nombre = f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || 'Zona';
+                const prov = f.properties.fna || f.properties.provincia || '';
 
                 layer.bindTooltip(`
                     <div style="font-size: 12px; min-width: 180px;">
                         <b style="color: #2c3e50; font-size: 13px;">${nombre}</b><br>
-                        <small>${muni} - ${depto}</small><br>
+                        <small>${prov}</small><br>
                         <b>🚨 Estado:</b> ${f.properties.emergencia || 'En Observación'}<br>
                         <b>🏢 Emisor:</b> ${f.properties.ente_emisor || 'Comando Conjunto'}
                     </div>
@@ -223,40 +220,33 @@
 
         // Poblar Selectores Cascada
         const selDepto = document.getElementById('sel-depto');
-        const deptos = [...new Set(datosZonasGeoJSON.features.map(f => f.properties.departamento || f.properties.FNA).filter(Boolean))];
+        const deptos = [...new Set(datosZonasGeoJSON.features.map(f => f.properties.nam || f.properties.departamento || f.properties.FNA).filter(Boolean))];
         deptos.forEach(d => selDepto.add(new Option(d, d)));
     }
 
     function filtrarMunicipios() {
         const depto = document.getElementById('sel-depto').value;
         const selMuni = document.getElementById('sel-muni');
-        selMuni.innerHTML = '<option value="">2. Seleccionar Municipio...</option>';
-        document.getElementById('sel-barrio').innerHTML = '<option value="">3. Seleccionar Barrio / Zona...</option>';
+        selMuni.innerHTML = '<option value="">2. Seleccionar Municipio / Localidad...</option>';
+        document.getElementById('sel-barrio').innerHTML = '<option value="">3. Detalle Territorial...</option>';
         selMuni.disabled = !depto; document.getElementById('sel-barrio').disabled = true;
         
         if (!depto) return;
-        const munis = [...new Set(datosZonasGeoJSON.features.filter(f => (f.properties.departamento || f.properties.FNA) === depto).map(f => f.properties.municipio || f.properties.NAM).filter(Boolean))];
-        munis.forEach(m => selMuni.add(new Option(m, m)));
-    }
-
-    function filtrarBarrios() {
-        const muni = document.getElementById('sel-muni').value;
-        const selBarrio = document.getElementById('sel-barrio');
-        selBarrio.innerHTML = '<option value="">3. Seleccionar Barrio / Zona...</option>';
-        selBarrio.disabled = !muni;
-        if (!muni) return;
-
-        const barrios = datosZonasGeoJSON.features.filter(f => (f.properties.municipio || f.properties.NAM) === muni);
-        barrios.forEach(f => {
-            const nombre = f.properties.name || f.properties.barrio || f.properties.nombre;
-            if(nombre) selBarrio.add(new Option(nombre, nombre));
+        const subZonas = datosZonasGeoJSON.features.filter(f => (f.properties.nam || f.properties.departamento || f.properties.FNA) === depto);
+        subZonas.forEach(f => {
+            const lbl = f.properties.fna || f.properties.nombre || f.properties.nam || 'Sector';
+            selMuni.add(new Option(lbl, lbl));
         });
     }
 
+    function filtrarBarrios() {
+        document.getElementById('sel-barrio').disabled = false;
+    }
+
     function volarAZona() {
-        const barrioSel = document.getElementById('sel-barrio').value;
-        if (!barrioSel) return;
-        const f = datosZonasGeoJSON.features.find(x => (x.properties.name || x.properties.barrio || x.properties.nombre) === barrioSel);
+        const deptoSel = document.getElementById('sel-depto').value;
+        if (!deptoSel) return;
+        const f = datosZonasGeoJSON.features.find(x => (x.properties.nam || x.properties.departamento || x.properties.FNA) === deptoSel);
         if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [50, 50], duration: 1.5 });
     }
 
@@ -310,21 +300,21 @@
         document.getElementById('form-recurso').reset(); renderizarRecursos();
     }
 
-    // --- MAPA RADAR ESTRATÉGICO ---
+    // --- MAPA RADAR ESTRATÉGICO ACTUALIZADO (SIN API KEY REQUERIDA) ---
     function inicializarMapaRadar() {
-        mapRadar = L.map('map-radar', { maxZoom: 8, minZoom: 5, zoomControl: true }).setView([-27.5, -59.0], 6);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 8, attribution: 'CartoDB' }).addTo(mapRadar);
+        mapRadar = L.map('map-radar', { maxZoom: 9, minZoom: 5, zoomControl: true }).setView([-27.5, -59.0], 6);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { 
+            maxZoom: 9, 
+            attribution: 'CartoDB' 
+        }).addTo(mapRadar);
 
-        fetch('https://api.rainviewer.com/public/weather-maps.json')
-            .then(res => res.json())
-            .then(data => {
-                if (data?.radar?.past?.length > 0) {
-                    const latestFrame = data.radar.past[data.radar.past.length - 1].path;
-                    L.tileLayer(`https://tilecache.rainviewer.com${latestFrame}/512/{z}/{x}/{y}/2/1_1.png`, {
-                        opacity: 0.85, attribution: 'RainViewer', maxNativeZoom: 8
-                    }).addTo(mapRadar);
-                }
-            }).catch(e => console.log(e));
+        L.tileLayer('https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=demo', {
+            maxZoom: 9,
+            opacity: 0.65,
+            attribution: 'OpenWeatherMap'
+        }).addTo(mapRadar);
+
         radarCargado = true;
     }
 
