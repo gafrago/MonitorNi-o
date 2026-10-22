@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Fase 1 y 2 Integr: GEOJSON + SCI</title>
+    <title>COP Hídrico NEA - Monitor Operativo SCI</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
@@ -47,11 +47,98 @@
             font-weight: bold;
             font-size: 12px;
         }
-        .smn-link:hover {
-            background-color: #3498db;
+        .smn-link:hover { background-color: #3498db; }
+
+        /* 2. Panel Lateral y Formulario de Alta */
+        #sidebar {
+            width: 360px;
+            background: #f4f6f7;
+            border-right: 2px solid #bdc3c7;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        .kpi-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .kpi-card {
+            flex: 1;
+            background: #2c3e50;
+            color: white;
+            padding: 6px 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 11px;
+        }
+        .kpi-card b {
+            display: block;
+            font-size: 16px;
+            color: #f39c12;
         }
 
-        /* 2. Estilo para la Leyenda Flotante */
+        /* Formulario Desplegable */
+        details.form-panel {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #2980b9;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            padding: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        details.form-panel summary {
+            font-weight: bold;
+            font-size: 13px;
+            color: #1e293b;
+            cursor: pointer;
+            outline: none;
+        }
+        .form-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        .form-grid input, .form-grid select, .form-grid textarea {
+            padding: 5px 7px;
+            border: 1px solid #cbd5e1;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .coords-row {
+            display: flex;
+            gap: 6px;
+        }
+        .coords-row input { width: 50%; background: #f8fafc; }
+        .btn-submit {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .btn-submit:hover { background-color: #2ecc71; }
+        .btn-reset {
+            background: none;
+            border: none;
+            color: #7f8c8d;
+            font-size: 11px;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 6px;
+            align-self: flex-end;
+        }
+
+        /* 3. Leyenda Flotante */
         .info.legend {
             background: rgba(255, 255, 255, 0.95);
             padding: 10px 14px;
@@ -90,22 +177,76 @@
 <!-- Contenedor Principal (Panel Lateral SCI + Mapa) -->
 <div style="display: flex; flex: 1; overflow: hidden;">
     <!-- Panel Lateral SCI -->
-    <div id="sidebar" style="width: 340px; background: #f8f9fa; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 12px; overflow-y: auto;">
-        <h3 style="margin-top: 0; margin-bottom: 10px; color: #2c3e50; font-size: 16px;">📋 Recursos Desplegados (SCI)</h3>
-        
+    <div id="sidebar">
+        <h3 style="margin-top: 0; margin-bottom: 8px; color: #2c3e50; font-size: 15px;">📋 Comando de Incidentes (SCI)</h3>
+
+        <!-- Resumen Táctico en Vivo -->
+        <div class="kpi-box">
+            <div class="kpi-card">
+                <b id="kpi-unidades">0</b>
+                Medios en Pantalla
+            </div>
+            <div class="kpi-card">
+                <b id="kpi-efectivos">0</b>
+                Efectivos Afectados
+            </div>
+        </div>
+
+        <!-- Formulario Desplegable para Alta en Vivo -->
+        <details class="form-panel" id="panel-alta">
+            <summary>➕ Desplegar Nuevo Recurso / Patrulla</summary>
+            <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
+                <small style="color: #2980b9; font-weight: bold;">
+                    💡 Tip: Hacé clic en cualquier punto del mapa para capturar las coordenadas automáticamente.
+                </small>
+
+                <input type="text" id="nuevo-nombre" placeholder="Nombre (ej. Patrulla Radar / Grupo Electrógeno)" required />
+
+                <div style="display: flex; gap: 6px;">
+                    <select id="nueva-institucion" style="flex: 1;" required>
+                        <option value="FAA">FAA - Fuerza Aérea</option>
+                        <option value="EA">EA - Ejército</option>
+                        <option value="PNA">PNA - Prefectura</option>
+                        <option value="GN">GN - Gendarmería</option>
+                        <option value="DC">DC - Defensa Civil</option>
+                    </select>
+                    <select id="nuevo-estado" style="flex: 1;" required>
+                        <option value="ASIGNADO">🟢 Asignado</option>
+                        <option value="DISPONIBLE">🟡 Disponible</option>
+                        <option value="NO_DISPONIBLE">🔴 No Disp.</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="nuevo-tipo" placeholder="Especialidad (ej. Com/Rescate)" style="flex: 2;" required />
+                    <input type="number" id="nuevos-efectivos" placeholder="Efectivos" min="1" value="4" style="flex: 1;" required />
+                </div>
+
+                <input type="text" id="nuevo-sector" placeholder="Zona / Sector (ej. Ribera Barranqueras)" required />
+                <textarea id="nueva-tarea" rows="2" placeholder="Tarea u orden asignada..." required></textarea>
+
+                <div class="coords-row">
+                    <input type="number" step="any" id="nueva-lat" placeholder="Latitud (Clic mapa)" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Longitud (Clic mapa)" required />
+                </div>
+
+                <button type="submit" class="btn-submit">📍 Registrar y Desplegar en Mapa</button>
+            </form>
+        </details>
+
         <!-- Controles de Filtro -->
-        <label style="font-size: 12px; font-weight: bold; color: #34495e;">Filtrar por Institución:</label>
-        <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 8px; padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
+        <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución:</label>
+        <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
             <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
             <option value="EA">Ejército Argentino (EA)</option>
             <option value="PNA">Prefectura Naval (PNA)</option>
             <option value="GN">Gendarmería Nacional (GN)</option>
-            <option value="DC">Defensa Civil</option>
+            <option value="DC">Defensa Civil (DC)</option>
         </select>
 
-        <label style="font-size: 12px; font-weight: bold; color: #34495e;">Filtrar por Estado SCI:</label>
-        <select id="filtro-estado" onchange="renderizarRecursosSCI()" style="margin-bottom: 12px; padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
+        <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Estado SCI:</label>
+        <select id="filtro-estado" onchange="renderizarRecursosSCI()" style="margin-bottom: 10px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODOS">Todos los Estados</option>
             <option value="ASIGNADO">🟢 Asignado (Operando)</option>
             <option value="DISPONIBLE">🟡 Disponible (En Reserva)</option>
@@ -113,11 +254,13 @@
         </select>
 
         <!-- Contenedor dinámico de tarjetas -->
-        <div id="lista-recursos"></div>
+        <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
+
+        <button class="btn-reset" onclick="restaurarDatosIniciales()">🔄 Restaurar padrón original de prueba</button>
     </div>
 
     <!-- Mapa -->
-    <div id="map" style="flex: 1;"></div>
+    <div id="map" style="flex: 1; cursor: crosshair;"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -208,8 +351,8 @@
         }
     }).addTo(map);
 
-    // --- E. MODELO DE DATOS SCI PARA MEDIOS Y PERSONAL (GEOJSON) ---
-    const recursosGeoJSON = {
+    // --- E. MODELO DE DATOS SCI CON PERSISTENCIA EN LOCALSTORAGE ---
+    const datosInicialesSCI = {
         "type": "FeatureCollection",
         "features": [
             {
@@ -269,7 +412,10 @@
         ]
     };
 
-    // --- F. SINCRONIZACIÓN DE PANEL LATERAL Y MARCADORES SCI ---
+    // Cargar desde localStorage si existen datos previos, o usar los iniciales
+    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci')) || structuredClone(datosInicialesSCI);
+
+    // --- F. SINCRONIZACIÓN DE PANEL LATERAL, CONTADORES Y MARCADORES SCI ---
     const capaRecursosSCI = L.layerGroup().addTo(map);
 
     function renderizarRecursosSCI() {
@@ -280,6 +426,9 @@
         capaRecursosSCI.clearLayers();
         contenedorLista.innerHTML = '';
 
+        let totalUnidades = 0;
+        let totalEfectivos = 0;
+
         recursosGeoJSON.features.forEach(recurso => {
             const p = recurso.properties;
             const coords = recurso.geometry.coordinates; // [lon, lat]
@@ -288,7 +437,9 @@
             const coincideEstado = (estadoSeleccionado === 'TODOS' || p.estado === estadoSeleccionado);
 
             if (coincideInst && coincideEstado) {
-                // Color de borde según Estado SCI
+                totalUnidades++;
+                totalEfectivos += Number(p.efectivos) || 0;
+
                 const colorEstado = p.estado === 'ASIGNADO' ? '#27ae60' : (p.estado === 'DISPONIBLE' ? '#f1c40f' : '#c0392b');
 
                 // 1. Crear marcador en el mapa
@@ -312,7 +463,6 @@
                     <span style="color: #555;">📍 ${p.sector}</span><br>
                     <small style="color: #7f8c8d;">🕒 ${p.hora_reporte.slice(11,16)} hs - ${p.tarea_asignada}</small>
                 `;
-                // Al hacer clic en la tarjeta del listado, el mapa vuela hacia la unidad
                 tarjeta.onclick = () => {
                     map.setView([coords[1], coords[0]], 14);
                     marker.openPopup();
@@ -320,12 +470,93 @@
                 contenedorLista.appendChild(tarjeta);
             }
         });
+
+        // Actualizar contadores tácticos superiores
+        document.getElementById('kpi-unidades').textContent = totalUnidades;
+        document.getElementById('kpi-efectivos').textContent = totalEfectivos;
     }
 
-    // Ejecución inicial para poblar el panel lateral y los pines al abrir
+    // --- G. CAPTURA DE COORDENADAS CON CLIC EN EL MAPA Y ALTA EN VIVO ---
+    let marcadorTemporal = null;
+
+    map.on('click', function(e) {
+        const lat = e.latlng.lat.toFixed(5);
+        const lon = e.latlng.lng.toFixed(5);
+
+        // Abrir el desplegable del formulario automáticamente y cargar coordenadas
+        document.getElementById('panel-alta').open = true;
+        document.getElementById('nueva-lat').value = lat;
+        document.getElementById('nueva-lon').value = lon;
+
+        // Mostrar marcador temporal donde hizo clic el operador
+        if (marcadorTemporal) {
+            map.removeLayer(marcadorTemporal);
+        }
+        marcadorTemporal = L.circleMarker([lat, lon], {
+            radius: 7,
+            color: '#e67e22',
+            fillColor: '#f39c12',
+            fillOpacity: 0.9
+        }).addTo(map).bindPopup("📍 Coordenada capturada para nuevo recurso").openPopup();
+    });
+
+    function agregarRecursoEnVivo(event) {
+        event.preventDefault();
+
+        const ahora = new Date();
+        // Formato de hora local ISO para mantener consistencia
+        const pad = n => String(n).padStart(2, '0');
+        const timestampLocal = `${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}T${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:00-03:00`;
+
+        const nuevoNumero = recursosGeoJSON.features.length + 1;
+        const lat = parseFloat(document.getElementById('nueva-lat').value);
+        const lon = parseFloat(document.getElementById('nueva-lon').value);
+
+        const nuevoRecurso = {
+            "type": "Feature",
+            "properties": {
+                "id": `REC-0${nuevoNumero}`,
+                "nombre": document.getElementById('nuevo-nombre').value,
+                "institucion": document.getElementById('nueva-institucion').value,
+                "tipo": document.getElementById('nuevo-tipo').value,
+                "estado": document.getElementById('nuevo-estado').value,
+                "efectivos": parseInt(document.getElementById('nuevos-efectivos').value, 10),
+                "sector": document.getElementById('nuevo-sector').value,
+                "tarea_asignada": document.getElementById('nueva-tarea').value,
+                "hora_reporte": timestampLocal
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [lon, lat] // Estándar GeoJSON: [Longitud, Latitud]
+            }
+        };
+
+        // Insertar al inicio para que aparezca primero en el listado
+        recursosGeoJSON.features.unshift(nuevoRecurso);
+        localStorage.setItem('cop_recursos_sci', JSON.stringify(recursosGeoJSON));
+
+        // Limpiar formulario y marcador temporal
+        document.getElementById('form-recurso').reset();
+        if (marcadorTemporal) {
+            map.removeLayer(marcadorTemporal);
+            marcadorTemporal = null;
+        }
+
+        // Volver a dibujar y centrar en la nueva unidad creada
+        renderizarRecursosSCI();
+        map.setView([lat, lon], 13);
+    }
+
+    function restaurarDatosIniciales() {
+        localStorage.removeItem('cop_recursos_sci');
+        recursosGeoJSON = structuredClone(datosInicialesSCI);
+        renderizarRecursosSCI();
+    }
+
+    // Ejecución inicial
     renderizarRecursosSCI();
 
-    // --- G. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
+    // --- H. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
     const grupoHidrometria = L.layerGroup().addTo(map);
 
     async function cargarCaudalRio() {
@@ -359,7 +590,7 @@
     }
     cargarCaudalRio();
 
-    // --- H. CONTROL DE CAPAS Y LEYENDA ---
+    // --- I. CONTROL DE CAPAS Y LEYENDA ---
     L.control.layers(
         { "Mapa Base (OpenStreetMap)": osmBase },
         {
@@ -379,7 +610,7 @@
             <i style="background: #e74c3c"></i> Zona de Riesgo Alto (Alerta Roja)<br>
             <i style="background: #f39c12"></i> Zona de Riesgo Medio (Prevención)<br>
             <i style="background: #0055ff; border-radius: 50%;"></i> Aforo Caudal Río Paraná (GloFAS)<br>
-            <small><i>Hacé clic en una unidad del listado izquierdo para centrar su posición.</i></small>
+            <small><i>Clic en el mapa = capturar coordenadas para nueva unidad.</i></small>
         `;
         return div;
     };
