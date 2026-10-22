@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Tablero de Comando Interfuerzas</title>
+    <title>COP Hídrico NEA - Zonas Dinámicas y Comando Total</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -15,7 +15,7 @@
         #top-banner { background-color: #1a252f; color: #ffffff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 3px solid #e67e22; z-index: 1000; }
         .badge-proto { background-color: #e67e22; color: #fff; padding: 3px 8px; border-radius: 3px; font-weight: bold; margin-right: 10px; font-size: 11px; }
         
-        #sidebar { width: 390px; background: #f4f6f7; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-sizing: border-box; }
+        #sidebar { width: 395px; background: #f4f6f7; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-sizing: border-box; }
         .kpi-box { display: flex; gap: 8px; margin-bottom: 10px; }
         .kpi-card { flex: 1; background: #2c3e50; color: white; padding: 6px 8px; border-radius: 4px; text-align: center; font-size: 11px; }
         .kpi-card b { display: block; font-size: 15px; color: #f39c12; }
@@ -40,6 +40,9 @@
         .poi-badge { background: #ffffff; border: 2px solid #333; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 
         .info.legend { background: rgba(255, 255, 255, 0.96); padding: 10px; font-size: 11px; line-height: 18px; color: #333; border-radius: 5px; box-shadow: 0 0 15px rgba(0,0,0,0.25); }
+
+        /* Estilos para buscador en cascada */
+        .select-zona { background-color: #f8fafc; border: 1px solid #94a3b8; font-weight: bold; color: #1e293b; }
     </style>
 </head>
 <body>
@@ -65,9 +68,26 @@
             <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
         </div>
 
+        <!-- NUEVO: Buscador de Zonas Administrativas -->
         <details class="form-panel" open>
+            <summary>📍 Navegación por Zonas y Barrios</summary>
+            <div class="form-grid">
+                <select id="sel-depto" class="select-zona" onchange="filtrarMunicipios()">
+                    <option value="">1. Seleccione Departamento...</option>
+                </select>
+                <select id="sel-muni" class="select-zona" onchange="filtrarBarrios()" disabled>
+                    <option value="">2. Seleccione Municipio...</option>
+                </select>
+                <select id="sel-barrio" class="select-zona" onchange="volarAZona()" disabled>
+                    <option value="">3. Seleccione Barrio / Zona...</option>
+                </select>
+            </div>
+        </details>
+
+        <details class="form-panel">
             <summary>🛣️ Calcular Ruta Táctica y Clima</summary>
             <div class="form-grid">
+                <small style="color: #8e44ad; font-weight: bold;">Ingresá dirección, lugar conocido o coordenadas.</small>
                 <input type="text" id="ruta-origen" placeholder="Origen: Ej. Base Aérea Resistencia" />
                 <input type="text" id="ruta-destino" placeholder="Destino: Ej. Isla del Cerrito" />
                 <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
@@ -104,7 +124,7 @@
             </form>
         </details>
 
-        <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar Padrón SCI:</label>
+        <label style="font-size: 11px; font-weight: bold; color: #34495e; margin-top: 5px;">Filtrar Padrón SCI:</label>
         <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom: 8px; padding: 5px; border-radius: 4px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
             <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
@@ -114,7 +134,7 @@
             <option value="DC">Defensa Civil / Vialidad</option>
         </select>
 
-        <div id="lista-recursos" style="flex: 1; overflow-y: auto; margin-top: 5px;"></div>
+        <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
     </div>
     <div id="map" style="flex: 1; cursor: crosshair;"></div>
 </div>
@@ -125,48 +145,129 @@
     const map = L.map('map').setView([-27.45, -58.95], 11);
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
-    // --- 1. CAPA DE DEPARTAMENTOS EXTERNA ---
-    const capaDeptos = L.geoJSON(null, {
+    // --- 1. ZONAS ADMINISTRATIVAS Y BARRIOS (GEOJSON INTEGRADO) ---
+    const geojsonZonasData = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": { 
+                    "departamento": "San Fernando (Chaco)", "municipio": "Resistencia", "barrio": "Microcentro / Macrocentro",
+                    "emergencia": "Alerta Amarilla", "ente_emisor": "Defensa Civil Provincial", "evacuados": 0, "vias": "Anegamientos parciales temporales", "color": "#f39c12" 
+                },
+                "geometry": { "type": "Polygon", "coordinates": [[[-58.995, -27.445], [-58.975, -27.445], [-58.975, -27.465], [-58.995, -27.465], [-58.995, -27.445]]] }
+            },
+            {
+                "type": "Feature",
+                "properties": { 
+                    "departamento": "San Fernando (Chaco)", "municipio": "Barranqueras", "barrio": "Ribera Av. Gaboto",
+                    "emergencia": "Alerta Roja", "ente_emisor": "Prefectura Naval Argentina", "evacuados": 120, "vias": "Corte total por desborde fluvial", "color": "#e74c3c" 
+                },
+                "geometry": { "type": "Polygon", "coordinates": [[[-58.960, -27.480], [-58.930, -27.480], [-58.930, -27.500], [-58.960, -27.500], [-58.960, -27.480]]] }
+            },
+            {
+                "type": "Feature",
+                "properties": { 
+                    "departamento": "Capital (Corrientes)", "municipio": "Corrientes", "barrio": "Cambá Cuá / Costanera",
+                    "emergencia": "Alerta Naranja", "ente_emisor": "Bomberos Voluntarios", "evacuados": 45, "vias": "Costanera Norte restringida preventivamente", "color": "#d35400" 
+                },
+                "geometry": { "type": "Polygon", "coordinates": [[[-58.840, -27.400], [-58.825, -27.400], [-58.825, -27.415], [-58.840, -27.415], [-58.840, -27.400]]] }
+            }
+        ]
+    };
+
+    let zonasLayer; // Variable para almacenar la capa dibujada
+
+    // Efectos tácticos de Hover (Mouse encima)
+    function resaltarZona(e) {
+        var layer = e.target;
+        layer.setStyle({ weight: 4, fillOpacity: 0.55, color: '#2c3e50', dashArray: '' }); // Aumenta brillo y borde
+        layer.bringToFront();
+    }
+    function restaurarZona(e) { zonasLayer.resetStyle(e.target); }
+
+    // Dibujar Zonas en el mapa
+    zonasLayer = L.geoJSON(geojsonZonasData, {
         style: function(feature) { 
-            return { color: feature.properties.color || '#3498db', weight: 2, fillOpacity: 0.15 }; 
+            return { color: feature.properties.color, weight: 2, fillOpacity: 0.25 }; 
         },
         onEachFeature: function(feature, layer) {
+            // Eventos de Hover
+            layer.on({ mouseover: resaltarZona, mouseout: restaurarZona });
+            // Tooltip con información detallada
             layer.bindTooltip(`
-                <div style="font-size: 12px;">
-                    <b style="color: ${feature.properties.color || '#333'}">${feature.properties.nombre || 'Zona'}</b><br>
-                    <b>Estado:</b> ${feature.properties.emergencia || 'Sin datos'}<br>
-                    <b>Evacuados:</b> ${feature.properties.evacuados || 0}<br>
-                    <b>Situación Vial:</b> ${feature.properties.vias || '-'}
+                <div style="font-size: 12px; min-width: 220px;">
+                    <div style="border-bottom: 2px solid ${feature.properties.color}; padding-bottom: 4px; margin-bottom: 4px;">
+                        <b style="color: #2c3e50; font-size: 13px;">${feature.properties.barrio}</b><br>
+                        <small>${feature.properties.municipio}, ${feature.properties.departamento}</small>
+                    </div>
+                    <b>🚨 Estado:</b> <span style="color: ${feature.properties.color}; font-weight: bold;">${feature.properties.emergencia}</span><br>
+                    <b>🏢 Reportó:</b> ${feature.properties.ente_emisor}<br>
+                    <b>👥 Evacuados:</b> ${feature.properties.evacuados}<br>
+                    <b>🚧 Vías:</b> ${feature.properties.vias}
                 </div>
             `, { sticky: true });
         }
     }).addTo(map);
 
-    // Función para leer el archivo externo
-    async function cargarCapaExterna() {
-        try {
-            const response = await fetch('departamentos.geojson');
-            if (!response.ok) throw new Error("No se encontró departamentos.geojson");
-            const data = await response.json();
-            capaDeptos.addData(data);
-        } catch (error) {
-            console.warn("Aviso: No se pudo cargar el archivo externo 'departamentos.geojson'.", error);
+    // Lógica para el Buscador en Cascada (Depto -> Muni -> Barrio)
+    const selDepto = document.getElementById('sel-depto');
+    const selMuni = document.getElementById('sel-muni');
+    const selBarrio = document.getElementById('sel-barrio');
+
+    // Poblamos los departamentos al iniciar
+    const departamentosSet = [...new Set(geojsonZonasData.features.map(f => f.properties.departamento))];
+    departamentosSet.forEach(d => {
+        let opt = document.createElement('option'); opt.value = d; opt.text = d; selDepto.add(opt);
+    });
+
+    function filtrarMunicipios() {
+        const depto = selDepto.value;
+        selMuni.innerHTML = '<option value="">2. Seleccione Municipio...</option>';
+        selBarrio.innerHTML = '<option value="">3. Seleccione Barrio / Zona...</option>';
+        selMuni.disabled = !depto; selBarrio.disabled = true;
+        if (!depto) return;
+
+        const municipios = [...new Set(geojsonZonasData.features.filter(f => f.properties.departamento === depto).map(f => f.properties.municipio))];
+        municipios.forEach(m => { let opt = document.createElement('option'); opt.value = m; opt.text = m; selMuni.add(opt); });
+    }
+
+    function filtrarBarrios() {
+        const muni = selMuni.value;
+        selBarrio.innerHTML = '<option value="">3. Seleccione Barrio / Zona...</option>';
+        selBarrio.disabled = !muni;
+        if (!muni) return;
+
+        const barrios = geojsonZonasData.features.filter(f => f.properties.municipio === muni);
+        barrios.forEach(f => { let opt = document.createElement('option'); opt.value = f.properties.barrio; opt.text = f.properties.barrio; selBarrio.add(opt); });
+    }
+
+    function volarAZona() {
+        const barrioSel = selBarrio.value;
+        if (!barrioSel) return;
+        // Buscar el polígono correspondiente
+        const feature = geojsonZonasData.features.find(f => f.properties.barrio === barrioSel);
+        if (feature) {
+            // Convertir la geometría GeoJSON a límites Leaflet y hacer zoom automático
+            const tempLayer = L.geoJSON(feature);
+            map.flyToBounds(tempLayer.getBounds(), { padding: [50, 50], duration: 1.5 });
         }
     }
-    cargarCapaExterna();
 
-    // --- 2. RADAR RAINVIEWER (Zoom Fix) ---
+    // --- 2. RADAR RAINVIEWER OPTIMIZADO (Sin Error de Zoom) ---
     const grupoRadar = L.layerGroup().addTo(map);
     fetch('https://api.rainviewer.com/public/weather-maps.json')
         .then(res => res.json())
         .then(data => {
             if (data?.radar?.past?.length > 0) {
                 const latestFrame = data.radar.past[data.radar.past.length - 1].path;
-                L.tileLayer(`https://tilecache.rainviewer.com${latestFrame}/256/{z}/{x}/{y}/2/1_1.png`, {
+                L.tileLayer(`https://tilecache.rainviewer.com${latestFrame}/512/{z}/{x}/{y}/2/1_1.png`, {
                     opacity: 0.65, 
                     attribution: 'Radar: RainViewer',
-                    maxNativeZoom: 12, // Evita el error "Zoom not supported"
-                    maxZoom: 18        // Permite seguir acercando el mapa estirando la imagen
+                    tileSize: 256,
+                    zoomOffset: -1,
+                    maxNativeZoom: 9, // Clave: detiene llamadas excesivas al servidor
+                    maxZoom: 18       // Clave: estira la última imagen al acercarse a las calles
                 }).addTo(grupoRadar);
             }
         }).catch(e => console.log(e));
@@ -202,7 +303,7 @@
         { id: "REC-01", inst: "FAA", nombre: "Comunicaciones Móvil", estado: "ASIGNADO", lat: -27.465, lon: -58.885, sector: "Puente Belgrano", efectivos: 4 },
         { id: "INC-01", inst: "VIALIDAD", nombre: "Corte por Agua", estado: "NO_DISPONIBLE", lat: -27.412, lon: -58.995, sector: "RN 16 km 14", efectivos: 0 }
     ];
-    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v8')) || datosIniciales;
+    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v9')) || datosIniciales;
     const capaRecursos = L.layerGroup().addTo(map);
 
     function renderizarRecursos() {
@@ -249,7 +350,7 @@
             sector: document.getElementById('nuevo-sector').value,
             efectivos: document.getElementById('nueva-institucion').value === 'VIALIDAD' ? 0 : document.getElementById('nuevos-efectivos').value
         });
-        localStorage.setItem('cop_recursos_v8', JSON.stringify(recursos));
+        localStorage.setItem('cop_recursos_v9', JSON.stringify(recursos));
         document.getElementById('form-recurso').reset();
         renderizarRecursos();
     }
@@ -324,44 +425,30 @@
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        doc.setFontSize(16);
-        doc.setTextColor(41, 128, 185);
-        doc.text("PARTE DIARIO OPERATIVO (SITREP)", 14, 20);
-        doc.setFontSize(10);
-        doc.setTextColor(100, 100, 100);
-        doc.text("Monitor Operativo Hídrico - NEA", 14, 26);
-        
-        const fechaActual = new Date().toLocaleString('es-AR');
-        doc.setTextColor(0, 0, 0);
-        doc.text(`Fecha y Hora de Emisión: ${fechaActual}`, 14, 34);
+        doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("PARTE DIARIO OPERATIVO (SITREP)", 14, 20);
+        doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text("Monitor Operativo Hídrico - NEA", 14, 26);
+        doc.setTextColor(0, 0, 0); doc.text(`Fecha y Hora de Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 34);
         
         let startY = 44;
-
         const rutaDiv = document.getElementById('resultado-ruta');
         if (rutaDiv && rutaDiv.style.display !== 'none' && rutaDiv.innerText.includes('✅')) {
-            doc.setFontSize(12);
-            doc.text("Información de Ruteo Táctico", 14, startY);
+            doc.setFontSize(12); doc.text("Información de Ruteo Táctico", 14, startY);
             doc.setFontSize(10);
             let rutaLimpiada = rutaDiv.innerText.replace(/[✅📏⏱️🌤️]/g, '').replace(/\n/g, ' | ');
             doc.text(rutaLimpiada, 14, startY + 6, { maxWidth: 180 });
             startY += 18;
         }
 
-        doc.setFontSize(12);
-        doc.text("Despliegue de Medios e Incidentes (SCI)", 14, startY);
-        
+        doc.setFontSize(12); doc.text("Despliegue de Medios e Incidentes (SCI)", 14, startY);
         const tablaDatos = recursos.map(r => [ r.inst, r.nombre, r.sector, r.estado, r.efectivos ]);
-
         doc.autoTable({
             startY: startY + 5,
             head: [['Fuerza', 'Recurso / Incidente', 'Sector', 'Estado', 'Efectivos']],
             body: tablaDatos,
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255] },
-            styles: { fontSize: 9, cellPadding: 3 },
-            alternateRowStyles: { fillColor: [245, 247, 250] }
+            styles: { fontSize: 9, cellPadding: 3 }, alternateRowStyles: { fillColor: [245, 247, 250] }
         });
-        
         doc.save(`SITREP_Operativo_${new Date().getTime()}.pdf`);
     }
 
@@ -370,8 +457,8 @@
 
     L.control.layers({ "Mapa Base": osmBase }, {
         "Recursos y Cortes (SCI)": capaRecursos,
+        "Zonas Administrativas y Barrios": zonasLayer,
         "Hospitales y POIs": grupoPOIs,
-        "Divisiones Administrativas": capaDeptos,
         "Radar Lluvia en Vivo": grupoRadar,
         "Ruta Activa": capaRutaActiva
     }, { collapsed: false }).addTo(map);
