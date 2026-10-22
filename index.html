@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Monitor Operativo SCI</title>
+    <title>COP Hídrico NEA - Monitor Operativo Interfuerzas</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
@@ -138,23 +138,80 @@
             align-self: flex-end;
         }
 
-        /* 3. Leyenda Flotante */
+        /* 3. Marcadores Tácticos Vectoriales por Institución (L.divIcon) */
+        .custom-div-icon {
+            background: transparent;
+            border: none;
+        }
+        .pin-tactico {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            border-radius: 50% 50% 50% 4px;
+            transform: rotate(-45deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.45);
+            border: 2px solid #ffffff;
+            transition: transform 0.15s ease;
+        }
+        .pin-tactico:hover {
+            transform: rotate(-45deg) scale(1.12);
+        }
+        .pin-tactico span.sigla {
+            transform: rotate(45deg);
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 10px;
+            letter-spacing: 0.3px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        }
+        /* Punto indicador del Estado SCI en el borde del pin */
+        .pin-tactico .estado-dot {
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            border: 1.5px solid #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        /* Etiqueta de Fuerza en las tarjetas del panel lateral */
+        .badge-fuerza {
+            display: inline-block;
+            color: #fff;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 4px;
+        }
+
+        /* 4. Leyenda Flotante */
         .info.legend {
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.96);
             padding: 10px 14px;
-            font-size: 12px;
-            line-height: 20px;
+            font-size: 11.5px;
+            line-height: 19px;
             color: #333;
             border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: 0 0 15px rgba(0,0,0,0.25);
         }
         .info.legend i {
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             float: left;
             margin-right: 8px;
-            opacity: 0.8;
-            border: 1px solid #555;
+            margin-top: 2px;
+            opacity: 0.9;
+            border: 1px solid #444;
+        }
+        .legend-divider {
+            border-top: 1px solid #ddd;
+            margin: 6px 0;
         }
     </style>
 </head>
@@ -238,11 +295,11 @@
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Institución:</label>
         <select id="filtro-institucion" onchange="renderizarRecursosSCI()" style="margin-bottom: 6px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px;">
             <option value="TODAS">Todas las Fuerzas / Organismos</option>
-            <option value="FAA">Fuerza Aérea Argentina (FAA)</option>
-            <option value="EA">Ejército Argentino (EA)</option>
-            <option value="PNA">Prefectura Naval (PNA)</option>
-            <option value="GN">Gendarmería Nacional (GN)</option>
-            <option value="DC">Defensa Civil (DC)</option>
+            <option value="FAA">🟦 Fuerza Aérea Argentina (FAA)</option>
+            <option value="EA">🟩 Ejército Argentino (EA)</option>
+            <option value="PNA">ネイビー Prefectura Naval (PNA)</option>
+            <option value="GN">🌲 Gendarmería Nacional (GN)</option>
+            <option value="DC">🟧 Defensa Civil (DC)</option>
         </select>
 
         <label style="font-size: 11px; font-weight: bold; color: #34495e;">Filtrar por Estado SCI:</label>
@@ -265,7 +322,41 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // --- A. RELOJ EN TIEMPO REAL (Hora Local y UTC/Zulú) ---
+    // --- A. CONFIGURACIÓN VISUAL POR INSTITUCIÓN Y ESTADO SCI ---
+    const ESTILOS_INSTITUCION = {
+        "FAA": { color: "#0284c7", nombre: "Fuerza Aérea Argentina" },
+        "EA":  { color: "#4d7c0f", nombre: "Ejército Argentino" },
+        "PNA": { color: "#1e3a8a", nombre: "Prefectura Naval Argentina" },
+        "GN":  { color: "#15803d", nombre: "Gendarmería Nacional" },
+        "DC":  { color: "#ea580c", nombre: "Defensa Civil" }
+    };
+
+    const COLOR_ESTADO_SCI = {
+        "ASIGNADO": "#22c55e",      // Verde
+        "DISPONIBLE": "#eab308",    // Amarillo
+        "NO_DISPONIBLE": "#ef4444"  // Rojo
+    };
+
+    // Generador de Pin Táctico Vectorial para Leaflet
+    function crearIconoTactico(institucion, estado) {
+        const conf = ESTILOS_INSTITUCION[institucion] || { color: "#64748b", nombre: institucion };
+        const colorDot = COLOR_ESTADO_SCI[estado] || "#94a3b8";
+
+        return L.divIcon({
+            className: 'custom-div-icon',
+            html: `
+                <div class="pin-tactico" style="background-color: ${conf.color};">
+                    <span class="sigla">${institucion}</span>
+                    <div class="estado-dot" style="background-color: ${colorDot};" title="Estado SCI: ${estado}"></div>
+                </div>
+            `,
+            iconSize: [38, 38],
+            iconAnchor: [19, 36],
+            popupAnchor: [0, -34]
+        });
+    }
+
+    // --- B. RELOJ EN TIEMPO REAL (Hora Local y UTC/Zulú) ---
     function actualizarReloj() {
         const ahora = new Date();
         const local = ahora.toLocaleString('es-AR', { hour12: false });
@@ -275,15 +366,15 @@
     setInterval(actualizarReloj, 1000);
     actualizarReloj();
 
-    // --- B. INICIALIZAR MAPA BASE ---
-    const map = L.map('map').setView([-27.45, -58.88], 11);
+    // --- C. INICIALIZAR MAPA BASE ---
+    const map = L.map('map').setView([-27.45, -58.91], 11);
 
     const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap | Caudales: <a href="https://open-meteo.com/">Open-Meteo (CC BY 4.0)</a> | Satélite: NASA GIBS',
         maxZoom: 18
     }).addTo(map);
 
-    // --- C. CAPA SATELITAL DE LLUVIA EN VIVO (NASA GIBS WMS - IMERG) ---
+    // --- D. CAPA SATELITAL DE LLUVIA EN VIVO (NASA GIBS WMS - IMERG) ---
     const nasaLluviaLayer = L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
         layers: 'IMERG_Precipitation_Rate',
         format: 'image/png',
@@ -292,7 +383,7 @@
         attribution: 'NASA EOSDIS GIBS'
     });
 
-    // --- D. ZONAS DE RIESGO ESTRUCTURADAS EN GEOJSON ---
+    // --- E. ZONAS DE RIESGO ESTRUCTURADAS EN GEOJSON ---
     const zonasRiesgoGeoJSON = {
         "type": "FeatureCollection",
         "features": [
@@ -339,7 +430,7 @@
                 color: feature.properties.color,
                 fillColor: feature.properties.color,
                 weight: 2,
-                fillOpacity: 0.35
+                fillOpacity: 0.30
             };
         },
         onEachFeature: function(feature, layer) {
@@ -351,7 +442,7 @@
         }
     }).addTo(map);
 
-    // --- E. MODELO DE DATOS SCI CON PERSISTENCIA EN LOCALSTORAGE ---
+    // --- F. MODELO DE DATOS SCI CON LAS 5 INSTITUCIONES PRECARGADAS ---
     const datosInicialesSCI = {
         "type": "FeatureCollection",
         "features": [
@@ -408,14 +499,49 @@
                     "type": "Point",
                     "coordinates": [-58.9320, -27.4850]
                 }
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": "REC-04",
+                    "nombre": "Patrulla Seguridad Vial RN 16",
+                    "institucion": "GN",
+                    "tipo": "Control de Ruta y Tránsito",
+                    "estado": "ASIGNADO",
+                    "efectivos": 6,
+                    "sector": "Acceso Norte / RN 16 km 14",
+                    "tarea_asignada": "Control de transitabilidad por anegamiento de banquinas y escolta logística",
+                    "hora_reporte": "2026-10-21T23:10:00-03:00"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-58.9950, -27.4120]
+                }
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": "REC-05",
+                    "nombre": "Base de Alojamiento y Asistencia",
+                    "institucion": "DC",
+                    "tipo": "Asistencia Humanitaria y Sanidad",
+                    "estado": "ASIGNADO",
+                    "efectivos": 10,
+                    "sector": "Puerto Vilelas",
+                    "tarea_asignada": "Recepción de familias autoevacuadas y distribución de raciones calientes",
+                    "hora_reporte": "2026-10-21T23:20:00-03:00"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-58.9390, -27.5130]
+                }
             }
         ]
     };
 
-    // Cargar desde localStorage si existen datos previos, o usar los iniciales
-    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci')) || structuredClone(datosInicialesSCI);
+    let recursosGeoJSON = JSON.parse(localStorage.getItem('cop_recursos_sci_v2')) || structuredClone(datosInicialesSCI);
 
-    // --- F. SINCRONIZACIÓN DE PANEL LATERAL, CONTADORES Y MARCADORES SCI ---
+    // --- G. SINCRONIZACIÓN DE PANEL LATERAL, CONTADORES Y PINES PERSONALIZADOS ---
     const capaRecursosSCI = L.layerGroup().addTo(map);
 
     function renderizarRecursosSCI() {
@@ -440,26 +566,37 @@
                 totalUnidades++;
                 totalEfectivos += Number(p.efectivos) || 0;
 
-                const colorEstado = p.estado === 'ASIGNADO' ? '#27ae60' : (p.estado === 'DISPONIBLE' ? '#f1c40f' : '#c0392b');
+                const estiloFuerza = ESTILOS_INSTITUCION[p.institucion] || { color: "#64748b", nombre: p.institucion };
+                const colorEstado = COLOR_ESTADO_SCI[p.estado] || "#94a3b8";
 
-                // 1. Crear marcador en el mapa
-                const marker = L.marker([coords[1], coords[0]]).addTo(capaRecursosSCI);
+                // 1. Crear marcador en el mapa con el ícono propio de la Fuerza
+                const marker = L.marker([coords[1], coords[0]], {
+                    icon: crearIconoTactico(p.institucion, p.estado)
+                }).addTo(capaRecursosSCI);
+
                 marker.bindPopup(`
-                    <b>[${p.institucion}] ${p.nombre}</b><br>
-                    <b>ID Recurso:</b> ${p.id}<br>
-                    <b>Tipo:</b> ${p.tipo} (${p.efectivos} efectivos)<br>
-                    <b>Estado SCI:</b> ${p.estado}<br>
+                    <div style="border-bottom: 3px solid ${estiloFuerza.color}; padding-bottom: 4px; margin-bottom: 6px;">
+                        <span class="badge-fuerza" style="background-color: ${estiloFuerza.color};">${p.institucion}</span>
+                        <b>${p.nombre}</b>
+                    </div>
+                    <b>Institución:</b> ${estiloFuerza.nombre}<br>
+                    <b>ID Recurso:</b> ${p.id} | <b>Efectivos:</b> ${p.efectivos}<br>
+                    <b>Especialidad:</b> ${p.tipo}<br>
+                    <b>Estado SCI:</b> <span style="color:${colorEstado}; font-weight:bold;">● ${p.estado}</span><br>
                     <b>Sector:</b> ${p.sector}<br>
                     <b>Tarea:</b> ${p.tarea_asignada}<br>
                     <b>Último reporte:</b> ${p.hora_reporte}
                 `);
 
-                // 2. Crear tarjeta en el Panel Lateral
+                // 2. Crear tarjeta en el Panel Lateral con distintivo de Fuerza y borde de Estado
                 const tarjeta = document.createElement('div');
                 tarjeta.style = `background: white; border-left: 5px solid ${colorEstado}; padding: 8px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer; font-size: 12px;`;
                 tarjeta.innerHTML = `
-                    <strong>[${p.institucion}] ${p.nombre}</strong><br>
-                    <span>Estado: <b>${p.estado}</b> | Efectivos: ${p.efectivos}</span><br>
+                    <div style="margin-bottom: 3px;">
+                        <span class="badge-fuerza" style="background-color: ${estiloFuerza.color};">${p.institucion}</span>
+                        <strong>${p.nombre}</strong>
+                    </div>
+                    <span>Estado: <b>${p.estado}</b> | Efectivos: <b>${p.efectivos}</b></span><br>
                     <span style="color: #555;">📍 ${p.sector}</span><br>
                     <small style="color: #7f8c8d;">🕒 ${p.hora_reporte.slice(11,16)} hs - ${p.tarea_asignada}</small>
                 `;
@@ -471,24 +608,21 @@
             }
         });
 
-        // Actualizar contadores tácticos superiores
         document.getElementById('kpi-unidades').textContent = totalUnidades;
         document.getElementById('kpi-efectivos').textContent = totalEfectivos;
     }
 
-    // --- G. CAPTURA DE COORDENADAS CON CLIC EN EL MAPA Y ALTA EN VIVO ---
+    // --- H. CAPTURA DE COORDENADAS CON CLIC EN EL MAPA Y ALTA EN VIVO ---
     let marcadorTemporal = null;
 
     map.on('click', function(e) {
         const lat = e.latlng.lat.toFixed(5);
         const lon = e.latlng.lng.toFixed(5);
 
-        // Abrir el desplegable del formulario automáticamente y cargar coordenadas
         document.getElementById('panel-alta').open = true;
         document.getElementById('nueva-lat').value = lat;
         document.getElementById('nueva-lon').value = lon;
 
-        // Mostrar marcador temporal donde hizo clic el operador
         if (marcadorTemporal) {
             map.removeLayer(marcadorTemporal);
         }
@@ -504,7 +638,6 @@
         event.preventDefault();
 
         const ahora = new Date();
-        // Formato de hora local ISO para mantener consistencia
         const pad = n => String(n).padStart(2, '0');
         const timestampLocal = `${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}T${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:00-03:00`;
 
@@ -527,36 +660,32 @@
             },
             "geometry": {
                 "type": "Point",
-                "coordinates": [lon, lat] // Estándar GeoJSON: [Longitud, Latitud]
+                "coordinates": [lon, lat]
             }
         };
 
-        // Insertar al inicio para que aparezca primero en el listado
         recursosGeoJSON.features.unshift(nuevoRecurso);
-        localStorage.setItem('cop_recursos_sci', JSON.stringify(recursosGeoJSON));
+        localStorage.setItem('cop_recursos_sci_v2', JSON.stringify(recursosGeoJSON));
 
-        // Limpiar formulario y marcador temporal
         document.getElementById('form-recurso').reset();
         if (marcadorTemporal) {
             map.removeLayer(marcadorTemporal);
             marcadorTemporal = null;
         }
 
-        // Volver a dibujar y centrar en la nueva unidad creada
         renderizarRecursosSCI();
         map.setView([lat, lon], 13);
     }
 
     function restaurarDatosIniciales() {
-        localStorage.removeItem('cop_recursos_sci');
+        localStorage.removeItem('cop_recursos_sci_v2');
         recursosGeoJSON = structuredClone(datosInicialesSCI);
         renderizarRecursosSCI();
     }
 
-    // Ejecución inicial
     renderizarRecursosSCI();
 
-    // --- H. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
+    // --- I. CONSULTA EN VIVO A OPEN-METEO FLOOD API (Caudal del Río Paraná) ---
     const grupoHidrometria = L.layerGroup().addTo(map);
 
     async function cargarCaudalRio() {
@@ -590,7 +719,7 @@
     }
     cargarCaudalRio();
 
-    // --- I. CONTROL DE CAPAS Y LEYENDA ---
+    // --- J. CONTROL DE CAPAS Y LEYENDA MULTIFUERZA ---
     L.control.layers(
         { "Mapa Base (OpenStreetMap)": osmBase },
         {
@@ -606,11 +735,17 @@
     legend.onAdd = function () {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
-            <strong>Referencias Operativas</strong><br>
-            <i style="background: #e74c3c"></i> Zona de Riesgo Alto (Alerta Roja)<br>
-            <i style="background: #f39c12"></i> Zona de Riesgo Medio (Prevención)<br>
-            <i style="background: #0055ff; border-radius: 50%;"></i> Aforo Caudal Río Paraná (GloFAS)<br>
-            <small><i>Clic en el mapa = capturar coordenadas para nueva unidad.</i></small>
+            <strong>Fuerzas y Organismos (SCI)</strong><br>
+            <i style="background: #0284c7; border-radius: 3px;"></i> <b>FAA</b> - Fuerza Aérea<br>
+            <i style="background: #4d7c0f; border-radius: 3px;"></i> <b>EA</b> - Ejército Argentino<br>
+            <i style="background: #1e3a8a; border-radius: 3px;"></i> <b>PNA</b> - Prefectura Naval<br>
+            <i style="background: #15803d; border-radius: 3px;"></i> <b>GN</b> - Gendarmería Nac.<br>
+            <i style="background: #ea580c; border-radius: 3px;"></i> <b>DC</b> - Defensa Civil<br>
+            <div class="legend-divider"></div>
+            <strong>Riesgo Hídrico y Telemetría</strong><br>
+            <i style="background: #e74c3c"></i> Zona de Riesgo Alto<br>
+            <i style="background: #f39c12"></i> Zona de Prevención<br>
+            <i style="background: #0055ff; border-radius: 50%;"></i> Aforo Caudal Paraná (GloFAS)
         `;
         return div;
     };
