@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Operativo Hídrico - NEA</title>
+    
+    <!-- 1. Importar los estilos y la librería de Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* El mapa ocupará toda la pantalla */
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 100vw; }
+    </style>
+</head>
+<body>
+
+<!-- Contenedor del Mapa -->
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // 2. Inicializar el mapa centrado en el límite Chaco/Corrientes
+    // Coordenadas: Latitud -27.45, Longitud -58.98. Zoom 8 para vista regional.
+    const map = L.map('map').setView([-27.4514, -58.9867], 8);
+
+    // 3. Cargar la capa base (El mapa de fondo físico/político)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18,
+    }).addTo(map);
+
+    // 4. Trazar Zonas de Riesgo (Polígonos vectoriales)
+    
+    // Zona Roja: Alta probabilidad de anegamiento (ej. márgenes del Paraná)
+    const zonaRojaCoords = [
+        [-27.20, -58.85], [-27.20, -58.60], 
+        [-27.60, -58.75], [-27.60, -58.95]
+    ];
+    const zonaRoja = L.polygon(zonaRojaCoords, {
+        color: 'red',
+        fillColor: '#f03',
+        fillOpacity: 0.4 // Transparencia para ver el terreno debajo
+    }).addTo(map).bindPopup("<b>Alerta Roja</b><br>Nivel de río crítico. Riesgo inminente.");
+
+    // Zona Amarilla: Área de prevención y monitoreo
+    const zonaAmarillaCoords = [
+        [-27.10, -59.50], [-27.10, -59.10], 
+        [-27.50, -59.30], [-27.50, -59.80]
+    ];
+    const zonaAmarilla = L.polygon(zonaAmarillaCoords, {
+        color: 'orange',
+        fillColor: 'orange',
+        fillOpacity: 0.4
+    }).addTo(map).bindPopup("<b>Alerta Amarilla</b><br>Prevención. Preparación de medios.");
+
+    // 5. Cargar Marcadores Tácticos (Posición de Medios y Personal)
+    // Inicialmente los cargamos fijos, luego se automatizarán.
+    
+    // Puesto de Comando Central
+    const baseMarker = L.marker([-27.4514, -59.05]).addTo(map)
+        .bindPopup("<b>Puesto de Comando</b><br>Base Aérea.<br><i>Enlace Satelital Activo</i>");
+
+    // Equipo desplegado en el terreno
+    const equipoMarker = L.marker([-27.35, -58.80]).addTo(map)
+        .bindPopup(`
+            <b>Equipo de Comunicaciones Alfa</b><br>
+            <b>Efectivos:</b> 4<br>
+            <b>Misión:</b> Relevamiento hídrico y enlace VHF<br>
+            <b>Estado:</b> Operativo
+        `);
+
+    // 6. Panel de Control de Capas (Permite a la superioridad filtrar lo que ve)
+    const capasSuperpuestas = {
+        "Áreas de Alerta Roja": zonaRoja,
+        "Áreas de Prevención Amarilla": zonaAmarilla,
+        "Medios Desplegados": L.layerGroup([baseMarker, equipoMarker])
+    };
+    
+    L.control.layers(null, capasSuperpuestas, {collapsed: false}).addTo(map);
+
+</script>
+</body>
+</html>
