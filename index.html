@@ -1,414 +1,594 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-<style>
-body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#e2e8f0}
-#top-banner{background:#1a252f;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000}
-.badge-proto{background:#e67e22;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold;margin-right:10px;font-size:11px}
-.tab-bar{background:#2c3e50;padding:0 16px;display:flex;gap:5px;border-bottom:3px solid #e67e22}
-.tab-btn{background:#34495e;color:#fff;border:none;padding:10px 20px;font-size:14px;font-weight:bold;cursor:pointer;border-radius:5px 5px 0 0;opacity:.7}
-.tab-btn:hover{opacity:1}.tab-btn.active{background:#e67e22;opacity:1}
-.view-container{display:none;flex:1;overflow:hidden;width:100%}.view-container.active{display:flex}
-#sidebar{width:410px;background:#f8fafc;border-right:2px solid #bdc3c7;display:flex;flex-direction:column;padding:12px;overflow-y:auto;box-sizing:border-box}
-.kpi-box{display:flex;gap:8px;margin-bottom:10px}
-.kpi-card{flex:1;background:#2c3e50;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px}
-.kpi-card b{display:block;font-size:15px;color:#f39c12}
-details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #2980b9;border-radius:4px;margin-bottom:10px;padding:8px}
-details.form-panel summary{font-weight:bold;font-size:13px;color:#1e293b;cursor:pointer;outline:none}
-.form-grid{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:12px}
-.form-grid input,.form-grid select{padding:6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
-.coords-row{display:flex;gap:6px}
-.btn-submit,.btn-ruta,.btn-pdf{color:#fff;border:none;padding:8px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:4px}
-.btn-submit{background:#27ae60}.btn-ruta{background:#8e44ad}.btn-pdf{background:#c0392b;padding:6px 12px;font-size:12px;margin:0}
-.select-zona{background:#f1f5f9;border:1px solid #94a3b8;font-weight:bold;color:#1e293b}
-#map-tactico{flex:1;cursor:crosshair}
-#map-radar{flex:1;width:100%;height:100%;background:#1e293b}
-.custom-div-icon{background:transparent;border:none}
-.pin-tactico{position:relative;width:36px;height:36px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 6px rgba(0,0,0,.45);border:2px solid #fff}
-.pin-tactico span.sigla{transform:rotate(45deg);color:#fff;font-weight:800;font-size:10px}
-.pin-tactico .estado-dot{position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;border:1.5px solid #fff}
-.corte-ruta-badge{background:#c0392b;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
-.radar-legend{position:absolute;bottom:30px;right:30px;z-index:1000;background:rgba(0,0,0,.82);color:#fff;padding:10px;border-radius:8px;font-size:12px;max-width:290px;line-height:1.5}
-.radar-legend a{color:#7fb3ff}
-#panel-rios{position:absolute;bottom:30px;left:12px;z-index:1000;background:rgba(0,0,0,.85);color:#fff;padding:10px;border-radius:8px;font-size:11.5px;width:285px;max-height:60vh;overflow-y:auto;line-height:1.45}
-#panel-rios input{background:#fff;border:none;border-radius:3px;padding:2px;font-size:11px}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #e2e8f0; }
+        
+        #top-banner { background-color: #1a252f; color: #ffffff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; z-index: 1000; }
+        .badge-proto { background-color: #e67e22; color: #fff; padding: 3px 8px; border-radius: 3px; font-weight: bold; margin-right: 10px; font-size: 11px; }
+        
+        .tab-bar { background-color: #2c3e50; padding: 0 16px; display: flex; gap: 5px; border-bottom: 3px solid #e67e22; }
+        .tab-btn { background-color: #34495e; color: white; border: none; padding: 10px 20px; font-size: 13px; font-weight: bold; cursor: pointer; border-radius: 5px 5px 0 0; transition: 0.2s; opacity: 0.75; }
+        .tab-btn:hover { opacity: 1; background-color: #3b536b; }
+        .tab-btn.active { background-color: #e67e22; opacity: 1; color: #fff; }
+
+        .view-container { display: none; flex: 1; overflow: hidden; width: 100%; position: relative; }
+        .view-container.active { display: flex; }
+
+        #sidebar { width: 420px; background: #f8fafc; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 10px; overflow-y: auto; box-sizing: border-box; z-index: 500; }
+        .kpi-box { display: flex; gap: 6px; margin-bottom: 8px; }
+        .kpi-card { flex: 1; background: #2c3e50; color: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 11px; }
+        .kpi-card b { display: block; font-size: 15px; color: #f39c12; }
+        
+        details.form-panel { background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #2980b9; border-radius: 4px; margin-bottom: 8px; padding: 7px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        details.form-panel summary { font-weight: bold; font-size: 12.5px; color: #1e293b; cursor: pointer; outline: none; }
+        .form-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 12px; }
+        .form-grid input, .form-grid select { padding: 5px 6px; border: 1px solid #cbd5e1; border-radius: 3px; font-size: 12px; }
+        .coords-row { display: flex; gap: 5px; }
+        .coords-row input { flex: 1; width: 100%; box-sizing: border-box; }
+        
+        .btn-submit { background-color: #27ae60; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .btn-ruta { background-color: #8e44ad; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; flex: 1; }
+        .btn-clear { background-color: #7f8c8d; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .btn-pick { background-color: #2980b9; color: white; border: none; padding: 5px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+        .btn-pick.picking { background-color: #e74c3c; animation: pulse 1s infinite; }
+        .btn-pdf { background-color: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        .select-zona { background-color: #f1f5f9; border: 1px solid #94a3b8; font-weight: bold; color: #1e293b; }
+
+        #map-tactico { flex: 1; cursor: crosshair; }
+        #map-radar { flex: 1; width: 100%; height: 100%; background: #1e293b; }
+
+        /* Barra flotante de filtros de capas sobre el mapa */
+        .layer-control-bar { position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.95); padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); font-size: 12px; display: flex; gap: 12px; border: 1px solid #cbd5e1; }
+        .layer-control-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 600; color: #1e293b; }
+
+        /* Iconos Tácticos */
+        .custom-div-icon { background: transparent; border: none; }
+        .pin-tactico { position: relative; width: 34px; height: 34px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.45); border: 2px solid #ffffff; }
+        .pin-tactico span.sigla { transform: rotate(45deg); color: #ffffff; font-weight: 800; font-size: 9.5px; }
+        .pin-tactico .estado-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #ffffff; }
+        
+        .corte-ruta-badge { background: #c0392b; color: white; border: 2px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .hidro-badge { color: white; border: 2px solid #fff; border-radius: 6px; padding: 2px 5px; font-size: 10px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.4); white-space: nowrap; text-align: center; }
+        .infra-badge { background: #ffffff; border: 2px solid #1e293b; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+
+        .recurso-card { background: white; border-left: 5px solid #2980b9; padding: 7px 8px; margin-bottom: 6px; font-size: 11.5px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; border-radius: 0 4px 4px 0; }
+        .btn-del-mini { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 3px; padding: 2px 6px; font-size: 11px; font-weight: bold; cursor: pointer; }
+        .btn-del-mini:hover { background: #dc2626; color: white; }
+
+        .radar-legend { position: absolute; bottom: 30px; right: 30px; z-index: 1000; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; font-size: 12px; }
+    </style>
 </head>
 <body>
+
 <div id="top-banner">
-  <div><span class="badge-proto">PROTOTIPO · DATOS DE EJEMPLO</span><strong>MONITOR OPERATIVO HÍDRICO (COP)</strong></div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <span id="reloj-operativo"></span>
-    <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
-  </div>
-</div>
-<div class="tab-bar">
-  <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Terreno y Medios)</button>
-  <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar y Lluvias)</button>
-</div>
-
-<div id="vista-tactica" class="view-container active">
-  <div id="sidebar">
-    <h3 style="margin:0 0 8px;color:#2c3e50;font-size:15px">📋 Comando de Incidentes</h3>
-    <div class="kpi-box">
-      <div class="kpi-card"><b id="kpi-unidades">0</b>Medios / Inc.</div>
-      <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
+    <div>
+        <span class="badge-proto">C2 CONJUNTO</span>
+        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v2.0)</strong>
     </div>
-    <details class="form-panel" open>
-      <summary>📍 Búsqueda de Zonas (Solo Chaco y Corrientes)</summary>
-      <div class="form-grid">
-        <small style="color:#c0392b;font-weight:bold;display:none" id="alerta-geojson">⚠️ Error al cargar mapa_nea.geojson.</small>
-        <input type="text" id="input-buscar-depto" placeholder="🔍 Buscar departamento..." oninput="filtrarDepartamentosTexto()" />
-        <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">1. Seleccionar Departamento...</option></select>
-        <select id="sel-muni" class="select-zona" disabled><option value="">2. Zona Seleccionada</option></select>
-      </div>
-    </details>
-    <details class="form-panel">
-      <summary>🛣️ Calcular Ruta Táctica</summary>
-      <div class="form-grid">
-        <input type="text" id="ruta-origen" placeholder="Origen: Ej. Base Aérea Resistencia" />
-        <input type="text" id="ruta-destino" placeholder="Destino: Ej. Isla del Cerrito" />
-        <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
-        <div id="resultado-ruta" style="display:none;font-size:11.5px;background:#f8fafc;padding:8px;margin-top:4px;border:1px solid #cbd5e1"></div>
-      </div>
-    </details>
-    <details class="form-panel" id="panel-alta">
-      <summary>➕ Alta Recurso / Corte de Ruta</summary>
-      <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-        <input type="text" id="nuevo-nombre" placeholder="Nombre" required />
-        <div style="display:flex;gap:6px">
-          <select id="nueva-institucion" style="flex:1" required>
-            <option value="FAA">FAA</option><option value="EA">EA</option><option value="PNA">PNA</option><option value="GN">GN</option><option value="DC">DC</option><option value="VIALIDAD">VIALIDAD - Corte</option>
-          </select>
-          <select id="nuevo-estado" style="flex:1" required>
-            <option value="ASIGNADO">🟢 Activo</option><option value="DISPONIBLE">🟡 Disp.</option><option value="NO_DISPONIBLE">🔴 Bloqueado</option>
-          </select>
-        </div>
-        <div class="coords-row">
-          <input type="number" step="any" id="nueva-lat" placeholder="Latitud" required />
-          <input type="number" step="any" id="nueva-lon" placeholder="Longitud" required />
-        </div>
-        <input type="text" id="nuevo-sector" placeholder="Sector" required />
-        <button type="submit" class="btn-submit">📍 Desplegar</button>
-      </form>
-    </details>
-    <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px">
-      <option value="TODAS">Todos los Organismos</option><option value="FAA">FAA</option><option value="EA">EA</option><option value="PNA">PNA</option><option value="GN">GN</option><option value="DC">Defensa Civil / Cortes</option>
-    </select>
-    <div id="lista-recursos" style="flex:1;overflow-y:auto"></div>
-  </div>
-  <div id="map-tactico"></div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span id="reloj-operativo" style="margin-right: 5px; font-family: monospace;"></span>
+        <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
+    </div>
 </div>
 
+<div class="tab-bar">
+    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Operaciones, Hidrometría y Ruteo)</button>
+    <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar Meteorológico)</button>
+</div>
+
+<!-- VISTA 1: TÁCTICA -->
+<div id="vista-tactica" class="view-container active">
+    
+    <!-- Barra de Conmutación Rápida de Capas -->
+    <div class="layer-control-bar">
+        <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros (INA/PNA)</label>
+        <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura Crítica</label>
+        <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes de Ruta</label>
+        <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades Desplegadas</label>
+    </div>
+
+    <div id="sidebar">
+        <div class="kpi-box">
+            <div class="kpi-card"><b id="kpi-unidades">0</b>Medios Activos</div>
+            <div class="kpi-card"><b id="kpi-cortes" style="color:#ef4444;">0</b>Cortes / Alertas</div>
+            <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
+        </div>
+
+        <!-- 1. BUSCADOR DE DEPARTAMENTOS -->
+        <details class="form-panel">
+            <summary>📍 Jurisdicciones NEA (Chaco y Corrientes)</summary>
+            <div class="form-grid">
+                <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento (ej. San Fernando)..." oninput="filtrarDepartamentosTexto()" />
+                <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">Seleccionar Departamento...</option></select>
+            </div>
+        </details>
+
+        <!-- 2. RUTEO TÁCTICO CON SELECCIÓN EN MAPA Y BORRADO -->
+        <details class="form-panel" open>
+            <summary>🛣️ Ruteo Táctico (Con Selección en Mapa)</summary>
+            <div class="form-grid">
+                <div style="display: flex; gap: 4px;">
+                    <input type="text" id="ruta-origen" placeholder="Origen (Dirección o clic en botón 👉)" style="flex:1;" />
+                    <button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Fijar Origen</button>
+                </div>
+                <div style="display: flex; gap: 4px;">
+                    <input type="text" id="ruta-destino" placeholder="Destino (Dirección o clic en botón 👉)" style="flex:1;" />
+                    <button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Fijar Destino</button>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 2px;">
+                    <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
+                    <button type="button" class="btn-clear" onclick="borrarRutaTactica()" title="Limpiar ruta del mapa">🗑️ Borrar Ruta</button>
+                </div>
+                <div id="resultado-ruta" style="display:none; font-size: 11.5px; background:#f1f5f9; padding:7px; border-radius:3px; border-left: 3px solid #8e44ad;"></div>
+            </div>
+        </details>
+
+        <!-- 3. ALTA DE RECURSOS Y CORTES CON TRAZABILIDAD -->
+        <details class="form-panel" id="panel-alta" open>
+            <summary>➕ Desplegar Unidad / Reportar Corte de Ruta</summary>
+            <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
+                <input type="text" id="nuevo-nombre" placeholder="Detalle (Ej. Corte RN 16 Km 14 / Unimog Comunicaciones)" required />
+                <div style="display: flex; gap: 5px;">
+                    <select id="nueva-institucion" style="flex: 1;" required>
+                        <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA VIAL</option>
+                        <option value="FAA">✈️ FAA - Fuerza Aérea</option>
+                        <option value="EA">🪖 EA - Ejército</option>
+                        <option value="PNA">⚓ PNA - Prefectura</option>
+                        <option value="GN">🛡️ GN - Gendarmería</option>
+                        <option value="DC">🚒 DC - Defensa Civil</option>
+                    </select>
+                    <select id="nuevo-estado" style="width: 115px;" required>
+                        <option value="ASIGNADO">🟢 Operativo</option>
+                        <option value="DISPONIBLE">🟡 En Reserva</option>
+                        <option value="NO_DISPONIBLE">🔴 Crítico/Corte</option>
+                    </select>
+                </div>
+                <div class="coords-row">
+                    <input type="number" step="any" id="nueva-lat" placeholder="Lat (Clic en mapa)" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Lon (Clic en mapa)" required />
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="nuevo-sector" placeholder="Sector / Localidad" style="flex:1;" required />
+                    <input type="text" id="nuevo-operador" placeholder="Operador / Fuente (Ej. S-3 FAA)" style="flex:1;" required />
+                </div>
+                <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
+            </form>
+        </details>
+
+        <!-- FILTRO Y LISTA CON BOTÓN DE ELIMINAR -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <select id="filtro-institucion" onchange="renderizarRecursos()" style="flex: 1; padding: 5px; border-radius: 4px; font-size: 12px;">
+                <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option>
+                <option value="VIALIDAD">🚧 Solo Cortes de Ruta / Alertas</option>
+                <option value="FAA">✈️ Fuerza Aérea (FAA)</option>
+                <option value="EA">🪖 Ejército Argentino (EA)</option>
+                <option value="PNA">⚓ Prefectura Naval (PNA)</option>
+                <option value="GN">🛡️ Gendarmería (GN)</option>
+                <option value="DC">🚒 Defensa Civil (DC)</option>
+            </select>
+        </div>
+        <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
+    </div>
+
+    <div id="map-tactico"></div>
+</div>
+
+<!-- VISTA 2: ESTRATÉGICA (RADAR) -->
 <div id="vista-radar" class="view-container">
-  <div id="map-radar"></div>
-  <div class="radar-legend">
-    <b>⛈️ Visor Estratégico</b><br>
-    <button id="rv-play" class="btn-pdf" style="padding:3px 8px">▶</button>
-    <input type="range" id="rv-slider" min="0" max="0" value="0" style="width:170px;vertical-align:middle">
-    <div>Radar: <b id="radar-hora">—</b></div>
-    <b>Estado de las fuentes:</b>
-    <div id="estado-capas">⏳ Cargando…</div>
-    <small>Radar gratuito: zoom máx. 7 y últimas 2 h. Cobertura parcial en el NEA: contrastar con satélite.<br>
-    <a href="https://www.rainviewer.com" target="_blank" rel="noopener">Weather data by Rain Viewer</a> · NASA GIBS · Open-Meteo</small>
-  </div>
-  <div id="panel-rios"><b>🌊 Ríos (cuenca del Paraná)</b>
-    <div id="lista-rios">⏳ Cargando…</div>
-    <small>Caudal: modelo GloFAS vía Open-Meteo (referencial, ubicación aprox.). Altura y umbral: cargar a mano desde el parte PNA/INA; se guardan en este navegador.</small>
-  </div>
+    <div id="map-radar"></div>
+    <div class="radar-legend" id="leyenda-radar">
+        <b>⛈️ Radar Meteorológico Regional</b><br>
+        <span style="color: #3498db;">🟦 Lluvias Leves</span> | 
+        <span style="color: #f1c40f;">🟨 Moderadas</span> | 
+        <span style="color: #e74c3c;">🟥 Tormentas Severas</span>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    // --- ESTADO GLOBAL ---
+    let mapTactico, mapRadar;
+    let radarCargado = false;
+    let modoSeleccionMapa = null; // 'origen', 'destino' o null
 
-// --- PESTAÑAS ---
-let mapTactico, mapRadar, radarCargado = false;
-function cambiarPestana(vista) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
-  if (vista === 'tactica') {
-    document.querySelectorAll('.tab-btn')[0].classList.add('active');
-    document.getElementById('vista-tactica').classList.add('active');
-    mapTactico.invalidateSize();
-  } else {
-    document.querySelectorAll('.tab-btn')[1].classList.add('active');
-    document.getElementById('vista-radar').classList.add('active');
-    if (!radarCargado) inicializarMapaRadar();
-    mapRadar.invalidateSize();
-  }
-}
-
-// --- MAPA TÁCTICO ---
-mapTactico = L.map('map-tactico').setView([-27.45, -58.95], 7);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
-let datosZonasGeoJSON = { type: "FeatureCollection", features: [] };
-const zonasLayerTactico = L.layerGroup().addTo(mapTactico);
-
-async function cargarZonasExternas() {
-  try {
-    const response = await fetch('mapa_nea.geojson');
-    if (!response.ok) throw new Error("Archivo no encontrado");
-    const dataCruda = await response.json();
-    datosZonasGeoJSON.features = dataCruda.features.filter(f => {
-      if (!f.properties) return false;
-      const t = JSON.stringify(f.properties).toLowerCase();
-      return t.includes('chaco') || t.includes('corrientes');
-    });
-    document.getElementById('alerta-geojson').style.display = 'none';
-  } catch (e) {
-    document.getElementById('alerta-geojson').style.display = 'block';
-    datosZonasGeoJSON = { type: "FeatureCollection", features: [] };
-  }
-  poblarSelectorDepartamentos(datosZonasGeoJSON.features);
-  dibujarZonasYCascada();
-}
-const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
-
-function dibujarZonasYCascada(feats = null) {
-  zonasLayerTactico.clearLayers();
-  feats = feats || datosZonasGeoJSON.features;
-  const capa = L.geoJSON({ type: "FeatureCollection", features: feats }, {
-    style: f => ({ color: f.properties.color || '#2980b9', weight: 2, fillOpacity: 0.25 }),
-    onEachFeature: (f, layer) => {
-      layer.on({
-        mouseover: e => { e.target.setStyle({ weight: 4, fillOpacity: 0.55, color: '#2c3e50' }); e.target.bringToFront(); },
-        mouseout: e => capa.resetStyle(e.target)
-      });
-      layer.bindTooltip(`<div style="font-size:12px;min-width:180px"><b style="color:#2c3e50;font-size:13px">${esc(nombreZona(f) || 'Zona')}</b><br>
-        <b>🚨 Estado:</b> ${esc(f.properties.emergencia || 'En Observación')}<br>
-        <b>👥 Evacuados:</b> ${esc(f.properties.evacuados !== undefined ? f.properties.evacuados : 'Sin registro')}</div>`, { sticky: true });
+    function cambiarPestana(vista) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+        
+        if (vista === 'tactica') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('vista-tactica').classList.add('active');
+            mapTactico.invalidateSize();
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('vista-radar').classList.add('active');
+            if (!radarCargado) inicializarMapaRadar();
+            mapRadar.invalidateSize();
+        }
     }
-  }).addTo(zonasLayerTactico);
-}
 
-function poblarSelectorDepartamentos(features) {
-  const sel = document.getElementById('sel-depto');
-  sel.innerHTML = '<option value="">1. Seleccionar Departamento...</option>';
-  [...new Set(features.map(nombreZona).filter(Boolean))].sort().forEach(d => sel.add(new Option(d, d)));
-}
-function filtrarDepartamentosTexto() {
-  const t = document.getElementById('input-buscar-depto').value.toLowerCase();
-  const fl = datosZonasGeoJSON.features.filter(f => nombreZona(f).toLowerCase().includes(t));
-  poblarSelectorDepartamentos(fl); dibujarZonasYCascada(fl);
-}
-function seleccionarDeptoMapa() {
-  const d = document.getElementById('sel-depto').value;
-  if (!d) return;
-  const f = datosZonasGeoJSON.features.find(x => nombreZona(x) === d);
-  if (f) {
-    mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.5 });
-    document.getElementById('sel-muni').innerHTML = `<option value="">2. ${esc(d)} (Seleccionado)</option>`;
-  }
-}
-cargarZonasExternas();
+    // --- MAPA TÁCTICO ---
+    mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
 
-// --- RECURSOS SCI ---
-function crearIcono(inst, estado) {
-  if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28, 28] });
-  const color = {FAA:"#0284c7", EA:"#4d7c0f", PNA:"#1e3a8a", GN:"#15803d", DC:"#ea580c"}[inst] || "#64748b";
-  const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
-  return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color}"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot}"></div></div>`, iconSize: [36, 36], iconAnchor: [18, 36] });
-}
-let recursos = JSON.parse(localStorage.getItem('cop_recursos_v11')) || [];
-const capaRecursos = L.layerGroup().addTo(mapTactico);
+    let datosZonasGeoJSON = { "type": "FeatureCollection", "features": [] };
+    const zonasLayerTactico = L.layerGroup().addTo(mapTactico);
+    const capaHidrometria = L.layerGroup().addTo(mapTactico);
+    const capaInfraestructura = L.layerGroup().addTo(mapTactico);
+    const capaRecursos = L.layerGroup().addTo(mapTactico);
+    const capaRutaActiva = L.layerGroup().addTo(mapTactico);
 
-function renderizarRecursos() {
-  capaRecursos.clearLayers();
-  const lista = document.getElementById('lista-recursos');
-  const fInst = document.getElementById('filtro-institucion').value;
-  lista.innerHTML = ''; let u = 0, e = 0;
-  recursos.forEach(r => {
-    if (fInst === 'TODAS' || r.inst === fInst || (fInst === 'DC' && r.inst === 'VIALIDAD')) {
-      u++; e += Number(r.efectivos) || 0;
-      const m = L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos);
-      m.bindPopup(`<b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br>Sector: ${esc(r.sector)}<br>Estado: ${esc(r.estado)}`);
-      const tj = document.createElement('div');
-      tj.style = `background:white;border-left:5px solid ${r.inst === 'VIALIDAD' ? '#c0392b' : '#2980b9'};padding:8px;margin-bottom:8px;font-size:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.1)`;
-      tj.innerHTML = `<b>${r.inst === 'VIALIDAD' ? '🚧' : ''} [${esc(r.inst)}] ${esc(r.nombre)}</b><br><span style="color:#555">📍 ${esc(r.sector)}</span>`;
-      tj.onclick = () => { mapTactico.setView([r.lat, r.lon], 14); m.openPopup(); };
-      lista.appendChild(tj);
+    // --- 1. DATOS HIDROLÓGICOS (HIDRÓMETROS INA / PNA EN EL NEA) ---
+    let estacionesHidro = JSON.parse(localStorage.getItem('cop_hidro_v1')) || [
+        { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 6.15, alerta: 6.00, evacuacion: 6.50, tendencia: "Creciendo ▲", lat: -27.485, lon: -58.932, actualizado: "PNA / INA" },
+        { id: "H2", estacion: "Corrientes Capital", rio: "Paraná", actual: 6.35, alerta: 6.50, evacuacion: 7.00, tendencia: "Estacionario ═", lat: -27.462, lon: -58.838, actualizado: "PNA / INA" },
+        { id: "H3", estacion: "Isla del Cerrito", rio: "Paraná / Paraguay", actual: 6.62, alerta: 6.00, evacuacion: 6.50, tendencia: "Creciendo ▲", lat: -27.295, lon: -58.625, actualizado: "PNA" },
+        { id: "H4", estacion: "Puerto Bermejo", rio: "Paraguay", actual: 5.40, alerta: 5.50, evacuacion: 6.00, tendencia: "Bajando ▼", lat: -26.928, lon: -58.502, actualizado: "PNA" },
+        { id: "H5", estacion: "Ituzaingó", rio: "Paraná", actual: 3.10, alerta: 3.50, evacuacion: 4.00, tendencia: "Estacionario ═", lat: -27.581, lon: -56.689, actualizado: "Yacyretá / INA" },
+        { id: "H6", estacion: "Goya", rio: "Paraná", actual: 5.25, alerta: 5.20, evacuacion: 5.70, tendencia: "Creciendo ▲", lat: -29.145, lon: -59.265, actualizado: "PNA" }
+    ];
+
+    function renderizarHidrometria() {
+        capaHidrometria.clearLayers();
+        if (!document.getElementById('chk-hidro').checked) return;
+
+        estacionesHidro.forEach((h, idx) => {
+            let bg = "#16a34a"; // Normal (Verde)
+            let estadoTxt = "NORMAL";
+            if (h.actual >= h.evacuacion) { bg = "#dc2626"; estadoTxt = "EVACUACIÓN"; }
+            else if (h.actual >= h.alerta) { bg = "#d97706"; estadoTxt = "ALERTA"; }
+
+            const icono = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="hidro-badge" style="background:${bg};">🌊 ${h.estacion}: ${h.actual.toFixed(2)}m</div>`,
+                iconSize: [110, 24], iconAnchor: [55, 12]
+            });
+
+            const m = L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria);
+            m.bindPopup(`
+                <div style="font-size:12px; min-width:190px;">
+                    <b style="font-size:13px; color:#1e293b;">🌊 Hidrómetro ${h.estacion}</b><br>
+                    <b>Río:</b> ${h.rio} | <b>Estado:</b> <span style="color:${bg}; font-weight:bold;">${estadoTxt}</span><br>
+                    <hr style="margin:4px 0;">
+                    <b>Altura Actual:</b> <b>${h.actual.toFixed(2)} m</b> (${h.tendencia})<br>
+                    <b>Nivel Alerta:</b> ${h.alerta.toFixed(2)} m | <b>Evacuación:</b> ${h.evacuacion.toFixed(2)} m<br>
+                    <small style="color:#64748b;">Fuente: ${h.actualizado}</small><br>
+                    <button onclick="actualizarAlturaRio(${idx})" style="margin-top:6px; width:100%; padding:4px; background:#2980b9; color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px;">✏️ Actualizar Nivel (m)</button>
+                </div>
+            `);
+        });
     }
-  });
-  document.getElementById('kpi-unidades').innerText = u;
-  document.getElementById('kpi-efectivos').innerText = e;
-}
-renderizarRecursos();
-mapTactico.on('click', e => {
-  document.getElementById('nueva-lat').value = e.latlng.lat.toFixed(5);
-  document.getElementById('nueva-lon').value = e.latlng.lng.toFixed(5);
-});
-function agregarRecursoEnVivo(e) {
-  e.preventDefault();
-  const inst = document.getElementById('nueva-institucion').value;
-  recursos.unshift({
-    id: `REC-${Date.now()}`, nombre: document.getElementById('nuevo-nombre').value, inst,
-    estado: document.getElementById('nuevo-estado').value,
-    lat: parseFloat(document.getElementById('nueva-lat').value), lon: parseFloat(document.getElementById('nueva-lon').value),
-    sector: document.getElementById('nuevo-sector').value, efectivos: inst === 'VIALIDAD' ? 0 : 4
-  });
-  localStorage.setItem('cop_recursos_v11', JSON.stringify(recursos));
-  document.getElementById('form-recurso').reset(); renderizarRecursos();
-}
 
-// --- MAPA RADAR / SATÉLITE / RÍOS ---
-const estadoCapas = {}; let primerError = '';
-function pintarEstado() {
-  document.getElementById('estado-capas').innerHTML = Object.entries(estadoCapas).map(([n, st]) =>
-    `${st.ok > 0 ? '✅' : st.err > 0 ? '⚠️' : '⏳'} ${n}${st.ok === 0 && st.err > 0 ? ' (sin datos)' : ''}`).join('<br>')
-    + (primerError ? `<br><small>Falló: ${esc(primerError)}</small>` : '');
-}
-function vigilar(l, nombre) {
-  estadoCapas[nombre] = estadoCapas[nombre] || { ok: 0, err: 0 };
-  l.on('tileload', () => { estadoCapas[nombre].ok++; pintarEstado(); });
-  l.on('tileerror', e => { estadoCapas[nombre].err++; if (!primerError) { try { primerError = new URL(e.tile.src).host; } catch (_) {} } pintarEstado(); });
-  return l;
-}
-const RV = 'Radar RainViewer';
-
-// Ríos: caudal GloFAS (Open-Meteo, sin clave) + altura/umbral cargados a mano
-const estaciones = [
-  { n: 'Paso de la Patria', lat: -27.31, lon: -58.58 }, { n: 'Corrientes', lat: -27.4597, lon: -58.8333 },
-  { n: 'Empedrado', lat: -27.95, lon: -58.81 }, { n: 'Bella Vista', lat: -28.50, lon: -59.05 }, { n: 'Goya', lat: -29.14, lon: -59.26 }
-];
-let med = JSON.parse(localStorage.getItem('cop_alturas_v1')) || {};
-let rios = []; const rioGrupo = L.layerGroup();
-function guardarMed(i, k, v) {
-  med[i] = med[i] || {}; med[i][k] = v === '' ? null : parseFloat(v); med[i].fecha = new Date().toISOString();
-  localStorage.setItem('cop_alturas_v1', JSON.stringify(med)); dibujarRios();
-}
-function dibujarRios() {
-  rioGrupo.clearLayers(); const cont = document.getElementById('lista-rios'); cont.innerHTML = '';
-  rios.forEach((r, i) => {
-    const m = med[i] || {}, flecha = r.error ? '' : r.tend > 0.03 ? '▲' : r.tend < -0.03 ? '▼' : '▬';
-    const critico = m.a != null && m.u != null && m.a >= m.u;
-    const color = critico ? '#e74c3c' : r.tend > 0.03 ? '#f39c12' : r.tend < -0.03 ? '#2ecc71' : '#3498db';
-    const q = r.error ? 'sin datos' : `${r.hoy.toFixed(0)} m³/s ${flecha} · máx 7 d: ${r.max.toFixed(0)}`;
-    L.circleMarker([r.lat, r.lon], { radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(rioGrupo)
-      .bindPopup(`<b>${esc(r.n)}</b><br>Caudal: ${q}<br>Altura: ${m.a ?? '—'} m (umbral ${m.u ?? '—'} m)${critico ? '<br><b style="color:#c0392b">⚠ SOBRE UMBRAL</b>' : ''}`);
-    cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #555;padding:3px 0"><b>${critico ? '🔴 ' : ''}${esc(r.n)}</b><br>Q: ${q}<br>
-      Altura (m) <input type="number" step="0.01" style="width:55px" value="${m.a ?? ''}" onchange="guardarMed(${i},'a',this.value)">
-      Umbral <input type="number" step="0.01" style="width:55px" value="${m.u ?? ''}" onchange="guardarMed(${i},'u',this.value)"></div>`);
-  });
-}
-async function cargarRios() {
-  rios = await Promise.all(estaciones.map(async s => {
-    try {
-      const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
-      const d = j.daily.river_discharge, hoy = d[7], ref = d[4];
-      if (hoy == null) throw new Error('sin dato');
-      return { ...s, hoy, max: Math.max(...d.slice(7).filter(x => x != null)), tend: ref ? (hoy - ref) / ref : 0 };
-    } catch (e) { return { ...s, error: true }; }
-  }));
-  dibujarRios();
-}
-
-function inicializarMapaRadar() {
-  mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
-  // Base por defecto: OpenStreetMap (sin clave). CARTO queda como opción.
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
-  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© OpenStreetMap, © CARTO' });
-
-  const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best', nasa = 'NASA GIBS / EOSDIS';
-  const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
-    { maxNativeZoom: 7, maxZoom: 9, opacity: 0.85, attribution: nasa }), 'Satélite GOES-East');
-  const imerg = vigilar(L.tileLayer(`${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
-    { maxNativeZoom: 6, maxZoom: 9, opacity: 0.7, attribution: nasa }), 'Lluvia NASA IMERG');
-  estadoCapas[RV] = { ok: 0, err: 0 };
-  const radarGrupo = L.layerGroup();
-
-  imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar); rioGrupo.addTo(mapRadar);
-  L.control.layers({ 'Mapa base (OSM)': osm, 'Mapa oscuro (CARTO)': carto }, {
-    'Radar animado (RainViewer)': radarGrupo, 'Lluvia satelital NASA IMERG': imerg,
-    'Satélite GOES-East (nubes)': goes, 'Ríos: caudal y altura': rioGrupo
-  }, { collapsed: false }).addTo(mapRadar);
-
-  // --- Radar animado: 6 frames (última hora), carga diferida para respetar el límite de 100 solicitudes/min ---
-  let frames = [], idx = 0, timer = null;
-  const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
-  function capaFrame(f) {
-    if (!f.layer) {
-      f.layer = vigilar(L.tileLayer(`${f.host}${f.path}/256/{z}/{x}/{y}/2/0_0.png`, {
-        maxNativeZoom: 7, maxZoom: 9, opacity: 0, updateWhenZooming: false, keepBuffer: 1,
-        attribution: 'Weather data by <a href="https://www.rainviewer.com">Rain Viewer</a>' }), RV);
-      radarGrupo.addLayer(f.layer);
-    }
-    return f.layer;
-  }
-  function mostrar(i) {
-    idx = (i + frames.length) % frames.length;
-    frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? 0.8 : 0); });
-    capaFrame(frames[idx]).setOpacity(0.8);
-    slider.value = idx;
-    document.getElementById('radar-hora').innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-  }
-  function toggle() {
-    if (timer) { clearInterval(timer); timer = null; btn.innerText = '▶'; return; }
-    btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200);
-  }
-  btn.onclick = toggle; slider.oninput = () => { if (timer) toggle(); mostrar(+slider.value); };
-
-  async function cargarRadar() {
-    try {
-      const data = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
-      const past = (data.radar && data.radar.past || []).slice(-6);
-      if (!past.length) throw new Error('sin frames');
-      const host = data.host || 'https://tilecache.rainviewer.com', corriendo = !!timer;
-      if (corriendo) toggle();
-      radarGrupo.clearLayers(); estadoCapas[RV] = { ok: 0, err: 0 };
-      frames = past.map(p => ({ time: p.time, path: p.path, host }));
-      slider.max = frames.length - 1; mostrar(frames.length - 1);
-      if (corriendo) toggle();
-    } catch (e) { estadoCapas[RV].err++; document.getElementById('radar-hora').innerText = 'no disponible'; pintarEstado(); }
-  }
-  cargarRadar(); cargarRios(); pintarEstado();
-  setInterval(cargarRadar, 10 * 60 * 1000);
-  setInterval(cargarRios, 60 * 60 * 1000);
-  radarCargado = true;
-}
-
-// --- RUTEO TÁCTICO ---
-const capaRutaActiva = L.layerGroup().addTo(mapTactico);
-async function calcularRutaTactica() {
-  const origenStr = document.getElementById('ruta-origen').value;
-  const destinoStr = document.getElementById('ruta-destino').value;
-  const resDiv = document.getElementById('resultado-ruta');
-  if (!origenStr || !destinoStr) return alert("Ingrese origen y destino.");
-  resDiv.style.display = 'block'; resDiv.innerHTML = "⏳ Trazando ruta...";
-  try {
-    const geocodificar = async txt => {
-      if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(txt.trim())) return txt.split(',').map(Number);
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(txt + ', Argentina')}&limit=1`);
-      const data = await resp.json();
-      return data.length ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : null;
+    window.actualizarAlturaRio = function(idx) {
+        const nuevoValor = prompt(`Ingrese nueva altura en metros para ${estacionesHidro[idx].estacion}:`, estacionesHidro[idx].actual);
+        if (nuevoValor !== null && !isNaN(parseFloat(nuevoValor))) {
+            estacionesHidro[idx].actual = parseFloat(nuevoValor);
+            localStorage.setItem('cop_hidro_v1', JSON.stringify(estacionesHidro));
+            renderizarHidrometria();
+        }
     };
-    const orig = await geocodificar(origenStr), dest = await geocodificar(destinoStr);
-    if (!orig || !dest) { resDiv.innerHTML = "❌ Dirección no encontrada."; return; }
-    const data = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${orig[1]},${orig[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`)).json();
-    if (!data.routes) { resDiv.innerHTML = "❌ Sin ruta terrestre."; return; }
-    capaRutaActiva.clearLayers();
-    const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6 } }).addTo(capaRutaActiva);
-    mapTactico.fitBounds(linea.getBounds());
-    resDiv.innerHTML = `<b>✅ Ruta Trazada</b><br>Distancia: ${(data.routes[0].distance / 1000).toFixed(1)} km`;
-  } catch (e) { resDiv.innerHTML = "❌ Error en ruteo."; }
-}
 
-// --- SITREP PDF ---
-function generarSITREP() {
-  const { jsPDF } = window.jspdf; const doc = new jsPDF();
-  doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("PARTE DIARIO OPERATIVO (SITREP)", 14, 20);
-  doc.setFontSize(10); doc.setTextColor(0); doc.text(`Fecha/Hora: ${new Date().toLocaleString('es-AR')}`, 14, 30);
-  doc.autoTable({ startY: 40, head: [['Fuerza', 'Recurso', 'Sector', 'Estado', 'Efectivos']],
-    body: recursos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.efectivos]), headStyles: { fillColor: [41, 128, 185] } });
-  doc.save(`SITREP_${Date.now()}.pdf`);
-}
-setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
+    // --- 2. INFRAESTRUCTURA CRÍTICA FIJA (PISTAS, HOSPITALES, CENTROS DE EVACUACIÓN) ---
+    const puntosInfraestructura = [
+        { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Resistencia (SARE)", detalle: "Base Aérea Militar Resistencia - Pista 2770m Operativa H24", lat: -27.4499, lon: -59.0561 },
+        { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Corrientes (SARC)", detalle: "Pista 2100m Asfalto - Puente Aéreo Alternativo", lat: -27.4455, lon: -58.7619 },
+        { tipo: "HOSPITAL", icono: "🏥", nombre: "Hospital Julio C. Perrando (Resistencia)", detalle: "Complejidad Nivel VIII - Helipuerto Sanitario", lat: -27.4606, lon: -58.9722 },
+        { tipo: "HOSPITAL", icono: "🏥", nombre: "Hospital Escuela Gral. San Martín (Corrientes)", detalle: "Derivación de Emergencias y Trauma", lat: -27.4682, lon: -58.8315 },
+        { tipo: "EVACUADOS", icono: "⛺", nombre: "Centro de Evacuados Club Sarmiento", detalle: "Capacidad: 180 personas - Agua y Grupo Electrógeno", lat: -27.4412, lon: -58.9950 }
+    ];
+
+    function renderizarInfraestructura() {
+        capaInfraestructura.clearLayers();
+        if (!document.getElementById('chk-infra').checked) return;
+
+        puntosInfraestructura.forEach(p => {
+            const ic = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="infra-badge" title="${p.nombre}">${p.icono}</div>`,
+                iconSize: [26, 26], iconAnchor: [13, 13]
+            });
+            L.marker([p.lat, p.lon], { icon: ic }).addTo(capaInfraestructura)
+             .bindPopup(`<b>${p.icono} ${p.nombre}</b><br><span style="font-size:11.5px;">${p.detalle}</span>`);
+        });
+    }
+
+    function toggleCapas() {
+        renderizarHidrometria();
+        renderizarInfraestructura();
+    }
+
+    // --- 3. CARGA DE CARTOGRAFÍA OFICIAL (CHACO Y CORRIENTES) ---
+    async function cargarZonasExternas() {
+        try {
+            const response = await fetch('mapa_nea.geojson');
+            let dataCruda = await response.json();
+            datosZonasGeoJSON.features = dataCruda.features.filter(f => {
+                if (!f.properties) return false;
+                const props = JSON.stringify(f.properties).toLowerCase();
+                return props.includes('chaco') || props.includes('corrientes');
+            });
+        } catch (error) { console.log("Usando modo sin GeoJSON externo."); }
+        poblarSelectorDepartamentos(datosZonasGeoJSON.features);
+        dibujarZonasYCascada();
+    }
+
+    function dibujarZonasYCascada(featuresFiltradas = null) {
+        zonasLayerTactico.clearLayers();
+        const feats = featuresFiltradas || datosZonasGeoJSON.features;
+        L.geoJSON({ type: "FeatureCollection", features: feats }, {
+            style: () => ({ color: '#2980b9', weight: 1.5, fillOpacity: 0.12 }),
+            onEachFeature: (f, layer) => {
+                const nombre = f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || 'Zona';
+                layer.bindTooltip(`<b>Depto: ${nombre}</b>`, { sticky: true });
+            }
+        }).addTo(zonasLayerTactico);
+    }
+
+    function poblarSelectorDepartamentos(features) {
+        const selDepto = document.getElementById('sel-depto');
+        selDepto.innerHTML = '<option value="">Seleccionar Departamento...</option>';
+        const deptosSet = new Set();
+        features.forEach(f => {
+            const val = f.properties.nam || f.properties.departamento || f.properties.FNA;
+            if(val) deptosSet.add(val);
+        });
+        [...deptosSet].sort().forEach(d => selDepto.add(new Option(d, d)));
+    }
+
+    function filtrarDepartamentosTexto() {
+        const texto = document.getElementById('input-buscar-depto').value.toLowerCase();
+        const filtradas = datosZonasGeoJSON.features.filter(f => {
+            const nombre = (f.properties.nam || f.properties.departamento || f.properties.FNA || '').toLowerCase();
+            return nombre.includes(texto);
+        });
+        poblarSelectorDepartamentos(filtradas);
+        dibujarZonasYCascada(filtradas);
+    }
+
+    function seleccionarDeptoMapa() {
+        const deptoSel = document.getElementById('sel-depto').value;
+        if (!deptoSel) return;
+        const f = datosZonasGeoJSON.features.find(x => (x.properties.nam || x.properties.departamento || x.properties.FNA) === deptoSel);
+        if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.2 });
+    }
+
+    // --- 4. RECURSOS SCI Y CORTES DE RUTA (CON BORRADO Y TRAZABILIDAD) ---
+    function crearIcono(inst, estado) {
+        if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge" title="Corte de Ruta / Alerta Vial">🚧</div>`, iconSize: [28,28], iconAnchor: [14,14] });
+        const color = {"FAA":"#0284c7", "EA":"#4d7c0f", "PNA":"#1e3a8a", "GN":"#15803d", "DC":"#ea580c"}[inst] || "#64748b";
+        const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
+        return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color: ${color};"><span class="sigla">${inst}</span><div class="estado-dot" style="background-color: ${dot};"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
+    }
+
+    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v12')) || [
+        { id: "REC-01", inst: "FAA", nombre: "Nodo Comunicaciones VHF/HF", estado: "ASIGNADO", lat: -27.451, lon: -58.986, sector: "Resistencia", efectivos: 4, operador: "C2 BAM SIS", timestamp: Date.now() - 1800000 },
+        { id: "REC-02", inst: "VIALIDAD", nombre: "Corte Preventivo por Agua en Calzada", estado: "NO_DISPONIBLE", lat: -27.475, lon: -58.910, sector: "Acceso Puente Belgrano", efectivos: 0, operador: "Defensa Civil", timestamp: Date.now() - 900000 }
+    ];
+
+    function calcularAntiguedad(ts) {
+        if (!ts) return "Sin hora";
+        const mins = Math.floor((Date.now() - ts) / 60000);
+        if (mins < 1) return "Hace instantes";
+        if (mins < 60) return `Hace ${mins} min`;
+        const hs = Math.floor(mins / 60);
+        return `Hace ${hs}h ${mins % 60}m`;
+    }
+
+    function renderizarRecursos() {
+        capaRecursos.clearLayers();
+        const fInst = document.getElementById('filtro-institucion').value;
+        const mostrarCortes = document.getElementById('chk-cortes').checked;
+        const mostrarUnidades = document.getElementById('chk-unidades').checked;
+        
+        const contenedorLista = document.getElementById('lista-recursos');
+        contenedorLista.innerHTML = '';
+        let u = 0, cortesCount = 0, e = 0;
+        
+        recursos.forEach(r => {
+            const esCorte = r.inst === 'VIALIDAD';
+            if (esCorte && !mostrarCortes) return;
+            if (!esCorte && !mostrarUnidades) return;
+
+            if (fInst === 'TODAS' || r.inst === fInst) {
+                if (esCorte) cortesCount++; else u++;
+                e += Number(r.efectivos) || 0;
+
+                const antiguedad = calcularAntiguedad(r.timestamp);
+                const m = L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos);
+                
+                m.bindPopup(`
+                    <div style="font-size:12px; min-width:180px;">
+                        <b>[${r.inst}] ${r.nombre}</b><br>
+                        <b>📍 Sector:</b> ${r.sector}<br>
+                        <b>🚦 Estado:</b> ${r.estado}<br>
+                        <b>👤 Cargado por:</b> ${r.operador || 'Operador'}<br>
+                        <b>⏱️ Antigüedad:</b> ${antiguedad}<br>
+                        <button onclick="eliminarRecurso('${r.id}')" style="margin-top:6px; width:100%; background:#dc2626; color:white; border:none; padding:4px; border-radius:3px; cursor:pointer; font-weight:bold;">🗑️ Eliminar del Mapa</button>
+                    </div>
+                `);
+
+                const tj = document.createElement('div');
+                tj.className = 'recurso-card';
+                tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
+                tj.innerHTML = `
+                    <div onclick="centrarEnRecurso(${r.lat}, ${r.lon})" style="flex:1;">
+                        <b>${esCorte ? '🚧' : '🛡️'} [${r.inst}] ${r.nombre}</b><br>
+                        <span style="color:#475569;">📍 ${r.sector} | 👤 ${r.operador || 'S/D'} (${antiguedad})</span>
+                    </div>
+                    <button class="btn-del-mini" onclick="eliminarRecurso('${r.id}')" title="Quitar alerta / recurso">✖</button>
+                `;
+                contenedorLista.appendChild(tj);
+            }
+        });
+        document.getElementById('kpi-unidades').innerText = u;
+        document.getElementById('kpi-cortes').innerText = cortesCount;
+        document.getElementById('kpi-efectivos').innerText = e;
+    }
+
+    window.centrarEnRecurso = function(lat, lon) {
+        mapTactico.setView([lat, lon], 14);
+    };
+
+    window.eliminarRecurso = function(id) {
+        recursos = recursos.filter(r => r.id !== id);
+        localStorage.setItem('cop_recursos_v12', JSON.stringify(recursos));
+        renderizarRecursos();
+    };
+
+    function agregarRecursoEnVivo(e) {
+        e.preventDefault();
+        const inst = document.getElementById('nueva-institucion').value;
+        recursos.unshift({
+            id: `REC-${Date.now()}`,
+            nombre: document.getElementById('nuevo-nombre').value,
+            inst: inst,
+            estado: document.getElementById('nuevo-estado').value,
+            lat: parseFloat(document.getElementById('nueva-lat').value),
+            lon: parseFloat(document.getElementById('nueva-lon').value),
+            sector: document.getElementById('nuevo-sector').value,
+            operador: document.getElementById('nuevo-operador').value,
+            efectivos: inst === 'VIALIDAD' ? 0 : 4,
+            timestamp: Date.now()
+        });
+        localStorage.setItem('cop_recursos_v12', JSON.stringify(recursos));
+        document.getElementById('form-recurso').reset();
+        renderizarRecursos();
+    }
+
+    // --- 5. CLIC EN EL MAPA (PARA RUTEO O ALTA DE RECURSOS) ---
+    function activarSeleccionMapa(modo) {
+        modoSeleccionMapa = modo;
+        document.getElementById('btn-pick-origen').classList.toggle('picking', modo === 'origen');
+        document.getElementById('btn-pick-destino').classList.toggle('picking', modo === 'destino');
+    }
+
+    mapTactico.on('click', e => {
+        const lat = e.latlng.lat.toFixed(5);
+        const lon = e.latlng.lng.toFixed(5);
+
+        if (modoSeleccionMapa === 'origen') {
+            document.getElementById('ruta-origen').value = `${lat}, ${lon}`;
+            activarSeleccionMapa(null);
+        } else if (modoSeleccionMapa === 'destino') {
+            document.getElementById('ruta-destino').value = `${lat}, ${lon}`;
+            activarSeleccionMapa(null);
+        } else {
+            document.getElementById('nueva-lat').value = lat;
+            document.getElementById('nueva-lon').value = lon;
+        }
+    });
+
+    // --- 6. RUTEO TÁCTICO Y BORRADO DE RUTA ---
+    async function calcularRutaTactica() {
+        const origenStr = document.getElementById('ruta-origen').value;
+        const destinoStr = document.getElementById('ruta-destino').value;
+        const resDiv = document.getElementById('resultado-ruta');
+
+        if (!origenStr || !destinoStr) return alert("Seleccione o escriba el Origen y el Destino.");
+        resDiv.style.display = 'block'; resDiv.innerHTML = "⏳ Calculando ruta táctica óptima...";
+
+        try {
+            const geocodificar = async (txt) => {
+                if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(txt.trim())) return txt.split(',').map(Number);
+                const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(txt + ', Argentina')}&limit=1`);
+                const data = await resp.json();
+                return data.length > 0 ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : null;
+            };
+
+            const orig = await geocodificar(origenStr);
+            const dest = await geocodificar(destinoStr);
+            if (!orig || !dest) { resDiv.innerHTML = "❌ Coordenadas o dirección no encontradas."; return; }
+
+            const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${orig[1]},${orig[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
+            const data = await (await fetch(urlOSRM)).json();
+            if (!data.routes || data.routes.length === 0) { resDiv.innerHTML = "❌ Sin ruta terrestre disponible."; return; }
+
+            capaRutaActiva.clearLayers();
+            
+            // Marcadores de Inicio y Fin
+            L.marker(orig).addTo(capaRutaActiva).bindPopup("<b>📍 Punto de Partida</b>");
+            L.marker(dest).addTo(capaRutaActiva).bindPopup("<b>🏁 Punto de Destino</b>");
+
+            const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6, opacity: 0.85 } }).addTo(capaRutaActiva);
+            mapTactico.fitBounds(linea.getBounds(), { padding: [40, 40] });
+            
+            const distKm = (data.routes[0].distance / 1000).toFixed(1);
+            const durMin = Math.round(data.routes[0].duration / 60);
+            resDiv.innerHTML = `<b>✅ Ruta Activa en Mapa</b><br>📏 Distancia: <b>${distKm} km</b> | ⏱️ Tiempo est.: <b>${durMin} min</b>`;
+        } catch(e) { resDiv.innerHTML = "❌ Error al conectar con el servidor de ruteo."; }
+    }
+
+    function borrarRutaTactica() {
+        capaRutaActiva.clearLayers();
+        document.getElementById('ruta-origen').value = '';
+        document.getElementById('ruta-destino').value = '';
+        const resDiv = document.getElementById('resultado-ruta');
+        resDiv.style.display = 'none';
+        resDiv.innerHTML = '';
+        activarSeleccionMapa(null);
+    }
+
+    // --- 7. RADAR METEOROLÓGICO ---
+    function inicializarMapaRadar() {
+        mapRadar = L.map('map-radar', { maxZoom: 8, minZoom: 4, zoomControl: true }).setView([-27.5, -59.0], 6);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 8, attribution: 'CartoDB' }).addTo(mapRadar);
+
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(res => res.json())
+            .then(data => {
+                const host = data.host; 
+                if (data.radar?.past?.length > 0) {
+                    const ultimoFrame = data.radar.past[data.radar.past.length - 1];
+                    L.tileLayer(`${host}${ultimoFrame.path}/256/{z}/{x}/{y}/2/1_1.png`, {
+                        maxZoom: 8, opacity: 0.8, attribution: 'RainViewer'
+                    }).addTo(mapRadar);
+
+                    let infoDiv = document.createElement('div');
+                    infoDiv.style = "margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.3);";
+                    infoDiv.innerHTML = `<span style="color:#2ecc71;">✅ Enlace Satelital Activo</span><br>Último barrido: <b>${new Date(ultimoFrame.time * 1000).toLocaleTimeString('es-AR')}</b>`;
+                    document.getElementById('leyenda-radar').appendChild(infoDiv);
+                }
+            }).catch(() => {});
+        radarCargado = true;
+    }
+
+    // --- 8. EXPORTAR SITREP PDF CON TRAZABILIDAD E HIDROMETRÍA ---
+    function generarSITREP() {
+        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+        doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
+        doc.setFontSize(9.5); doc.text(`Fecha/Hora de Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
+        
+        doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Estado Hidrométrico de la Cuenca (INA / PNA)", 14, 34);
+        const tablaHidro = estacionesHidro.map(h => [ h.estacion, h.rio, `${h.actual.toFixed(2)} m`, `${h.alerta.toFixed(2)} m`, `${h.evacuacion.toFixed(2)} m`, h.tendencia ]);
+        doc.autoTable({ startY: 37, head: [['Estación', 'Río', 'Actual', 'Alerta', 'Evacuación', 'Tendencia']], body: tablaHidro, headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8.5 }});
+
+        const finalY = doc.lastAutoTable.finalY + 8;
+        doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios Desplegados y Cortes Viales (Con Trazabilidad)", 14, finalY);
+        const tablaRec = recursos.map(r => [ r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', calcularAntiguedad(r.timestamp) ]);
+        doc.autoTable({ startY: finalY + 3, head: [['Org.', 'Detalle / Medio', 'Sector', 'Estado', 'Fuente/Operador', 'Antigüedad']], body: tablaRec, headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8.5 }});
+        
+        doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    // Inicializar todo
+    cargarZonasExternas();
+    renderizarHidrometria();
+    renderizarInfraestructura();
+    renderizarRecursos();
+    setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
+    setInterval(renderizarRecursos, 60000); // Refresca la antigüedad cada 1 minuto
 </script>
 </body>
 </html>
