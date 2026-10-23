@@ -77,7 +77,7 @@
 <div id="top-banner">
     <div>
         <span class="badge-proto">C2 CONJUNTO</span>
-        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v3.0)</strong>
+        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v3.1)</strong>
     </div>
     <div style="display: flex; align-items: center; gap: 10px;">
         <span id="reloj-operativo" style="margin-right: 5px; font-family: monospace;"></span>
@@ -86,8 +86,8 @@
 </div>
 
 <div class="tab-bar">
-    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Operaciones, Hidrometría e Interoperabilidad)</button>
-    <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar Animado, NASA y Caudales)</button>
+    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Geocodificación y Operaciones)</button>
+    <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar y NASA)</button>
 </div>
 
 <!-- ================= VISTA 1: TÁCTICA ================= -->
@@ -107,9 +107,9 @@
             <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
         </div>
 
-        <!-- 1. INTEROPERABILIDAD (GEOJSON & GOOGLE SHEETS) -->
-        <details class="form-panel">
-            <summary>🔄 Interoperabilidad (GeoJSON & Cloud Sheets)</summary>
+        <!-- 1. INTEROPERABILIDAD Y GEOCODIFICACIÓN (APPS SCRIPT) -->
+        <details class="form-panel" open>
+            <summary>🔄 Interoperabilidad (Formulario Terreno & GeoJSON)</summary>
             <div class="form-grid">
                 <div style="display: flex; gap: 5px;">
                     <button type="button" class="btn-geo" onclick="exportarGeoJSON()">📥 Exportar GeoJSON</button>
@@ -117,10 +117,10 @@
                     <input type="file" id="file-import" accept=".geojson,.json" style="display:none" onchange="importarGeoJSON(event)">
                 </div>
                 <hr style="border-color:#cbd5e1; margin:4px 0;">
-                <label style="font-weight:bold; color:#1e293b; font-size:11.5px;">☁️ Sincronización Google Sheets (Web App URL):</label>
+                <label style="font-weight:bold; color:#1e293b; font-size:11.5px;">☁️ Enlace Apps Script (Web App URL que termina en /exec):</label>
                 <input type="text" id="sheet-url-input" placeholder="https://script.google.com/macros/s/.../exec" />
                 <div style="display: flex; gap: 5px; margin-top: 2px;">
-                    <button type="button" class="btn-submit" style="flex:1; padding:5px; font-size:11px;" onclick="sincronizarConSheets()">☁️ Sincronizar / Descargar</button>
+                    <button type="button" class="btn-submit" style="flex:1; padding:6px; font-size:12px; background:#2980b9;" onclick="sincronizarConSheets()">📡 Sincronizar Formulario (Mapeo Automático)</button>
                 </div>
             </div>
         </details>
@@ -155,11 +155,11 @@
             </div>
         </details>
 
-        <!-- 4. ALTA DE RECURSOS Y CORTES -->
-        <details class="form-panel" id="panel-alta" open>
-            <summary>➕ Desplegar Unidad / Reportar Corte</summary>
+        <!-- 4. ALTA DE RECURSOS MANUAL (LOCAL) -->
+        <details class="form-panel" id="panel-alta">
+            <summary>➕ Desplegar Unidad Manual (Si falla la red)</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-                <input type="text" id="nuevo-nombre" placeholder="Detalle (Ej. Corte RN 16 / Unimog)" required />
+                <input type="text" id="nuevo-nombre" placeholder="Detalle del recurso o incidente" required />
                 <div style="display: flex; gap: 5px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
                         <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option>
@@ -176,12 +176,12 @@
                     </select>
                 </div>
                 <div class="coords-row">
-                    <input type="number" step="any" id="nueva-lat" placeholder="Lat" required />
-                    <input type="number" step="any" id="nueva-lon" placeholder="Lon" required />
+                    <input type="number" step="any" id="nueva-lat" placeholder="Lat (Clic en mapa)" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Lon (Clic en mapa)" required />
                 </div>
                 <div style="display: flex; gap: 5px;">
-                    <input type="text" id="nuevo-sector" placeholder="Sector / Localidad" style="flex:1;" required />
-                    <input type="text" id="nuevo-operador" placeholder="Operador / Fuente" style="flex:1;" required />
+                    <input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1;" required />
+                    <input type="text" id="nuevo-operador" placeholder="Operador" style="flex:1;" required />
                 </div>
                 <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
             </form>
@@ -225,7 +225,7 @@
         <b>🌊 Cuenca del Paraná (Caudal GloFAS + PNA)</b>
         <div id="lista-rios" style="margin-top:5px;">⏳ Consultando modelo hidrológico…</div>
         <hr style="border-color:#444; margin:6px 0;">
-        <small><b>Q ($\text{m}^3/\text{s}$):</b> Modelo satelital GloFAS automático.<br>
+        <small><b>Q (m³/s):</b> Modelo satelital GloFAS automático.<br>
         <b>Altura/Umbral:</b> Sincronizados con el Visor Táctico y el SITREP.</small>
     </div>
 </div>
@@ -420,7 +420,7 @@
         }
     }
 
-    // --- 4. RECURSOS SCI Y CORTES DE RUTA (CON INTEROPERABILIDAD GEOJSON / SHEETS) ---
+    // --- 4. RECURSOS SCI Y CORTES DE RUTA ---
     function crearIcono(inst, estado) {
         if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge" title="Corte de Ruta">🚧</div>`, iconSize: [28,28], iconAnchor: [14,14] });
         const color = {"FAA":"#0284c7", "EA":"#4d7c0f", "PNA":"#1e3a8a", "GN":"#15803d", "DC":"#ea580c"}[inst] || "#64748b";
@@ -467,9 +467,9 @@
                 m.bindPopup(`
                     <div style="font-size:12px; min-width:180px;">
                         <b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br>
-                        <b>📍 Sector:</b> ${esc(r.sector)}<br>
+                        <b>📍 Sector/Dir:</b> ${esc(r.sector)}<br>
                         <b>🚦 Estado:</b> ${esc(r.estado)}<br>
-                        <b>👤 Cargado por:</b> ${esc(r.operador || 'Operador')}<br>
+                        <b>👤 Operador:</b> ${esc(r.operador || 'S/D')}<br>
                         <b>⏱️ Antigüedad:</b> ${antiguedad}<br>
                         <button onclick="eliminarRecurso('${esc(r.id)}')" style="margin-top:6px; width:100%; background:#dc2626; color:white; border:none; padding:4px; border-radius:3px; cursor:pointer; font-weight:bold;">🗑️ Eliminar del Mapa</button>
                     </div>
@@ -521,7 +521,7 @@
         renderizarRecursos();
     }
 
-    // --- INTEROPERABILIDAD: GEOJSON & GOOGLE SHEETS ---
+    // --- INTEROPERABILIDAD: GEOJSON & GOOGLE SHEETS (CON GEOCODIFICACIÓN ON-THE-FLY) ---
     function exportarGeoJSON() {
         const features = recursos.map(r => ({
             type: "Feature",
@@ -553,8 +553,7 @@
                             nombre: p.nombre || p.name || 'Recurso Importado',
                             inst: p.inst || 'FAA',
                             estado: p.estado || 'ASIGNADO',
-                            lon: coords[0],
-                            lat: coords[1],
+                            lon: coords[0], lat: coords[1],
                             sector: p.sector || 'General',
                             efectivos: Number(p.efectivos) || 4,
                             operador: p.operador || 'Importación GeoJSON',
@@ -568,9 +567,7 @@
                 } else {
                     alert("❌ Formato GeoJSON no válido.");
                 }
-            } catch(err) {
-                alert("❌ Error al procesar el archivo GeoJSON.");
-            }
+            } catch(err) { alert("❌ Error al procesar el archivo GeoJSON."); }
         };
         reader.readAsText(file);
     }
@@ -578,37 +575,65 @@
     async function sincronizarConSheets() {
         const urlInput = document.getElementById('sheet-url-input');
         const url = urlInput.value.trim();
-        if (!url) return alert("Ingrese la URL del Web App de Google Sheets.");
+        if (!url) return alert("Ingrese la URL del Web App de Google Apps Script (termina en /exec). No pegue el link del archivo de Excel.");
         localStorage.setItem('cop_sheet_url', url);
+
+        document.querySelector('.btn-submit[onclick="sincronizarConSheets()"]').innerText = "⏳ Sincronizando y Traduciendo ubicaciones...";
 
         try {
             const resp = await fetch(url);
             const data = await resp.json();
             if (Array.isArray(data)) {
-                recursos = data.map(item => ({
-                    id: item.id || `REC-${Math.random().toString(36).substr(2, 9)}`,
-                    nombre: item.nombre || item.Nombre || 'Recurso Remoto',
-                    inst: item.inst || item.Institucion || 'FAA',
-                    estado: item.estado || item.Estado || 'ASIGNADO',
-                    lat: parseFloat(item.lat || item.Latitud) || -27.45,
-                    lon: parseFloat(item.lon || item.Longitud) || -58.90,
-                    sector: item.sector || item.Sector || 'General',
-                    efectivos: Number(item.efectivos || item.Efectivos) || 4,
-                    operador: item.operador || 'Google Sheets',
-                    timestamp: item.timestamp ? Number(item.timestamp) : Date.now()
-                }));
+                
+                // Función inteligente para traducir Direcciones a Latitud/Longitud
+                const obtenerCoords = async (direccionStr) => {
+                    try {
+                        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(direccionStr + ', Chaco, Argentina')}&limit=1`);
+                        const d = await r.json();
+                        return d.length ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) } : { lat: -27.45, lon: -58.90 };
+                    } catch(e) { return { lat: -27.45, lon: -58.90 }; }
+                };
+
+                let nuevosRecursos = [];
+                for (let item of data) {
+                    let lat = parseFloat(item.lat || item.Latitud);
+                    let lon = parseFloat(item.lon || item.Longitud);
+                    
+                    // Si no mandaron lat/lon, el sistema traduce la Dirección del formulario
+                    if (isNaN(lat) || isNaN(lon)) {
+                        const dir = item.direccion || item.Direccion || item.sector || item.Sector || 'Resistencia';
+                        const coords = await obtenerCoords(dir);
+                        lat = coords.lat;
+                        lon = coords.lon;
+                    }
+
+                    nuevosRecursos.push({
+                        id: item.id || `REC-${Math.random().toString(36).substr(2, 9)}`,
+                        nombre: item.nombre || item.Nombre || 'Recurso Reportado',
+                        inst: item.inst || item.Institucion || 'FAA',
+                        estado: item.estado || item.Estado || 'ASIGNADO',
+                        lat: lat, lon: lon,
+                        sector: item.direccion || item.Direccion || item.sector || item.Sector || 'Terreno',
+                        efectivos: Number(item.efectivos || item.Efectivos) || 0,
+                        operador: item.operador || item.Operador || 'App Terreno',
+                        timestamp: item.timestamp ? Number(item.timestamp) : Date.now()
+                    });
+                }
+                
+                recursos = nuevosRecursos;
                 localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos));
                 renderizarRecursos();
-                alert("✅ Sincronización con Google Sheets completada con éxito.");
+                alert("✅ Sincronización completada. Las direcciones fueron geolocalizadas en el mapa.");
             } else {
-                alert("❌ La respuesta de Google Sheets no tiene el formato de lista esperado.");
+                alert("❌ El formato recibido no es el esperado. Verifique el Apps Script.");
             }
         } catch(err) {
-            alert("❌ Error al conectar con Google Sheets. Verifique la URL y que esté publicada para acceso anónimo.");
+            alert("❌ Error de conexión. Recuerde que debe usar la URL generada en Apps Script (Publicar > Aplicación Web) que termina en /exec. No el link de Google Sheets.");
+        } finally {
+            document.querySelector('.btn-submit[onclick="sincronizarConSheets()"]').innerText = "📡 Sincronizar Formulario (Mapeo Automático)";
         }
     }
 
-    // Cargar URL guardada previamente si existe
     window.addEventListener('DOMContentLoaded', () => {
         const savedUrl = localStorage.getItem('cop_sheet_url');
         if (savedUrl) document.getElementById('sheet-url-input').value = savedUrl;
