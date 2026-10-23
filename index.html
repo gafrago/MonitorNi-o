@@ -1,653 +1,578 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-
-    <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #e2e8f0; }
-        
-        #top-banner { background-color: #1a252f; color: #ffffff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; z-index: 1000; }
-        .badge-proto { background-color: #e67e22; color: #fff; padding: 3px 8px; border-radius: 3px; font-weight: bold; margin-right: 10px; font-size: 11px; }
-        
-        .tab-bar { background-color: #2c3e50; padding: 0 16px; display: flex; gap: 5px; border-bottom: 3px solid #e67e22; }
-        .tab-btn { background-color: #34495e; color: white; border: none; padding: 10px 18px; font-size: 13px; font-weight: bold; cursor: pointer; border-radius: 5px 5px 0 0; transition: 0.2s; opacity: 0.75; }
-        .tab-btn:hover { opacity: 1; background-color: #3b536b; }
-        .tab-btn.active { background-color: #e67e22; opacity: 1; color: #fff; }
-
-        .view-container { display: none; flex: 1; overflow: hidden; width: 100%; position: relative; }
-        .view-container.active { display: flex; }
-
-        #sidebar { width: 420px; background: #f8fafc; border-right: 2px solid #bdc3c7; display: flex; flex-direction: column; padding: 10px; overflow-y: auto; box-sizing: border-box; z-index: 500; }
-        .kpi-box { display: flex; gap: 6px; margin-bottom: 8px; }
-        .kpi-card { flex: 1; background: #2c3e50; color: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 11px; }
-        .kpi-card b { display: block; font-size: 15px; color: #f39c12; }
-        
-        details.form-panel { background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #2980b9; border-radius: 4px; margin-bottom: 8px; padding: 7px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-        details.form-panel summary { font-weight: bold; font-size: 12.5px; color: #1e293b; cursor: pointer; outline: none; }
-        .form-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 12px; }
-        .form-grid input, .form-grid select { padding: 5px 6px; border: 1px solid #cbd5e1; border-radius: 3px; font-size: 12px; }
-        .coords-row { display: flex; gap: 5px; }
-        .coords-row input { flex: 1; width: 100%; box-sizing: border-box; }
-        
-        .btn-submit { background-color: #27ae60; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        .btn-ruta { background-color: #8e44ad; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; flex: 1; }
-        .btn-clear { background-color: #7f8c8d; color: white; border: none; padding: 7px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        .btn-pick { background-color: #2980b9; color: white; border: none; padding: 5px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; }
-        .btn-pick.picking { background-color: #e74c3c; animation: pulse 1s infinite; }
-        .btn-pdf { background-color: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
-
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
-
-        .select-zona { background-color: #f1f5f9; border: 1px solid #94a3b8; font-weight: bold; color: #1e293b; }
-
-        #map-tactico { flex: 1; cursor: crosshair; }
-        #map-radar { flex: 1; width: 100%; height: 100%; background: #1e293b; }
-
-        /* Estilos de la Pestaña Analytics */
-        #vista-analytics { background: #f1f5f9; padding: 20px; overflow-y: auto; display: none; flex-direction: column; gap: 15px; }
-        #vista-analytics.active { display: flex; }
-        .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .analytics-card { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-        .analytics-card h4 { margin-top: 0; color: #1e293b; border-bottom: 2px solid #e67e22; padding-bottom: 6px; font-size: 14px; }
-        
-        table.analytics-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 5px; }
-        table.analytics-table th, table.analytics-table td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
-        table.analytics-table th { background: #2c3e50; color: white; }
-
-        .layer-control-bar { position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.95); padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); font-size: 12px; display: flex; gap: 12px; border: 1px solid #cbd5e1; }
-        .layer-control-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 600; color: #1e293b; }
-
-        .custom-div-icon { background: transparent; border: none; }
-        .pin-tactico { position: relative; width: 34px; height: 34px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.45); border: 2px solid #ffffff; }
-        .pin-tactico span.sigla { transform: rotate(-45deg); color: #ffffff; font-weight: 800; font-size: 9.5px; }
-        .pin-tactico .estado-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #ffffff; }
-        
-        .corte-ruta-badge { background: #c0392b; color: white; border: 2px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .hidro-badge { color: white; border: 2px solid #fff; border-radius: 6px; padding: 2px 5px; font-size: 10px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.4); white-space: nowrap; text-align: center; }
-        .infra-badge { background: #ffffff; border: 2px solid #1e293b; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-
-        .recurso-card { background: white; border-left: 5px solid #2980b9; padding: 7px 8px; margin-bottom: 6px; font-size: 11.5px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; border-radius: 0 4px 4px 0; }
-        .btn-del-mini { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 3px; padding: 2px 6px; font-size: 11px; font-weight: bold; cursor: pointer; }
-        .btn-del-mini:hover { background: #dc2626; color: white; }
-
-        .radar-legend { position: absolute; bottom: 30px; right: 30px; z-index: 1000; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; font-size: 12px; max-width: 300px; line-height: 1.5; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
-        .radar-legend a { color: #7fb3ff; }
-        #panel-rios { position: absolute; bottom: 30px; left: 12px; z-index: 1000; background: rgba(0,0,0,0.85); color: #fff; padding: 12px; border-radius: 8px; font-size: 11.5px; width: 295px; max-height: 62vh; overflow-y: auto; line-height: 1.45; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
-        #panel-rios input { background: #fff; border: none; border-radius: 3px; padding: 2px 4px; font-size: 11px; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<style>
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#e2e8f0}
+#top-banner{background:#1a252f;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000}
+.badge-proto{background:#e67e22;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold;margin-right:10px;font-size:11px}
+.tab-bar{background:#2c3e50;padding:0 16px;display:flex;gap:5px;border-bottom:3px solid #e67e22}
+.tab-btn{background:#34495e;color:#fff;border:none;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;border-radius:5px 5px 0 0;opacity:.75}
+.tab-btn:hover{opacity:1}.tab-btn.active{background:#e67e22;opacity:1}
+.view-container{display:none;flex:1;overflow:hidden;width:100%;position:relative}.view-container.active{display:flex}
+#sidebar{width:420px;background:#f8fafc;border-right:2px solid #bdc3c7;display:flex;flex-direction:column;padding:10px;overflow-y:auto;box-sizing:border-box;z-index:500}
+.kpi-box{display:flex;gap:6px;margin-bottom:8px}
+.kpi-card{flex:1;background:#2c3e50;color:#fff;padding:6px;border-radius:4px;text-align:center;font-size:11px}
+.kpi-card b{display:block;font-size:15px;color:#f39c12}
+details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #2980b9;border-radius:4px;margin-bottom:8px;padding:7px}
+details.form-panel summary{font-weight:bold;font-size:12.5px;color:#1e293b;cursor:pointer;outline:none}
+.form-grid{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px}
+.form-grid input,.form-grid select{padding:5px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
+.coords-row{display:flex;gap:5px}.coords-row input{flex:1;width:100%;box-sizing:border-box}
+.btn-submit,.btn-ruta,.btn-clear,.btn-pdf{color:#fff;border:none;padding:7px;border-radius:4px;font-weight:bold;cursor:pointer}
+.btn-submit{background:#27ae60}.btn-ruta{background:#8e44ad;flex:1}.btn-clear{background:#7f8c8d}.btn-pdf{background:#c0392b;padding:6px 12px;font-size:12px}
+.btn-pick{background:#2980b9;color:#fff;border:none;padding:5px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
+.btn-pick.picking{background:#e74c3c;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+.select-zona{background:#f1f5f9;border:1px solid #94a3b8;font-weight:bold;color:#1e293b}
+#map-tactico{flex:1;cursor:crosshair}
+#map-radar{flex:1;width:100%;height:100%;background:#1e293b}
+#vista-analytics{background:#f1f5f9;padding:20px;overflow-y:auto;display:none;flex-direction:column;gap:15px}
+#vista-analytics.active{display:flex}
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.analytics-card{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:15px}
+.analytics-card h4{margin-top:0;color:#1e293b;border-bottom:2px solid #e67e22;padding-bottom:6px;font-size:14px}
+table.analytics-table{width:100%;border-collapse:collapse;font-size:12px}
+table.analytics-table th,table.analytics-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
+table.analytics-table th{background:#2c3e50;color:#fff}
+.layer-control-bar{position:absolute;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.95);padding:8px 12px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;display:flex;gap:12px;border:1px solid #cbd5e1}
+.layer-control-bar label{display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:600;color:#1e293b}
+.custom-div-icon{background:transparent;border:none}
+.pin-tactico{position:relative;width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 6px rgba(0,0,0,.45);border:2px solid #fff}
+.pin-tactico span.sigla{transform:rotate(45deg);color:#fff;font-weight:800;font-size:9.5px}
+.pin-tactico .estado-dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff}
+.corte-ruta-badge{background:#c0392b;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.hidro-badge{color:#fff;border:2px solid #fff;border-radius:6px;padding:2px 5px;font-size:10px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,.4);white-space:nowrap;text-align:center}
+.infra-badge{background:#fff;border:2px dashed #1e293b;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.recurso-card{background:#fff;border-left:5px solid #2980b9;padding:7px 8px;margin-bottom:6px;font-size:11.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center;border-radius:0 4px 4px 0}
+.btn-del-mini{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:bold;cursor:pointer}
+.radar-legend,#panel-rios{position:absolute;bottom:30px;z-index:1000;background:rgba(0,0,0,.85);color:#fff;padding:12px;border-radius:8px;font-size:12px;line-height:1.5;box-shadow:0 4px 10px rgba(0,0,0,.4)}
+.radar-legend{right:30px;max-width:300px}.radar-legend a{color:#7fb3ff}
+#panel-rios{left:12px;width:295px;max-height:62vh;overflow-y:auto;font-size:11.5px}
+.aviso{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:11px;padding:5px 7px;border-radius:3px}
+</style>
 </head>
 <body>
-
 <div id="top-banner">
-    <div>
-        <span class="badge-proto">C2 CONJUNTO</span>
-        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.0)</strong>
-    </div>
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <span id="reloj-operativo" style="margin-right: 5px; font-family: monospace;"></span>
-        <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
-    </div>
+  <div><span class="badge-proto">PROTOTIPO · DATOS DE EJEMPLO</span><strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.1)</strong></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="reloj-operativo" style="font-family:monospace"></span>
+    <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
+  </div>
 </div>
-
 <div class="tab-bar">
-    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico</button>
-    <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
-    <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y Pronóstico 48h</button>
+  <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico</button>
+  <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
+  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y Pronóstico 48h</button>
 </div>
 
-<!-- ================= VISTA 1: TÁCTICA ================= -->
+<!-- VISTA 1: TÁCTICA -->
 <div id="vista-tactica" class="view-container active">
-    <div class="layer-control-bar">
-        <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros</label>
-        <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura</label>
-        <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes</label>
-        <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades</label>
+  <div class="layer-control-bar">
+    <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros</label>
+    <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura</label>
+    <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes</label>
+    <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades</label>
+  </div>
+  <div id="sidebar">
+    <div class="kpi-box">
+      <div class="kpi-card"><b id="kpi-unidades">0</b>Medios Activos</div>
+      <div class="kpi-card"><b id="kpi-cortes" style="color:#ef4444">0</b>Cortes / Alertas</div>
+      <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
     </div>
 
-    <div id="sidebar">
-        <div class="kpi-box">
-            <div class="kpi-card"><b id="kpi-unidades">0</b>Medios Activos</div>
-            <div class="kpi-card"><b id="kpi-cortes" style="color:#ef4444;">0</b>Cortes / Alertas</div>
-            <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
+    <details class="form-panel">
+      <summary>🌊 Cargar nivel de río (parte PNA/INA)</summary>
+      <form class="form-grid" onsubmit="cargarNivelManual(event)">
+        <select id="nivel-est" onchange="prellenarNivel()"></select>
+        <div class="coords-row">
+          <input type="number" step="0.01" id="nivel-alt" placeholder="Altura (m)" required />
+          <input type="number" step="0.01" id="nivel-ale" placeholder="Alerta (m)" />
+          <input type="number" step="0.01" id="nivel-eva" placeholder="Evac. (m)" />
         </div>
+        <small style="color:#64748b">Umbrales: cargar los oficiales. Se guarda hora de carga; pasadas 6 h el dato se marca DESACTUALIZADO.</small>
+        <button type="submit" class="btn-submit" style="background:#16a34a">💾 Guardar nivel</button>
+      </form>
+    </details>
 
-        <details class="form-panel" open>
-            <summary>🔄 Sincronización Remota (Modo Seguro)</summary>
-            <div class="form-grid">
-                <label style="font-weight:bold; color:#1e293b; font-size:11.5px;">☁️ Novedades Terreno (/exec):</label>
-                <input type="text" id="sheet-url-input" placeholder="URL Apps Script de Medios/Cortes" />
-                
-                <label style="font-weight:bold; color:#1e293b; font-size:11.5px; margin-top:6px;">☁️ Hidrometría INA/PNA (/exec):</label>
-                <input type="text" id="hidro-url-input" placeholder="URL Apps Script de Ríos" />
+    <details class="form-panel">
+      <summary>🔄 Sincronización Remota</summary>
+      <div class="form-grid">
+        <div class="aviso">⚠ No cargar datos reales de personal o medios en servicios públicos sin autorización de la superioridad.</div>
+        <input type="text" id="sheet-url-input" placeholder="URL Apps Script de Medios/Cortes (/exec)" />
+        <input type="text" id="hidro-url-input" placeholder="URL Apps Script de Ríos (/exec)" />
+        <div style="display:flex;gap:5px">
+          <button type="button" class="btn-submit" style="flex:1;font-size:11.5px;background:#2980b9" onclick="sincronizarConSheets()">📡 Sync Terreno</button>
+          <button type="button" class="btn-submit" style="flex:1;font-size:11.5px;background:#16a34a" onclick="sincronizarHidro()">🌊 Sync Ríos</button>
+        </div>
+        <small id="sync-estado" style="color:#475569"></small>
+      </div>
+    </details>
 
-                <div style="display: flex; gap: 5px; margin-top: 6px;">
-                    <button type="button" class="btn-submit" style="flex:1; padding:6px; font-size:11.5px; background:#2980b9;" onclick="sincronizarConSheets()">📡 Sync Terreno</button>
-                    <button type="button" class="btn-submit" style="flex:1; padding:6px; font-size:11.5px; background:#16a34a;" onclick="sincronizarHidro()">🌊 Sync Ríos</button>
-                </div>
-            </div>
-        </details>
+    <details class="form-panel">
+      <summary>📍 Jurisdicciones NEA (Chaco y Corrientes)</summary>
+      <div class="form-grid">
+        <small style="color:#c0392b;font-weight:bold;display:none" id="alerta-geojson">⚠️ Sin archivo mapa_nea.geojson local.</small>
+        <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento..." oninput="filtrarDepartamentosTexto()" />
+        <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">Seleccionar Departamento...</option></select>
+      </div>
+    </details>
 
-        <details class="form-panel">
-            <summary>📍 Jurisdicciones NEA (Chaco y Corrientes)</summary>
-            <div class="form-grid">
-                <small style="color:#c0392b;font-weight:bold;display:none" id="alerta-geojson">⚠️ Sin archivo mapa_nea.geojson local.</small>
-                <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento..." oninput="filtrarDepartamentosTexto()" />
-                <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">Seleccionar Departamento...</option></select>
-            </div>
-        </details>
+    <details class="form-panel">
+      <summary>🛣️ Ruteo Táctico</summary>
+      <div class="form-grid">
+        <div style="display:flex;gap:4px"><input type="text" id="ruta-origen" placeholder="Origen (o clic en mapa)" style="flex:1" /><button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Origen</button></div>
+        <div style="display:flex;gap:4px"><input type="text" id="ruta-destino" placeholder="Destino (o clic en mapa)" style="flex:1" /><button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Destino</button></div>
+        <div style="display:flex;gap:6px"><button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button><button type="button" class="btn-clear" onclick="borrarRutaTactica()">🗑️ Borrar</button></div>
+        <div id="resultado-ruta" style="display:none;font-size:11.5px;background:#f1f5f9;padding:7px;border-radius:3px;border-left:3px solid #8e44ad"></div>
+      </div>
+    </details>
 
-        <details class="form-panel">
-            <summary>🛣️ Ruteo Táctico</summary>
-            <div class="form-grid">
-                <div style="display: flex; gap: 4px;">
-                    <input type="text" id="ruta-origen" placeholder="Origen (o clic en 👉)" style="flex:1;" />
-                    <button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Origen</button>
-                </div>
-                <div style="display: flex; gap: 4px;">
-                    <input type="text" id="ruta-destino" placeholder="Destino (o clic en 👉)" style="flex:1;" />
-                    <button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Destino</button>
-                </div>
-                <div style="display: flex; gap: 6px; margin-top: 2px;">
-                    <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
-                    <button type="button" class="btn-clear" onclick="borrarRutaTactica()">🗑️ Borrar</button>
-                </div>
-                <div id="resultado-ruta" style="display:none; font-size: 11.5px; background:#f1f5f9; padding:7px; border-radius:3px; border-left: 3px solid #8e44ad;"></div>
-            </div>
-        </details>
+    <details class="form-panel" id="panel-alta">
+      <summary>➕ Desplegar Unidad Manual</summary>
+      <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
+        <input type="text" id="nuevo-nombre" placeholder="Detalle del recurso o incidente" required />
+        <div style="display:flex;gap:5px">
+          <select id="nueva-institucion" style="flex:1" required>
+            <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option><option value="FAA">✈️ FAA - Fuerza Aérea</option><option value="EA">🪖 EA - Ejército</option>
+            <option value="PNA">⚓ PNA - Prefectura</option><option value="GN">🛡️ GN - Gendarmería</option><option value="DC">🚒 DC - Defensa Civil</option>
+          </select>
+          <select id="nuevo-estado" style="width:110px" required><option value="ASIGNADO">🟢 Operativo</option><option value="DISPONIBLE">🟡 Reserva</option><option value="NO_DISPONIBLE">🔴 Crítico</option></select>
+        </div>
+        <div class="coords-row"><input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required /><input type="number" step="any" id="nueva-lon" placeholder="Lon (clic en mapa)" required /></div>
+        <div style="display:flex;gap:5px"><input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1" required /><input type="text" id="nuevo-operador" placeholder="Operador" style="flex:1" required /></div>
+        <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
+      </form>
+    </details>
 
-        <details class="form-panel" id="panel-alta">
-            <summary>➕ Desplegar Unidad Manual (Backup C2)</summary>
-            <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-                <input type="text" id="nuevo-nombre" placeholder="Detalle del recurso o incidente" required />
-                <div style="display: flex; gap: 5px;">
-                    <select id="nueva-institucion" style="flex: 1;" required>
-                        <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option>
-                        <option value="FAA">✈️ FAA - Fuerza Aérea</option>
-                        <option value="EA">🪖 EA - Ejército</option>
-                        <option value="PNA">⚓ PNA - Prefectura</option>
-                        <option value="GN">🛡️ GN - Gendarmería</option>
-                        <option value="DC">🚒 DC - Defensa Civil</option>
-                    </select>
-                    <select id="nuevo-estado" style="width: 110px;" required>
-                        <option value="ASIGNADO">🟢 Operativo</option>
-                        <option value="DISPONIBLE">🟡 Reserva</option>
-                        <option value="NO_DISPONIBLE">🔴 Crítico</option>
-                    </select>
-                </div>
-                <div class="coords-row">
-                    <input type="number" step="any" id="nueva-lat" placeholder="Lat (Clic en mapa)" required />
-                    <input type="number" step="any" id="nueva-lon" placeholder="Lon (Clic en mapa)" required />
-                </div>
-                <div style="display: flex; gap: 5px;">
-                    <input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1;" required />
-                    <input type="text" id="nuevo-operador" placeholder="Operador" style="flex:1;" required />
-                </div>
-                <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
-            </form>
-        </details>
-
-        <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom: 8px; padding: 5px; border-radius: 4px; font-size: 12px;">
-            <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option>
-            <option value="VIALIDAD">🚧 Solo Cortes de Ruta / Alertas</option>
-            <option value="FAA">✈️ Fuerza Aérea (FAA)</option>
-            <option value="EA">🪖 Ejército Argentino (EA)</option>
-            <option value="PNA">⚓ Prefectura Naval (PNA)</option>
-            <option value="GN">🛡️ Gendarmería (GN)</option>
-            <option value="DC">🚒 Defensa Civil (DC)</option>
-        </select>
-        <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
-    </div>
-
-    <div id="map-tactico"></div>
+    <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px;font-size:12px">
+      <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option><option value="VIALIDAD">🚧 Solo Cortes / Alertas</option><option value="FAA">✈️ FAA</option>
+      <option value="EA">🪖 EA</option><option value="PNA">⚓ PNA</option><option value="GN">🛡️ GN</option><option value="DC">🚒 DC</option>
+    </select>
+    <div id="lista-recursos" style="flex:1;overflow-y:auto"></div>
+  </div>
+  <div id="map-tactico"></div>
 </div>
 
-<!-- ================= VISTA 2: ESTRATÉGICA (RADAR) ================= -->
+<!-- VISTA 2: RADAR -->
 <div id="vista-radar" class="view-container">
-    <div id="map-radar"></div>
-    <div class="radar-legend">
-        <b>⛈️ Control de Radar Meteorológico</b><br>
-        <div style="margin: 6px 0;">
-            <button id="rv-play" class="btn-pdf" style="padding:3px 10px; margin-right:5px;">▶</button>
-            <input type="range" id="rv-slider" min="0" max="0" value="0" style="width:170px; vertical-align:middle;">
-        </div>
-        <div>Barrido Radar: <b id="radar-hora" style="color:#f39c12;">—</b></div>
-        <hr style="border-color:#444; margin:6px 0;">
-        <b>Estado de las fuentes en vivo:</b>
-        <div id="estado-capas">⏳ Inicializando enlaces…</div>
-    </div>
-    <div id="panel-rios">
-        <b>🌊 Cuenca del Paraná (Caudal GloFAS + PNA)</b>
-        <div id="lista-rios" style="margin-top:5px;">⏳ Consultando modelo hidrológico…</div>
-        <hr style="border-color:#444; margin:6px 0;">
-        <small><b>Q (m³/s):</b> Modelo satelital GloFAS automático.<br>
-        <b>Altura/Umbral:</b> Sincronizados con el Visor Táctico y el SITREP.</small>
-    </div>
+  <div id="map-radar"></div>
+  <div class="radar-legend">
+    <b>⛈️ Radar Meteorológico</b>
+    <div style="margin:6px 0"><button id="rv-play" class="btn-pdf" style="padding:3px 10px;margin-right:5px">▶</button><input type="range" id="rv-slider" min="0" max="0" value="0" style="width:170px;vertical-align:middle"></div>
+    <div>Barrido: <b id="radar-hora" style="color:#f39c12">—</b></div>
+    <hr style="border-color:#444;margin:6px 0">
+    <b>Estado de las fuentes:</b><div id="estado-capas">⏳ Inicializando…</div>
+    <small>Radar gratuito: zoom máx. 7, cobertura parcial en el NEA.<br><a href="https://www.rainviewer.com" target="_blank" rel="noopener">Weather data by Rain Viewer</a> · NASA GIBS · Open-Meteo</small>
+  </div>
+  <div id="panel-rios">
+    <b>🌊 Cuenca del Paraná</b>
+    <div id="lista-rios" style="margin-top:5px">⏳ Consultando…</div>
+    <hr style="border-color:#444;margin:6px 0">
+    <small><b>Q (m³/s):</b> modelo GloFAS (referencial, ubicación aprox.).<br><b>Altura:</b> la cargada en el Visor Táctico, con su antigüedad.</small>
+  </div>
 </div>
 
-<!-- ================= VISTA 3: INTELIGENCIA Y PRONÓSTICO 48H ================= -->
+<!-- VISTA 3: INTELIGENCIA -->
 <div id="vista-analytics" class="view-container">
-    <div style="max-width: 1200px; margin: 0 auto; width: 100%;">
-        <h2 style="color: #1e293b; margin-top: 0; display: flex; align-items: center; gap: 10px;">
-            📊 Inteligencia Operativa, Histórico y Pronóstico 48h
-        </h2>
-        <p style="color: #475569; font-size: 13px;">Panel estratégico para evaluación de riesgos, seguimiento de la cuenca y programación de actividades del Comando Conjunto en el NEA.</p>
-
-        <div class="analytics-grid">
-            <!-- TARJETA 1: PRONÓSTICO METEOROLÓGICO 48H -->
-            <div class="analytics-card" style="grid-column: span 2;">
-                <h4>🌤️ Pronóstico Extendido 48 Horas (Resistencia / Corrientes)</h4>
-                <div id="pronostico-container" style="display: flex; gap: 10px; overflow-x: auto; padding: 5px 0;">
-                    <span style="color: #64748b; font-size: 13px;">⏳ Consultando estación meteorológica en tiempo real (Open-Meteo)...</span>
-                </div>
-            </div>
-
-            <!-- TARJETA 2: ESTADO GENERAL DE LA CUENCA -->
-            <div class="analytics-card">
-                <h4>🌊 Resumen Hidrológico Actual</h4>
-                <div style="max-height: 250px; overflow-y: auto;">
-                    <table class="analytics-table" id="tabla-analitica-rios">
-                        <thead>
-                            <tr><th>Estación</th><th>Río</th><th>Altura</th><th>Estado</th></tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- TARJETA 3: DISTRIBUCIÓN DE MEDIOS Y ALERTAS VIALES -->
-            <div class="analytics-card">
-                <h4>🛡️ Estado de Despliegue y Cortes Viales</h4>
-                <div id="analitica-fuerzas" style="font-size: 13px; line-height: 1.6; color: #334155;">
-                    Cargando métricas de fuerzas y cortes...
-                </div>
-            </div>
-        </div>
+  <div style="max-width:1200px;margin:0 auto;width:100%">
+    <h2 style="color:#1e293b;margin-top:0">📊 Inteligencia Operativa y Pronóstico 48h</h2>
+    <div class="analytics-grid">
+      <div class="analytics-card" style="grid-column:span 2">
+        <h4>🌤️ Pronóstico próximas 48 h (bloques de 6 h)
+          <select id="sel-pronostico" onchange="cargarPronostico()" style="float:right;font-size:12px">
+            <option value="-27.45,-58.98">Resistencia</option><option value="-27.47,-58.83">Corrientes</option><option value="-26.93,-58.50">Puerto Bermejo</option><option value="-29.14,-59.26">Goya</option>
+          </select></h4>
+        <div id="pronostico-resumen" style="font-size:12.5px;color:#334155;margin-bottom:6px"></div>
+        <div id="pronostico-container" style="display:flex;gap:10px;overflow-x:auto;padding:5px 0"><span style="color:#64748b;font-size:13px">⏳ Consultando Open-Meteo…</span></div>
+      </div>
+      <div class="analytics-card">
+        <h4>🌊 Resumen Hidrológico</h4>
+        <div style="max-height:250px;overflow-y:auto"><table class="analytics-table" id="tabla-analitica-rios"><thead><tr><th>Estación</th><th>Altura</th><th>Estado</th><th>Q GloFAS</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="analytics-card">
+        <h4>🛡️ Despliegue y Cortes</h4>
+        <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
+      </div>
+      <div class="analytics-card" style="grid-column:span 2">
+        <h4>📝 Bitácora de eventos (últimos 15)</h4>
+        <div id="bitacora" style="font-size:12px;color:#334155;max-height:200px;overflow-y:auto"></div>
+      </div>
     </div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS = { rec: 'cop_recursos_v13', hid: 'cop_hidro_v4', log: 'cop_bitacora_v1', geo: 'cop_geocache_v1' };
+const leer = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } };
+const guardar = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 
-    let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
+// --- BITÁCORA ---
+let bitacora = leer(LS.log, []);
+function logEvento(t) { bitacora.unshift({ ts: Date.now(), t }); bitacora = bitacora.slice(0, 100); guardar(LS.log, bitacora); }
+const fmtFecha = ts => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function edadTxt(ts) {
+  if (!ts) return 'Sin hora';
+  const m = Math.floor((Date.now() - ts) / 60000);
+  return m < 1 ? 'Hace instantes' : m < 60 ? `Hace ${m} min` : `Hace ${Math.floor(m / 60)} h ${m % 60} min`;
+}
 
-    function cambiarPestana(vista) {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
-        
-        if (vista === 'tactica') {
-            document.querySelectorAll('.tab-btn')[0].classList.add('active');
-            document.getElementById('vista-tactica').classList.add('active');
-            mapTactico.invalidateSize();
-        } else if (vista === 'radar') {
-            document.querySelectorAll('.tab-btn')[1].classList.add('active');
-            document.getElementById('vista-radar').classList.add('active');
-            if (!radarCargado) inicializarMapaRadar();
-            mapRadar.invalidateSize();
-        } else if (vista === 'analytics') {
-            document.querySelectorAll('.tab-btn')[2].classList.add('active');
-            document.getElementById('vista-analytics').classList.add('active');
-            actualizarDashboardAnalytics();
-        }
+// --- PESTAÑAS ---
+function cambiarPestana(vista) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+  const i = { tactica: 0, radar: 1, analytics: 2 }[vista];
+  document.querySelectorAll('.tab-btn')[i].classList.add('active');
+  document.getElementById('vista-' + vista).classList.add('active');
+  if (vista === 'tactica') mapTactico.invalidateSize();
+  if (vista === 'radar') { if (!radarCargado) inicializarMapaRadar(); mapRadar.invalidateSize(); dibujarRiosEstrategico(); }
+  if (vista === 'analytics') actualizarDashboardAnalytics();
+}
+
+// --- MAPA TÁCTICO ---
+mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
+let datosZonasGeoJSON = { type: "FeatureCollection", features: [] };
+const zonasLayerTactico = L.layerGroup().addTo(mapTactico), capaHidrometria = L.layerGroup().addTo(mapTactico),
+      capaInfraestructura = L.layerGroup().addTo(mapTactico), capaRecursos = L.layerGroup().addTo(mapTactico), capaRutaActiva = L.layerGroup().addTo(mapTactico);
+
+// --- HIDROMETRÍA (valores por defecto = EJEMPLO hasta que se cargue un nivel real) ---
+let estacionesHidro = leer(LS.hid, null) || [
+  { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 6.15, alerta: 6.00, evacuacion: 6.50, tendencia: "═", lat: -27.485, lon: -58.932, ts: null, ejemplo: true },
+  { id: "H2", estacion: "Corrientes Capital", rio: "Paraná", actual: 6.35, alerta: 6.50, evacuacion: 7.00, tendencia: "═", lat: -27.462, lon: -58.838, ts: null, ejemplo: true },
+  { id: "H3", estacion: "Paso de la Patria / Cerrito", rio: "Paraná", actual: 6.62, alerta: 6.50, evacuacion: 7.00, tendencia: "═", lat: -27.310, lon: -58.580, ts: null, ejemplo: true },
+  { id: "H4", estacion: "Puerto Bermejo", rio: "Paraguay", actual: 5.40, alerta: 5.50, evacuacion: 6.00, tendencia: "═", lat: -26.928, lon: -58.502, ts: null, ejemplo: true },
+  { id: "H5", estacion: "Empedrado", rio: "Paraná", actual: 5.80, alerta: 6.20, evacuacion: 6.70, tendencia: "═", lat: -27.950, lon: -58.810, ts: null, ejemplo: true },
+  { id: "H6", estacion: "Goya", rio: "Paraná", actual: 5.25, alerta: 5.20, evacuacion: 5.70, tendencia: "═", lat: -29.145, lon: -59.265, ts: null, ejemplo: true }
+];
+const HORAS_VENCIMIENTO = 6;
+function estadoHidro(h) {
+  let txt = 'NORMAL', color = '#16a34a';
+  if (h.actual >= h.evacuacion) { txt = 'EVACUACIÓN'; color = '#dc2626'; }
+  else if (h.actual >= h.alerta) { txt = 'ALERTA'; color = '#d97706'; }
+  if (h.ejemplo) return { txt: 'EJEMPLO · ' + txt, color, tag: ' (ej.)', ok: false };
+  const horas = (Date.now() - (h.ts || 0)) / 3600000;
+  if (!h.ts || horas > HORAS_VENCIMIENTO) return { txt: `DESACTUALIZADO (${h.ts ? Math.floor(horas) + ' h' : 's/hora'})`, color: '#64748b', tag: ' (¡viejo!)', ok: false };
+  return { txt, color, tag: '', ok: true };
+}
+function renderizarHidrometria() {
+  capaHidrometria.clearLayers();
+  if (!document.getElementById('chk-hidro').checked) return;
+  estacionesHidro.forEach(h => {
+    const e = estadoHidro(h);
+    const icono = L.divIcon({ className: 'custom-div-icon', html: `<div class="hidro-badge" style="background:${e.color};${h.ejemplo ? 'border-style:dashed' : ''}">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m${e.tag}</div>`, iconSize: [140, 24], iconAnchor: [70, 12] });
+    L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`<div style="font-size:12px;min-width:200px">
+      <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br><b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
+      <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia)}<br><b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
+      <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo, no oficial' : 'Cargado: ' + edadTxt(h.ts)}</small></div>`);
+  });
+}
+function poblarSelectorNivel() {
+  const s = document.getElementById('nivel-est'); s.innerHTML = '';
+  estacionesHidro.forEach((h, i) => s.add(new Option(`${h.estacion} (${h.rio})`, i))); prellenarNivel();
+}
+function prellenarNivel() {
+  const h = estacionesHidro[+document.getElementById('nivel-est').value]; if (!h) return;
+  document.getElementById('nivel-ale').value = h.ejemplo ? '' : h.alerta; document.getElementById('nivel-eva').value = h.ejemplo ? '' : h.evacuacion;
+  document.getElementById('nivel-alt').value = '';
+}
+function cargarNivelManual(ev) {
+  ev.preventDefault();
+  const h = estacionesHidro[+document.getElementById('nivel-est').value], alt = parseFloat(document.getElementById('nivel-alt').value);
+  const ale = parseFloat(document.getElementById('nivel-ale').value), eva = parseFloat(document.getElementById('nivel-eva').value);
+  if (h.ejemplo && (isNaN(ale) || isNaN(eva))) return alert("Primera carga de esta estación: ingrese también los umbrales oficiales de alerta y evacuación.");
+  const dif = alt - h.actual;
+  h.tendencia = h.ejemplo ? '═' : dif > 0.02 ? '▲' : dif < -0.02 ? '▼' : '═';
+  h.actual = alt; if (!isNaN(ale)) h.alerta = ale; if (!isNaN(eva)) h.evacuacion = eva;
+  h.ts = Date.now(); h.ejemplo = false; guardar(LS.hid, estacionesHidro);
+  logEvento(`Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`);
+  renderizarHidrometria(); dibujarRiosEstrategico(); prellenarNivel();
+}
+
+// --- INFRAESTRUCTURA (EJEMPLO: verificar coordenadas y capacidades con fuente oficial) ---
+const puntosInfraestructura = [
+  { icono: "✈️", nombre: "Aeropuerto Resistencia", detalle: "Pista/base aérea", lat: -27.4499, lon: -59.0561 },
+  { icono: "✈️", nombre: "Aeropuerto Corrientes", detalle: "Pista", lat: -27.4455, lon: -58.7619 },
+  { icono: "🏥", nombre: "Hospital Julio C. Perrando (Resistencia)", detalle: "Derivación sanitaria", lat: -27.4606, lon: -58.9722 },
+  { icono: "🏥", nombre: "Hospital Escuela Gral. San Martín (Corrientes)", detalle: "Emergencias y trauma", lat: -27.4682, lon: -58.8315 },
+  { icono: "⛺", nombre: "Centro de evacuados (ejemplo)", detalle: "Capacidad sin verificar", lat: -27.4412, lon: -58.9950 }
+];
+function renderizarInfraestructura() {
+  capaInfraestructura.clearLayers();
+  if (!document.getElementById('chk-infra').checked) return;
+  puntosInfraestructura.forEach(p => L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
+    .addTo(capaInfraestructura).bindPopup(`<b>${p.icono} ${esc(p.nombre)}</b><br><span style="font-size:11.5px">${esc(p.detalle)}</span><br><small style="color:#9a3412">⚠ Dato de ejemplo: verificar con fuente oficial</small>`));
+}
+function toggleCapas() { renderizarHidrometria(); renderizarInfraestructura(); }
+
+// --- ZONAS ---
+const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
+async function cargarZonasExternas() {
+  try {
+    const dataCruda = await (await fetch('mapa_nea.geojson')).json();
+    datosZonasGeoJSON.features = dataCruda.features.filter(f => { const t = JSON.stringify(f.properties).toLowerCase(); return t.includes('chaco') || t.includes('corrientes'); });
+    document.getElementById('alerta-geojson').style.display = 'none';
+  } catch (e) { document.getElementById('alerta-geojson').style.display = 'block'; }
+  poblarSelectorDepartamentos(datosZonasGeoJSON.features); dibujarZonasYCascada();
+}
+function dibujarZonasYCascada(feats = null) {
+  zonasLayerTactico.clearLayers();
+  L.geoJSON({ type: "FeatureCollection", features: feats || datosZonasGeoJSON.features }, {
+    style: () => ({ color: '#2980b9', weight: 2, fillOpacity: 0.18 }),
+    onEachFeature: (f, layer) => {
+      layer.on({ mouseover: e => { e.target.setStyle({ weight: 4, fillOpacity: 0.45, color: '#2c3e50' }); e.target.bringToFront(); }, mouseout: e => e.target.setStyle({ weight: 2, fillOpacity: 0.18, color: '#2980b9' }) });
+      layer.bindTooltip(`<b>${esc(nombreZona(f) || 'Zona')}</b>`, { sticky: true });
     }
+  }).addTo(zonasLayerTactico);
+}
+function poblarSelectorDepartamentos(features) {
+  const s = document.getElementById('sel-depto'); s.innerHTML = '<option value="">Seleccionar Departamento...</option>';
+  [...new Set(features.map(nombreZona).filter(Boolean))].sort().forEach(d => s.add(new Option(d, d)));
+}
+function filtrarDepartamentosTexto() {
+  const t = document.getElementById('input-buscar-depto').value.toLowerCase();
+  const fl = datosZonasGeoJSON.features.filter(f => nombreZona(f).toLowerCase().includes(t)); poblarSelectorDepartamentos(fl); dibujarZonasYCascada(fl);
+}
+function seleccionarDeptoMapa() {
+  const f = datosZonasGeoJSON.features.find(x => nombreZona(x) === document.getElementById('sel-depto').value);
+  if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.3 });
+}
 
-    mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
+// --- RECURSOS ---
+function crearIcono(inst, estado) {
+  if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+  const color = { FAA: "#0284c7", EA: "#4d7c0f", PNA: "#1e3a8a", GN: "#15803d", DC: "#ea580c" }[inst] || "#64748b";
+  const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
+  return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color}"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot}"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
+}
+let recursos = leer(LS.rec, []);
+const guardarRecursos = () => guardar(LS.rec, recursos);
 
-    let datosZonasGeoJSON = { "type": "FeatureCollection", "features": [] };
-    const zonasLayerTactico = L.layerGroup().addTo(mapTactico);
-    const capaHidrometria = L.layerGroup().addTo(mapTactico);
-    const capaInfraestructura = L.layerGroup().addTo(mapTactico);
-    const capaRecursos = L.layerGroup().addTo(mapTactico);
-    const capaRutaActiva = L.layerGroup().addTo(mapTactico);
+function renderizarRecursos() {
+  capaRecursos.clearLayers();
+  const fInst = document.getElementById('filtro-institucion').value, verCortes = document.getElementById('chk-cortes').checked, verUni = document.getElementById('chk-unidades').checked;
+  const lista = document.getElementById('lista-recursos'); lista.innerHTML = '';
+  let u = 0, c = 0, e = 0;
+  recursos.forEach(r => {
+    const esCorte = r.inst === 'VIALIDAD';
+    if ((esCorte && !verCortes) || (!esCorte && !verUni) || !(fInst === 'TODAS' || r.inst === fInst)) return;
+    if (esCorte) c++; else u++; e += Number(r.efectivos) || 0;
+    const viejo = r.timestamp && (Date.now() - r.timestamp) > 3600000;
+    L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos).bindPopup(`<div style="font-size:12px;min-width:180px"><b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br><b>📍</b> ${esc(r.sector)}<br><b>🚦</b> ${esc(r.estado)}<br><b>👤</b> ${esc(r.operador || 'S/D')}<br><b>⏱️</b> ${edadTxt(r.timestamp)}${viejo ? ' <b style="color:#c2410c">(desactualizado)</b>' : ''}<br><button data-del="${esc(r.id)}" style="margin-top:6px;width:100%;background:#dc2626;color:#fff;border:none;padding:4px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar</button></div>`);
+    const tj = document.createElement('div'); tj.className = 'recurso-card'; tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
+    tj.innerHTML = `<div data-center="${r.lat},${r.lon}" style="flex:1"><b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br><span style="color:#475569">📍 ${esc(r.sector)} | 👤 ${esc(r.operador || 'S/D')} | ⏱️ ${edadTxt(r.timestamp)}${viejo ? ' ⚠' : ''}</span></div><button class="btn-del-mini" data-del="${esc(r.id)}">✖</button>`;
+    lista.appendChild(tj);
+  });
+  document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-cortes').innerText = c; document.getElementById('kpi-efectivos').innerText = e;
+}
+function eliminarRecurso(id) {
+  const r = recursos.find(x => x.id === id); if (!r || !confirm(`¿Eliminar "${r.nombre}"?`)) return;
+  recursos = recursos.filter(x => x.id !== id); guardarRecursos(); logEvento(`Baja: [${r.inst}] ${r.nombre}`); renderizarRecursos();
+}
+// Delegación de eventos (sin onclick con datos dentro del HTML)
+document.getElementById('lista-recursos').addEventListener('click', ev => {
+  const d = ev.target.closest('[data-del]'); if (d) return eliminarRecurso(d.dataset.del);
+  const c = ev.target.closest('[data-center]'); if (c) { const [la, lo] = c.dataset.center.split(',').map(Number); mapTactico.setView([la, lo], 14); }
+});
+mapTactico.on('popupopen', ev => { const b = ev.popup.getElement().querySelector('[data-del]'); if (b) b.onclick = () => { eliminarRecurso(b.dataset.del); mapTactico.closePopup(); }; });
 
-    let estacionesHidro = JSON.parse(localStorage.getItem('cop_hidro_v3')) || [
-        { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 6.15, alerta: 6.00, evacuacion: 6.50, tendencia: "Estacionario ═", lat: -27.485, lon: -58.932, actualizado: "Base Local" },
-        { id: "H2", estacion: "Corrientes Capital", rio: "Paraná", actual: 6.35, alerta: 6.50, evacuacion: 7.00, tendencia: "Estacionario ═", lat: -27.462, lon: -58.838, actualizado: "Base Local" },
-        { id: "H3", estacion: "Paso de la Patria / Cerrito", rio: "Paraná", actual: 6.62, alerta: 6.50, evacuacion: 7.00, tendencia: "Estacionario ═", lat: -27.310, lon: -58.580, actualizado: "Base Local" },
-        { id: "H4", estacion: "Puerto Bermejo", rio: "Paraguay", actual: 5.40, alerta: 5.50, evacuacion: 6.00, tendencia: "Estacionario ═", lat: -26.928, lon: -58.502, actualizado: "Base Local" },
-        { id: "H5", estacion: "Empedrado", rio: "Paraná", actual: 5.80, alerta: 6.20, evacuacion: 6.70, tendencia: "Estacionario ═", lat: -27.950, lon: -58.810, actualizado: "Base Local" },
-        { id: "H6", estacion: "Goya", rio: "Paraná", actual: 5.25, alerta: 5.20, evacuacion: 5.70, tendencia: "Estacionario ═", lat: -29.145, lon: -59.265, actualizado: "Base Local" }
-    ];
+function agregarRecursoEnVivo(e) {
+  e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
+  const r = { id: `REC-${Date.now()}`, nombre: document.getElementById('nuevo-nombre').value, inst, estado: document.getElementById('nuevo-estado').value,
+    lat: parseFloat(document.getElementById('nueva-lat').value), lon: parseFloat(document.getElementById('nueva-lon').value),
+    sector: document.getElementById('nuevo-sector').value, operador: document.getElementById('nuevo-operador').value, efectivos: inst === 'VIALIDAD' ? 0 : 4, timestamp: Date.now(), origen: 'manual' };
+  recursos.unshift(r); guardarRecursos(); logEvento(`Alta manual: [${inst}] ${r.nombre} (${r.sector})`);
+  document.getElementById('form-recurso').reset(); renderizarRecursos();
+}
 
-    function renderizarHidrometria() {
-        capaHidrometria.clearLayers();
-        if (!document.getElementById('chk-hidro').checked) return;
-
-        estacionesHidro.forEach(h => {
-            let bg = "#16a34a", estadoTxt = "NORMAL";
-            if (h.actual >= h.evacuacion) { bg = "#dc2626"; estadoTxt = "EVACUACIÓN"; }
-            else if (h.actual >= h.alerta) { bg = "#d97706"; estadoTxt = "ALERTA"; }
-
-            const icono = L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div class="hidro-badge" style="background:${bg};">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m</div>`,
-                iconSize: [120, 24], iconAnchor: [60, 12]
-            });
-
-            L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`
-                <div style="font-size:12px; min-width:195px;">
-                    <b style="font-size:13px; color:#1e293b;">🌊 Hidrómetro ${esc(h.estacion)}</b><br>
-                    <b>Río:</b> ${esc(h.rio)} | <b>Estado:</b> <span style="color:${bg}; font-weight:bold;">${estadoTxt}</span><br>
-                    <hr style="margin:4px 0;">
-                    <b>Altura Actual:</b> <b>${Number(h.actual).toFixed(2)} m</b> (${esc(h.tendencia)})<br>
-                    <b>Nivel Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evacuación:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
-                    <small style="color:#64748b;">Actualizado: ${esc(h.actualizado)}</small>
-                </div>
-            `);
-        });
+// --- SINCRONIZACIÓN (fusiona: no borra lo cargado a mano; no inventa coordenadas) ---
+const espera = ms => new Promise(r => setTimeout(r, ms));
+async function geocodificar(dir) {
+  try { const d = await (await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(dir + ', Argentina')}&limit=1`)).json(); return d.length ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) } : null; } catch (e) { return null; }
+}
+async function sincronizarConSheets() {
+  const url = document.getElementById('sheet-url-input').value.trim(), est = document.getElementById('sync-estado');
+  if (!url) return alert("Ingrese la URL del Apps Script de Novedades.");
+  localStorage.setItem('cop_sheet_url', url); est.innerText = '⏳ Sincronizando…';
+  try {
+    const data = await (await fetch(url)).json(); if (!Array.isArray(data)) throw new Error('formato');
+    const cache = leer(LS.geo, {}); let omitidos = 0; const nuevos = [];
+    for (const it of data) {
+      let lat = parseFloat(it.lat), lon = parseFloat(it.lon);
+      if (isNaN(lat) || isNaN(lon)) {
+        const dir = it.direccion || it.sector;
+        if (!dir) { omitidos++; continue; }
+        if (!cache[dir]) { est.innerText = `⏳ Ubicando "${dir}"…`; const g = await geocodificar(dir); await espera(1100); if (g) { cache[dir] = g; guardar(LS.geo, cache); } }
+        if (!cache[dir]) { omitidos++; continue; }
+        ({ lat, lon } = cache[dir]);
+      }
+      nuevos.push({ id: it.id || `SHEET-${nuevos.length}-${Date.now()}`, nombre: it.nombre || 'Recurso', inst: it.inst || 'FAA', estado: it.estado || 'ASIGNADO', lat, lon,
+        sector: it.direccion || it.sector || 'Terreno', efectivos: Number(it.efectivos) || 0, operador: it.operador || 'Formulario', timestamp: it.timestamp ? Number(it.timestamp) : Date.now(), origen: 'sheet' });
     }
-
-    const puntosInfraestructura = [
-        { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Resistencia (SARE)", detalle: "Base Aérea Militar Resistencia - Pista 2770m", lat: -27.4499, lon: -59.0561 },
-        { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Corrientes (SARC)", detalle: "Pista 2100m Asfalto - Puente Aéreo", lat: -27.4455, lon: -58.7619 },
-        { tipo: "HOSPITAL", icono: "🏥", nombre: "Hospital Julio C. Perrando (Resistencia)", detalle: "Complejidad Nivel VIII - Derivación Sanitaria", lat: -27.4606, lon: -58.9722 },
-        { tipo: "HOSPITAL", icono: "🏥", nombre: "Hospital Escuela Gral. San Martín (Corrientes)", detalle: "Derivación de Emergencias y Trauma", lat: -27.4682, lon: -58.8315 },
-        { tipo: "EVACUADOS", icono: "⛺", nombre: "Centro de Evacuados Club Sarmiento", detalle: "Capacidad: 180 personas - Agua y Generador", lat: -27.4412, lon: -58.9950 }
-    ];
-
-    function renderizarInfraestructura() {
-        capaInfraestructura.clearLayers();
-        if (!document.getElementById('chk-infra').checked) return;
-        puntosInfraestructura.forEach(p => {
-            const ic = L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge" title="${esc(p.nombre)}">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
-            L.marker([p.lat, p.lon], { icon: ic }).addTo(capaInfraestructura).bindPopup(`<b>${p.icono} ${esc(p.nombre)}</b><br><span style="font-size:11.5px;">${esc(p.detalle)}</span>`);
-        });
-    }
-    function toggleCapas() { renderizarHidrometria(); renderizarInfraestructura(); }
-
-    const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
-    async function cargarZonasExternas() {
-        try {
-            const response = await fetch('mapa_nea.geojson');
-            const dataCruda = await response.json();
-            datosZonasGeoJSON.features = dataCruda.features.filter(f => JSON.stringify(f.properties).toLowerCase().includes('chaco') || JSON.stringify(f.properties).toLowerCase().includes('corrientes'));
-            document.getElementById('alerta-geojson').style.display = 'none';
-        } catch (error) { document.getElementById('alerta-geojson').style.display = 'block'; }
-        poblarSelectorDepartamentos(datosZonasGeoJSON.features);
-        dibujarZonasYCascada();
-    }
-    function dibujarZonasYCascada(feats = null) {
-        zonasLayerTactico.clearLayers();
-        L.geoJSON({ type: "FeatureCollection", features: feats || datosZonasGeoJSON.features }, {
-            style: f => ({ color: '#2980b9', weight: 2, fillOpacity: 0.18 }),
-            onEachFeature: (f, layer) => {
-                layer.on({ mouseover: e => { e.target.setStyle({ weight: 4, fillOpacity: 0.45, color: '#2c3e50' }); e.target.bringToFront(); }, mouseout: e => e.target.setStyle({ weight: 2, fillOpacity: 0.18, color: '#2980b9' }) });
-                layer.bindTooltip(`<b>${esc(nombreZona(f) || 'Zona')}</b><br>🚨 Estado: En Observación`, { sticky: true });
-            }
-        }).addTo(zonasLayerTactico);
-    }
-    function poblarSelectorDepartamentos(features) {
-        const selDepto = document.getElementById('sel-depto'); selDepto.innerHTML = '<option value="">Seleccionar Departamento...</option>';
-        [...new Set(features.map(nombreZona).filter(Boolean))].sort().forEach(d => selDepto.add(new Option(d, d)));
-    }
-    function filtrarDepartamentosTexto() {
-        const texto = document.getElementById('input-buscar-depto').value.toLowerCase();
-        const filtradas = datosZonasGeoJSON.features.filter(f => nombreZona(f).toLowerCase().includes(texto));
-        poblarSelectorDepartamentos(filtradas); dibujarZonasYCascada(filtradas);
-    }
-    function seleccionarDeptoMapa() {
-        const d = document.getElementById('sel-depto').value;
-        const f = datosZonasGeoJSON.features.find(x => nombreZona(x) === d);
-        if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.3 });
-    }
-
-    function crearIcono(inst, estado) {
-        if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28,28], iconAnchor: [14,14] });
-        const color = {"FAA":"#0284c7", "EA":"#4d7c0f", "PNA":"#1e3a8a", "GN":"#15803d", "DC":"#ea580c"}[inst] || "#64748b";
-        const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
-        return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color};"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot};"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
-    }
-
-    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v13')) || [];
-
-    function calcularAntiguedad(ts) {
-        if (!ts) return "Sin hora";
-        const mins = Math.floor((Date.now() - ts) / 60000);
-        if (mins < 1) return "Hace instantes"; if (mins < 60) return `Hace ${mins} min`;
-        return `Hace ${Math.floor(mins / 60)}h ${mins % 60}m`;
-    }
-
-    function renderizarRecursos() {
-        capaRecursos.clearLayers();
-        const fInst = document.getElementById('filtro-institucion').value;
-        const mostrarCortes = document.getElementById('chk-cortes').checked, mostrarUnidades = document.getElementById('chk-unidades').checked;
-        const contenedorLista = document.getElementById('lista-recursos'); contenedorLista.innerHTML = '';
-        let u = 0, cortesCount = 0, e = 0;
-        
-        recursos.forEach(r => {
-            const esCorte = r.inst === 'VIALIDAD';
-            if ((esCorte && !mostrarCortes) || (!esCorte && !mostrarUnidades)) return;
-            if (fInst === 'TODAS' || r.inst === fInst) {
-                if (esCorte) cortesCount++; else u++; e += Number(r.efectivos) || 0;
-                const m = L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos);
-                m.bindPopup(`<div style="font-size:12px; min-width:180px;"><b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br><b>📍 Sector/Dir:</b> ${esc(r.sector)}<br><b>🚦 Estado:</b> ${esc(r.estado)}<br><b>👤 Operador:</b> ${esc(r.operador || 'S/D')}<br><b>⏱️ Antigüedad:</b> ${calcularAntiguedad(r.timestamp)}<br><button onclick="eliminarRecurso('${esc(r.id)}')" style="margin-top:6px;width:100%;background:#dc2626;color:white;border:none;padding:4px;border-radius:3px;cursor:pointer;font-weight:bold;">🗑️ Eliminar</button></div>`);
-                const tj = document.createElement('div'); tj.className = 'recurso-card'; tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
-                tj.innerHTML = `<div onclick="centrarEnRecurso(${r.lat}, ${r.lon})" style="flex:1;"><b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br><span style="color:#475569;">📍 ${esc(r.sector)} | 👤 ${esc(r.operador || 'S/D')}</span></div><button class="btn-del-mini" onclick="eliminarRecurso('${esc(r.id)}')">✖</button>`;
-                contenedorLista.appendChild(tj);
-            }
-        });
-        document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-cortes').innerText = cortesCount; document.getElementById('kpi-efectivos').innerText = e;
-    }
-
-    window.centrarEnRecurso = function(lat, lon) { mapTactico.setView([lat, lon], 14); };
-    window.eliminarRecurso = function(id) { recursos = recursos.filter(r => r.id !== id); localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos)); renderizarRecursos(); };
-
-    function agregarRecursoEnVivo(e) {
-        e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
-        recursos.unshift({ id: `REC-${Date.now()}`, nombre: document.getElementById('nuevo-nombre').value, inst: inst, estado: document.getElementById('nuevo-estado').value, lat: parseFloat(document.getElementById('nueva-lat').value), lon: parseFloat(document.getElementById('nueva-lon').value), sector: document.getElementById('nuevo-sector').value, operador: document.getElementById('nuevo-operador').value, efectivos: inst === 'VIALIDAD' ? 0 : 4, timestamp: Date.now() });
-        localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos)); document.getElementById('form-recurso').reset(); renderizarRecursos();
-    }
-
-    async function sincronizarConSheets() {
-        const url = document.getElementById('sheet-url-input').value.trim();
-        if (!url) return alert("Ingrese la URL del Apps Script de Novedades.");
-        localStorage.setItem('cop_sheet_url', url);
-        try {
-            const resp = await fetch(url); const data = await resp.json();
-            if (Array.isArray(data)) {
-                const obtenerCoords = async (dirStr) => {
-                    try { const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(dirStr + ', Chaco, Argentina')}&limit=1`); const d = await r.json(); return d.length ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) } : { lat: -27.45, lon: -58.90 }; } catch(e) { return { lat: -27.45, lon: -58.90 }; }
-                };
-                let nuevosRecursos = [];
-                for (let item of data) {
-                    let lat = parseFloat(item.lat), lon = parseFloat(item.lon);
-                    if (isNaN(lat) || isNaN(lon)) { const c = await obtenerCoords(item.direccion || item.sector || 'Resistencia'); lat = c.lat; lon = c.lon; }
-                    nuevosRecursos.push({ id: item.id || `REC-${Math.random().toString(36).substr(2, 9)}`, nombre: item.nombre || 'Recurso', inst: item.inst || 'FAA', estado: item.estado || 'ASIGNADO', lat: lat, lon: lon, sector: item.direccion || item.sector || 'Terreno', efectivos: Number(item.efectivos) || 0, operador: item.operador || 'Formulario', timestamp: item.timestamp ? Number(item.timestamp) : Date.now() });
-                }
-                recursos = nuevosRecursos; localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos)); renderizarRecursos();
-                alert("✅ Sincronización de terreno completada.");
-            }
-        } catch(err) { alert("❌ Error al sincronizar terreno."); }
-    }
-
-    async function sincronizarHidro() {
-        const url = document.getElementById('hidro-url-input').value.trim();
-        if (!url) return alert("Ingrese la URL del Apps Script de Hidrometría.");
-        localStorage.setItem('cop_hidro_url_v3', url);
-        try {
-            const resp = await fetch(url); const data = await resp.json();
-            if (Array.isArray(data)) {
-                data.forEach(item => {
-                    const idx = estacionesHidro.findIndex(h => h.estacion.toLowerCase() === (item.estacion || "").toLowerCase());
-                    if (idx !== -1) {
-                        estacionesHidro[idx].actual = parseFloat(item.actual) || estacionesHidro[idx].actual;
-                        estacionesHidro[idx].tendencia = item.tendencia || estacionesHidro[idx].tendencia;
-                        estacionesHidro[idx].actualizado = item.actualizado || "Formulario";
-                    }
-                });
-                localStorage.setItem('cop_hidro_v3', JSON.stringify(estacionesHidro));
-                renderizarHidrometria();
-                alert("✅ Niveles de ríos actualizados con éxito.");
-            }
-        } catch(err) { alert("❌ Error al sincronizar hidrometría."); }
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-        const savedUrl = localStorage.getItem('cop_sheet_url'); if (savedUrl) document.getElementById('sheet-url-input').value = savedUrl;
-        const savedHidroUrl = localStorage.getItem('cop_hidro_url_v3'); if (savedHidroUrl) document.getElementById('hidro-url-input').value = savedHidroUrl;
+    recursos = [...recursos.filter(r => r.origen !== 'sheet'), ...nuevos]; guardarRecursos();
+    logEvento(`Sync terreno: ${nuevos.length} registros, ${omitidos} sin ubicación`); renderizarRecursos();
+    est.innerText = `✅ ${nuevos.length} registros. ${omitidos ? `⚠ ${omitidos} omitidos por no poder ubicarlos (cargar lat/lon).` : ''}`;
+  } catch (err) { est.innerText = '❌ Error al sincronizar terreno.'; }
+}
+async function sincronizarHidro() {
+  const url = document.getElementById('hidro-url-input').value.trim(), est = document.getElementById('sync-estado');
+  if (!url) return alert("Ingrese la URL del Apps Script de Hidrometría.");
+  localStorage.setItem('cop_hidro_url_v4', url);
+  try {
+    const data = await (await fetch(url)).json(); if (!Array.isArray(data)) throw new Error('formato'); let n = 0;
+    data.forEach(it => {
+      const h = estacionesHidro.find(x => x.estacion.toLowerCase() === (it.estacion || '').toLowerCase()); const v = parseFloat(it.actual); if (!h || isNaN(v)) return;
+      h.actual = v; if (!isNaN(parseFloat(it.alerta))) h.alerta = parseFloat(it.alerta); if (!isNaN(parseFloat(it.evacuacion))) h.evacuacion = parseFloat(it.evacuacion);
+      h.tendencia = it.tendencia || h.tendencia; h.ts = it.timestamp ? Number(it.timestamp) : Date.now(); h.ejemplo = false; n++;
     });
+    guardar(LS.hid, estacionesHidro); logEvento(`Sync ríos: ${n} estaciones`); renderizarHidrometria(); dibujarRiosEstrategico();
+    est.innerText = `✅ ${n} estaciones actualizadas.`;
+  } catch (err) { est.innerText = '❌ Error al sincronizar hidrometría.'; }
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const a = localStorage.getItem('cop_sheet_url'); if (a) document.getElementById('sheet-url-input').value = a;
+  const b = localStorage.getItem('cop_hidro_url_v4'); if (b) document.getElementById('hidro-url-input').value = b;
+});
 
-    function activarSeleccionMapa(modo) { modoSeleccionMapa = modo; document.getElementById('btn-pick-origen').classList.toggle('picking', modo === 'origen'); document.getElementById('btn-pick-destino').classList.toggle('picking', modo === 'destino'); }
-    mapTactico.on('click', e => {
-        const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
-        if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); } 
-        else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); } 
-        else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
-    });
+// --- RUTEO ---
+function activarSeleccionMapa(m) { modoSeleccionMapa = m; document.getElementById('btn-pick-origen').classList.toggle('picking', m === 'origen'); document.getElementById('btn-pick-destino').classList.toggle('picking', m === 'destino'); }
+mapTactico.on('click', e => {
+  const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
+  if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+  else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+  else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
+});
+async function calcularRutaTactica() {
+  const o = document.getElementById('ruta-origen').value, d = document.getElementById('ruta-destino').value, res = document.getElementById('resultado-ruta');
+  if (!o || !d) return; res.style.display = 'block'; res.innerHTML = "⏳ Trazando...";
+  try {
+    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
+    const a = await geo(o), b = await geo(d); if (!a || !b) { res.innerHTML = "❌ Dirección no encontrada."; return; }
+    const data = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`)).json();
+    if (!data.routes) { res.innerHTML = "❌ Sin ruta terrestre."; return; }
+    capaRutaActiva.clearLayers(); L.marker(a).addTo(capaRutaActiva).bindPopup("📍 Partida"); L.marker(b).addTo(capaRutaActiva).bindPopup("🏁 Destino");
+    const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6, opacity: .85 } }).addTo(capaRutaActiva); mapTactico.fitBounds(linea.getBounds(), { padding: [40, 40] });
+    res.innerHTML = `<b>✅ Ruta</b>: ${(data.routes[0].distance / 1000).toFixed(1)} km | ${Math.round(data.routes[0].duration / 60)} min <small>(no considera cortes cargados)</small>`;
+  } catch (e) { res.innerHTML = "❌ Error de conexión."; }
+}
+function borrarRutaTactica() { capaRutaActiva.clearLayers(); ['ruta-origen', 'ruta-destino'].forEach(i => document.getElementById(i).value = ''); document.getElementById('resultado-ruta').style.display = 'none'; activarSeleccionMapa(null); }
 
-    async function calcularRutaTactica() {
-        const origStr = document.getElementById('ruta-origen').value, destStr = document.getElementById('ruta-destino').value, resDiv = document.getElementById('resultado-ruta');
-        if (!origStr || !destStr) return; resDiv.style.display = 'block'; resDiv.innerHTML = "⏳ Trazando...";
-        try {
-            const geocode = async txt => { if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(txt.trim())) return txt.split(',').map(Number); const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(txt + ', Argentina')}&limit=1`); const d = await r.json(); return d.length ? [parseFloat(d[0].lat), parseFloat(d[0].lon)] : null; };
-            const orig = await geocode(origStr), dest = await geocode(destStr);
-            if (!orig || !dest) { resDiv.innerHTML = "❌ Dirección no encontrada."; return; }
-            const data = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${orig[1]},${orig[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`)).json();
-            if (!data.routes) { resDiv.innerHTML = "❌ Sin ruta terrestre."; return; }
-            capaRutaActiva.clearLayers(); L.marker(orig).addTo(capaRutaActiva).bindPopup("📍 Partida"); L.marker(dest).addTo(capaRutaActiva).bindPopup("🏁 Destino");
-            const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6, opacity: 0.85 } }).addTo(capaRutaActiva); mapTactico.fitBounds(linea.getBounds(), { padding: [40, 40] });
-            resDiv.innerHTML = `<b>✅ Ruta Trazada</b><br>Distancia: ${(data.routes[0].distance / 1000).toFixed(1)} km | Tiempo: ${Math.round(data.routes[0].duration / 60)} min`;
-        } catch (e) { resDiv.innerHTML = "❌ Error de conexión."; }
+// --- CAUDALES GloFAS (una sola carga + refresco horario) ---
+async function cargarCaudalesGloFAS() {
+  await Promise.all(estacionesHidro.map(async s => {
+    try {
+      const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
+      const d = j.daily.river_discharge, hoy = d[7], ref = d[4]; if (hoy == null) throw new Error();
+      s.hoy = hoy; s.tend = ref ? (hoy - ref) / ref : 0; s.errQ = false;
+    } catch (e) { s.errQ = true; }
+  }));
+  dibujarRiosEstrategico();
+}
+
+// --- INTELIGENCIA ---
+const textoQ = s => s.errQ || s.hoy == null ? 's/d' : `${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'}`;
+async function cargarPronostico() {
+  const cont = document.getElementById('pronostico-container'), resu = document.getElementById('pronostico-resumen');
+  const [lat, lon] = document.getElementById('sel-pronostico').value.split(',');
+  cont.innerHTML = '<span style="color:#64748b">⏳ Consultando…</span>';
+  try {
+    const d = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m&forecast_days=3&timezone=America%2FArgentina%2FCordoba`)).json();
+    const h = d.hourly, now = Date.now(); let ini = h.time.findIndex(t => new Date(t).getTime() + 3600000 > now); if (ini < 0) ini = 0;
+    cont.innerHTML = ''; let total = 0;
+    for (let i = ini; i < ini + 48 && i + 6 <= h.time.length; i += 6) {
+      const rng = k => Array.from({ length: 6 }, (_, j) => h[k][i + j]).filter(x => x != null);
+      const mm = rng('precipitation').reduce((a, b) => a + b, 0), pmax = Math.max(...rng('precipitation_probability')), vmax = Math.max(...rng('wind_speed_10m')); total += mm;
+      const f = new Date(h.time[i]), col = mm > 30 ? '#dc2626' : mm > 10 ? '#d97706' : '#16a34a';
+      cont.insertAdjacentHTML('beforeend', `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:8px 12px;min-width:92px;text-align:center;font-size:11.5px">
+        <div style="color:#64748b;font-weight:bold">${f.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' })}</div><div style="font-size:13px"><b>${f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</b></div><hr style="border:0;border-top:1px solid #e2e8f0;margin:4px 0">
+        <div>🌡️ ${h.temperature_2m[i]}°C</div><div style="color:${col};font-weight:bold">🌧️ ${mm.toFixed(1)} mm</div><div style="color:#64748b">prob. máx ${pmax}%</div><div>💨 ${vmax} km/h</div></div>`);
     }
-    function borrarRutaTactica() { capaRutaActiva.clearLayers(); document.getElementById('ruta-origen').value = ''; document.getElementById('ruta-destino').value = ''; document.getElementById('resultado-ruta').style.display = 'none'; activarSeleccionMapa(null); }
+    resu.innerHTML = `<b>Lluvia acumulada 48 h: <span style="color:${total > 60 ? '#dc2626' : total > 20 ? '#d97706' : '#16a34a'}">${total.toFixed(0)} mm</span></b> <small>(modelo; colores por bloque de 6 h: &gt;10 mm / &gt;30 mm, referenciales)</small>`;
+  } catch (e) { cont.innerHTML = '<span style="color:#dc2626">❌ No se pudo cargar el pronóstico.</span>'; resu.innerHTML = ''; }
+}
+function actualizarDashboardAnalytics() {
+  const tb = document.querySelector('#tabla-analitica-rios tbody'); tb.innerHTML = '';
+  estacionesHidro.forEach(h => { const e = estadoHidro(h);
+    tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${textoQ(h)}</td></tr>`); });
+  const medios = recursos.filter(r => r.inst !== 'VIALIDAD').length, cortes = recursos.filter(r => r.inst === 'VIALIDAD').length, ef = recursos.reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
+  document.getElementById('analitica-fuerzas').innerHTML = `• Unidades y medios: <b>${medios}</b><br>• Cortes / alertas viales: <b style="color:#dc2626">${cortes}</b><br>• Personal en terreno: <b>${ef} efectivos</b> <small>(mismo cálculo que el KPI del visor táctico)</small><br>• Estaciones hidrométricas: <b>${estacionesHidro.length}</b> (${estacionesHidro.filter(h => estadoHidro(h).ok).length} con dato vigente)`;
+  document.getElementById('bitacora').innerHTML = bitacora.length ? bitacora.slice(0, 15).map(b => `<div style="border-bottom:1px solid #e2e8f0;padding:3px 0"><b>${fmtFecha(b.ts)}</b> — ${esc(b.t)}</div>`).join('') : '<i>Sin eventos registrados.</i>';
+  cargarPronostico();
+}
 
-    // --- MÓDULO ANALYTICS Y PRONÓSTICO 48H ---
-    async function actualizarDashboardAnalytics() {
-        // 1. Llenar tabla de hidrometría
-        const tbody = document.querySelector('#tabla-analitica-rios tbody');
-        tbody.innerHTML = '';
-        estacionesHidro.forEach(h => {
-            let estado = 'Normal', color = '#16a34a';
-            if (h.actual >= h.evacuacion) { estado = 'Evacuación'; color = '#dc2626'; }
-            else if (h.actual >= h.alerta) { estado = 'Alerta'; color = '#d97706'; }
-            tbody.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b></td><td>${esc(h.rio)}</td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${color}; font-weight:bold;">${estado}</span></td></tr>`);
-        });
+// --- VISOR ESTRATÉGICO ---
+const estadoCapas = {}, RV = 'Radar RainViewer', rioGrupoEstrategico = L.layerGroup();
+function pintarEstado() { const d = document.getElementById('estado-capas'); if (d) d.innerHTML = Object.entries(estadoCapas).map(([n, s]) => `${s.ok > 0 ? '✅' : s.err > 0 ? '⚠️' : '⏳'} ${n}`).join('<br>'); }
+function vigilar(l, n) { estadoCapas[n] = estadoCapas[n] || { ok: 0, err: 0 }; l.on('tileload', () => { estadoCapas[n].ok++; pintarEstado(); }); l.on('tileerror', () => { estadoCapas[n].err++; pintarEstado(); }); return l; }
+function dibujarRiosEstrategico() {
+  rioGrupoEstrategico.clearLayers(); const cont = document.getElementById('lista-rios'); cont.innerHTML = '';
+  estacionesHidro.forEach(r => {
+    const e = estadoHidro(r);
+    L.circleMarker([r.lat, r.lon], { radius: 9, color: '#fff', weight: 2, fillColor: e.color, fillOpacity: .95, dashArray: r.ejemplo ? '3' : null }).addTo(rioGrupoEstrategico)
+      .bindPopup(`<b>🌊 ${esc(r.estacion)}</b><br>${esc(e.txt)}<br>Q: ${textoQ(r)}<br>Altura: <b>${Number(r.actual).toFixed(2)} m</b>`);
+    cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #444;padding:4px 0"><b style="color:${e.color === '#16a34a' ? '#4ade80' : '#fff'}">● ${esc(r.estacion)}</b><br>Q: ${textoQ(r)} | Alt: ${Number(r.actual).toFixed(2)} m<br><small>${esc(e.txt)}</small></div>`);
+  });
+}
+function inicializarMapaRadar() {
+  mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
+  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© OpenStreetMap, © CARTO' });
+  const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best', nasa = 'NASA GIBS / EOSDIS';
+  const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: .85, attribution: nasa }), 'Satélite nubes');
+  const imerg = vigilar(L.tileLayer(`${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`, { maxNativeZoom: 6, maxZoom: 9, opacity: .7, attribution: nasa }), 'Lluvia NASA');
+  const radarGrupo = L.layerGroup(); imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar); rioGrupoEstrategico.addTo(mapRadar);
+  L.control.layers({ 'Mapa base (OSM)': osm, 'Mapa oscuro (CARTO)': carto }, { 'Radar (RainViewer)': radarGrupo, 'Lluvia NASA IMERG': imerg, 'Nubes GOES': goes, 'Ríos': rioGrupoEstrategico }, { collapsed: false }).addTo(mapRadar);
 
-        // 2. Métricas de fuerzas y cortes
-        let totalMedios = recursos.filter(r => r.inst !== 'VIALIDAD').length;
-        let totalCortes = recursos.filter(r => r.inst === 'VIALIDAD').length;
-        let totalEfectivos = recursos.reduce((acc, r) => acc + (Number(r.efectivos) || 0), totalMedios * 4);
-        
-        document.getElementById('analitica-fuerzas').innerHTML = `
-            <b>📊 Estado Operativo General NEA:</b><br>
-            • Unidades y Medios Desplegados: <b>${totalMedios}</b><br>
-            • Cortes de Ruta / Alertas Viales: <b style="color:#dc2626;">${totalCortes}</b><br>
-            • Personal Operativo en Terreno: <b>${totalEfectivos} efectivos</b><br>
-            • Estaciones Hidrométricas Monitoreadas: <b>${estacionesHidro.length}</b><br><br>
-            <i style="color:#64748b;">* Datos calculados en tiempo real desde los registros del Centro de Comando.</i>
-        `;
+  let frames = [], idx = 0, timer = null; const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
+  const capaFrame = f => { if (!f.layer) { f.layer = vigilar(L.tileLayer(`${f.host}${f.path}/256/{z}/{x}/{y}/2/0_0.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: 0, updateWhenZooming: false, keepBuffer: 1, attribution: 'Weather data by <a href="https://www.rainviewer.com">Rain Viewer</a>' }), RV); radarGrupo.addLayer(f.layer); } return f.layer; };
+  function mostrar(i) {
+    if (!frames.length) return; idx = (i + frames.length) % frames.length;
+    frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? .8 : 0); }); capaFrame(frames[idx]).setOpacity(.8); slider.value = idx;
+    document.getElementById('radar-hora').innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function togglePlay() { if (timer) { clearInterval(timer); timer = null; btn.innerText = '▶'; return; } btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200); }
+  btn.onclick = togglePlay; slider.oninput = () => { if (timer) togglePlay(); mostrar(+slider.value); };
+  async function cargarRadar() {
+    try {
+      const data = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(), past = (data.radar && data.radar.past || []).slice(-6); if (!past.length) throw new Error();
+      const host = data.host || 'https://tilecache.rainviewer.com', corriendo = !!timer; if (corriendo) togglePlay();
+      radarGrupo.clearLayers(); estadoCapas[RV] = { ok: 0, err: 0 }; frames = past.map(p => ({ time: p.time, path: p.path, host })); slider.max = frames.length - 1; mostrar(frames.length - 1); if (corriendo) togglePlay();
+    } catch (e) { document.getElementById('radar-hora').innerText = 'No disp.'; }
+  }
+  cargarRadar(); setInterval(cargarRadar, 600000); radarCargado = true;
+}
 
-        // 3. Pronóstico 48h desde Open-Meteo (Resistencia: -27.45, -58.98)
-        const container = document.getElementById('pronostico-container');
-        try {
-            const resp = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-27.45&longitude=-58.98&hourly=temperature_2m,precipitation_probability,wind_speed_10m&forecast_days=2');
-            const data = await resp.json();
-            if (data && data.hourly) {
-                container.innerHTML = '';
-                const h = data.hourly;
-                // Mostrar cada 4 horas las próximas 48h
-                for (let i = 0; i < 48; i += 4) {
-                    const fecha = new Date(h.time[i]);
-                    const horaStr = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-                    const diaStr = fecha.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' });
-                    const temp = h.temperature_2m[i];
-                    const lluvia = h.precipitation_probability[i];
-                    const viento = h.wind_speed_10m[i];
+// --- SITREP ---
+function generarSITREP() {
+  const { jsPDF } = window.jspdf, doc = new jsPDF();
+  const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
+  doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
+  doc.setFontSize(9.5); doc.text(`Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
+  if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 31); }
+  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 38);
+  doc.autoTable({ startY: 41, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q GloFAS']],
+    body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬]/g, '')]),
+    headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
+  let y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios desplegados y cortes viales", 14, y);
+  doc.autoTable({ startY: y + 3, head: [['Org.', 'Detalle', 'Sector', 'Estado', 'Fuente', 'Antiguedad']], body: recursos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', edadTxt(r.timestamp)]), headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8 } });
+  y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitacora (ultimos eventos)", 14, y);
+  doc.autoTable({ startY: y + 3, head: [['Hora', 'Evento']], body: bitacora.slice(0, 10).map(b => [fmtFecha(b.ts), b.t]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } });
+  doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
 
-                    let colorLluvia = '#16a34a';
-                    if (lluvia > 40) colorLluvia = '#d97706';
-                    if (lluvia > 75) colorLluvia = '#dc2626';
-
-                    container.insertAdjacentHTML('beforeend', `
-                        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 12px; min-width:90px; text-align:center; font-size:11.5px;">
-                            <div style="color:#64748b; font-weight:bold;">${diaStr}</div>
-                            <div style="font-size:13px; color:#1e293b; margin:2px 0;"><b>${horaStr}</b></div>
-                            <hr style="border:0; border-top:1px solid #e2e8f0; margin:4px 0;">
-                            <div>🌡️ ${temp}°C</div>
-                            <div style="color:${colorLluvia}; font-weight:bold;">🌧️ ${lluvia}%</div>
-                            <div style="color:#475569;">💨 ${viento} km/h</div>
-                        </div>
-                    `);
-                }
-            }
-        } catch (err) {
-            container.innerHTML = `<span style="color:#dc2626;">❌ No se pudo cargar el pronóstico extendido en este momento.</span>`;
-        }
-    }
-
-    // --- VISOR ESTRATÉGICO ---
-    const estadoCapas = {}; let primerError = ''; const RV = 'Radar RainViewer'; const rioGrupoEstrategico = L.layerGroup();
-    function pintarEstado() { const div = document.getElementById('estado-capas'); if (div) div.innerHTML = Object.entries(estadoCapas).map(([n, st]) => `${st.ok > 0 ? '✅' : st.err > 0 ? '⚠️' : '⏳'} ${n}`).join('<br>'); }
-    function vigilar(l, nombre) { estadoCapas[nombre] = { ok: 0, err: 0 }; l.on('tileload', () => { estadoCapas[nombre].ok++; pintarEstado(); }); l.on('tileerror', () => { estadoCapas[nombre].err++; pintarEstado(); }); return l; }
-
-    function dibujarRiosEstrategico() {
-        rioGrupoEstrategico.clearLayers(); const cont = document.getElementById('lista-rios'); if (!cont) return; cont.innerHTML = '';
-        estacionesHidro.forEach((r) => {
-            const flecha = r.error ? '' : r.tend > 0.03 ? '▲' : r.tend < -0.03 ? '▼' : '▬';
-            const critico = r.actual >= r.alerta, color = r.actual >= r.evacuacion ? '#e74c3c' : critico ? '#f39c12' : '#2ecc71';
-            const q = r.error || r.hoy == null ? 's/d GloFAS' : `${r.hoy.toFixed(0)} m³/s ${flecha}`;
-            L.circleMarker([r.lat, r.lon], { radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(rioGrupoEstrategico).bindPopup(`<b>🌊 ${esc(r.estacion)}</b><br>Caudal: ${q}<br>Altura: <b>${Number(r.actual).toFixed(2)} m</b>`);
-            cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #444; padding:4px 0;"><b>${critico ? '🔴 ' : '🟢 '}${esc(r.estacion)}</b><br><span>Q: ${q} | Alt: ${Number(r.actual).toFixed(2)}m (${r.tendencia})</span></div>`);
-        });
-    }
-
-    async function cargarCaudalesGloFAS() {
-        await Promise.all(estacionesHidro.map(async (s, idx) => {
-            try { const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
-                  const d = j.daily.river_discharge, hoy = d[7], ref = d[4]; if (hoy == null) throw new Error();
-                  estacionesHidro[idx].hoy = hoy; estacionesHidro[idx].tend = ref ? (hoy - ref) / ref : 0; estacionesHidro[idx].error = false;
-            } catch (e) { estacionesHidro[idx].error = true; }
-        }));
-        dibujarRiosEstrategico(); renderizarHidrometria();
-    }
-
-    function inicializarMapaRadar() {
-        mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9 }).addTo(mapRadar);
-        const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9 });
-        const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
-        const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: 0.85 }), 'Satélite Nubes');
-        const imerg = vigilar(L.tileLayer(`${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`, { maxNativeZoom: 6, maxZoom: 9, opacity: 0.7 }), 'Lluvia NASA');
-        const radarGrupo = L.layerGroup(); imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar); rioGrupoEstrategico.addTo(mapRadar);
-        L.control.layers({ 'Mapa Base': mapRadar, 'Mapa Oscuro': carto }, { 'Radar (RainViewer)': radarGrupo, 'NASA IMERG': imerg, 'Nubes GOES': goes, 'Ríos (GloFAS)': rioGrupoEstrategico }, { collapsed: false }).addTo(mapRadar);
-
-        let frames = [], idx = 0, timer = null; const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
-        function capaFrame(f) { if (!f.layer) { f.layer = vigilar(L.tileLayer(`${f.host}${f.path}/256/{z}/{x}/{y}/2/0_0.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: 0, updateWhenZooming: false, keepBuffer: 1 }), RV); radarGrupo.addLayer(f.layer); } return f.layer; }
-        function mostrar(i) { if (!frames.length) return; idx = (i + frames.length) % frames.length; frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? 0.8 : 0); }); capaFrame(frames[idx]).setOpacity(0.8); slider.value = idx; document.getElementById('radar-hora').innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); }
-        function togglePlay() { if (timer) { clearInterval(timer); timer = null; btn.innerText = '▶'; return; } btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200); }
-        btn.onclick = togglePlay; slider.oninput = () => { if (timer) togglePlay(); mostrar(+slider.value); };
-
-        async function cargarRadar() {
-            try { const data = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(); const past = (data.radar && data.radar.past || []).slice(-6); if (!past.length) throw new Error(); const host = data.host || 'https://tilecache.rainviewer.com', corriendo = !!timer; if (corriendo) togglePlay(); radarGrupo.clearLayers(); frames = past.map(p => ({ time: p.time, path: p.path, host })); slider.max = frames.length - 1; mostrar(frames.length - 1); if (corriendo) togglePlay();
-            } catch (e) { document.getElementById('radar-hora').innerText = 'No disp.'; }
-        }
-        cargarRadar(); cargarCaudalesGloFAS(); setInterval(cargarRadar, 600000); radarCargado = true;
-    }
-
-    function generarSITREP() {
-        const { jsPDF } = window.jspdf; const doc = new jsPDF();
-        doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
-        doc.setFontSize(9.5); doc.text(`Fecha/Hora de Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
-        doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Estado Hidrométrico y Caudales de la Cuenca (INA / PNA / GloFAS)", 14, 34);
-        const tablaHidro = estacionesHidro.map(h => [ h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)} m`, `${Number(h.evacuacion).toFixed(2)} m`, h.hoy ? `${h.hoy.toFixed(0)} m³/s` : 'S/D' ]);
-        doc.autoTable({ startY: 37, head: [['Estación', 'Río', 'Altura Actual', 'Nivel Alerta', 'Evacuación', 'Caudal (Q)']], body: tablaHidro, headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8.5 }});
-        const finalY = doc.lastAutoTable.finalY + 8;
-        doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios Desplegados y Cortes Viales", 14, finalY);
-        const tablaRec = recursos.map(r => [ r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', calcularAntiguedad(r.timestamp) ]);
-        doc.autoTable({ startY: finalY + 3, head: [['Org.', 'Detalle / Medio', 'Sector', 'Estado', 'Fuente', 'Antigüedad']], body: tablaRec, headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8.5 }});
-        doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0,10)}.pdf`);
-    }
-
-    cargarZonasExternas(); renderizarHidrometria(); renderizarInfraestructura(); renderizarRecursos(); cargarCaudalesGloFAS();
-    setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
-    setInterval(renderizarRecursos, 60000);
+// --- ARRANQUE ---
+poblarSelectorNivel(); cargarZonasExternas(); renderizarHidrometria(); renderizarInfraestructura(); renderizarRecursos(); cargarCaudalesGloFAS();
+setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
+setInterval(() => { renderizarRecursos(); renderizarHidrometria(); }, 60000);
+setInterval(cargarCaudalesGloFAS, 3600000);
 </script>
 </body>
 </html>
