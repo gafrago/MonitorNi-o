@@ -41,6 +41,7 @@
         .btn-pick { background-color: #2980b9; color: white; border: none; padding: 5px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; }
         .btn-pick.picking { background-color: #e74c3c; animation: pulse 1s infinite; }
         .btn-pdf { background-color: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .btn-geo { background-color: #d35400; color: white; border: none; padding: 6px; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 11.5px; flex: 1; }
 
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 
@@ -49,11 +50,9 @@
         #map-tactico { flex: 1; cursor: crosshair; }
         #map-radar { flex: 1; width: 100%; height: 100%; background: #1e293b; }
 
-        /* Barra flotante de filtros de capas sobre el mapa táctico */
         .layer-control-bar { position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.95); padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); font-size: 12px; display: flex; gap: 12px; border: 1px solid #cbd5e1; }
         .layer-control-bar label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 600; color: #1e293b; }
 
-        /* Iconos Tácticos */
         .custom-div-icon { background: transparent; border: none; }
         .pin-tactico { position: relative; width: 34px; height: 34px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.45); border: 2px solid #ffffff; }
         .pin-tactico span.sigla { transform: rotate(45deg); color: #ffffff; font-weight: 800; font-size: 9.5px; }
@@ -67,7 +66,6 @@
         .btn-del-mini { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 3px; padding: 2px 6px; font-size: 11px; font-weight: bold; cursor: pointer; }
         .btn-del-mini:hover { background: #dc2626; color: white; }
 
-        /* Paneles Flotantes del Visor Estratégico */
         .radar-legend { position: absolute; bottom: 30px; right: 30px; z-index: 1000; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; font-size: 12px; max-width: 300px; line-height: 1.5; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
         .radar-legend a { color: #7fb3ff; }
         #panel-rios { position: absolute; bottom: 30px; left: 12px; z-index: 1000; background: rgba(0,0,0,0.85); color: #fff; padding: 12px; border-radius: 8px; font-size: 11.5px; width: 295px; max-height: 62vh; overflow-y: auto; line-height: 1.45; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
@@ -79,7 +77,7 @@
 <div id="top-banner">
     <div>
         <span class="badge-proto">C2 CONJUNTO</span>
-        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v2.5 UNIFICADO)</strong>
+        <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v3.0)</strong>
     </div>
     <div style="display: flex; align-items: center; gap: 10px;">
         <span id="reloj-operativo" style="margin-right: 5px; font-family: monospace;"></span>
@@ -88,19 +86,18 @@
 </div>
 
 <div class="tab-bar">
-    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Operaciones, Hidrometría y Ruteo)</button>
+    <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico (Operaciones, Hidrometría e Interoperabilidad)</button>
     <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar Animado, NASA y Caudales)</button>
 </div>
 
 <!-- ================= VISTA 1: TÁCTICA ================= -->
 <div id="vista-tactica" class="view-container active">
     
-    <!-- Barra de Conmutación Rápida de Capas -->
     <div class="layer-control-bar">
-        <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros (INA/PNA)</label>
-        <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura Crítica</label>
-        <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes de Ruta</label>
-        <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades Desplegadas</label>
+        <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros</label>
+        <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura</label>
+        <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes</label>
+        <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades</label>
     </div>
 
     <div id="sidebar">
@@ -110,88 +107,102 @@
             <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
         </div>
 
-        <!-- 1. BUSCADOR DE DEPARTAMENTOS -->
+        <!-- 1. INTEROPERABILIDAD (GEOJSON & GOOGLE SHEETS) -->
+        <details class="form-panel">
+            <summary>🔄 Interoperabilidad (GeoJSON & Cloud Sheets)</summary>
+            <div class="form-grid">
+                <div style="display: flex; gap: 5px;">
+                    <button type="button" class="btn-geo" onclick="exportarGeoJSON()">📥 Exportar GeoJSON</button>
+                    <button type="button" class="btn-geo" onclick="document.getElementById('file-import').click()">📤 Importar GeoJSON</button>
+                    <input type="file" id="file-import" accept=".geojson,.json" style="display:none" onchange="importarGeoJSON(event)">
+                </div>
+                <hr style="border-color:#cbd5e1; margin:4px 0;">
+                <label style="font-weight:bold; color:#1e293b; font-size:11.5px;">☁️ Sincronización Google Sheets (Web App URL):</label>
+                <input type="text" id="sheet-url-input" placeholder="https://script.google.com/macros/s/.../exec" />
+                <div style="display: flex; gap: 5px; margin-top: 2px;">
+                    <button type="button" class="btn-submit" style="flex:1; padding:5px; font-size:11px;" onclick="sincronizarConSheets()">☁️ Sincronizar / Descargar</button>
+                </div>
+            </div>
+        </details>
+
+        <!-- 2. BUSCADOR DE DEPARTAMENTOS -->
         <details class="form-panel">
             <summary>📍 Jurisdicciones NEA (Chaco y Corrientes)</summary>
             <div class="form-grid">
                 <small style="color:#c0392b;font-weight:bold;display:none" id="alerta-geojson">⚠️ Sin archivo mapa_nea.geojson local.</small>
-                <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento (ej. San Fernando)..." oninput="filtrarDepartamentosTexto()" />
-                <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">1. Seleccionar Departamento...</option></select>
-                <select id="sel-muni" class="select-zona" disabled><option value="">2. Zona Seleccionada</option></select>
+                <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento..." oninput="filtrarDepartamentosTexto()" />
+                <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">Seleccionar Departamento...</option></select>
             </div>
         </details>
 
-        <!-- 2. RUTEO TÁCTICO CON SELECCIÓN EN MAPA Y BORRADO -->
-        <details class="form-panel" open>
-            <summary>🛣️ Ruteo Táctico (Con Selección en Mapa)</summary>
+        <!-- 3. RUTEO TÁCTICO -->
+        <details class="form-panel">
+            <summary>🛣️ Ruteo Táctico</summary>
             <div class="form-grid">
                 <div style="display: flex; gap: 4px;">
-                    <input type="text" id="ruta-origen" placeholder="Origen (Dirección o clic en 👉)" style="flex:1;" />
-                    <button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Fijar Origen</button>
+                    <input type="text" id="ruta-origen" placeholder="Origen (o clic en 👉)" style="flex:1;" />
+                    <button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Origen</button>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <input type="text" id="ruta-destino" placeholder="Destino (Dirección o clic en 👉)" style="flex:1;" />
-                    <button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Fijar Destino</button>
+                    <input type="text" id="ruta-destino" placeholder="Destino (o clic en 👉)" style="flex:1;" />
+                    <button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Destino</button>
                 </div>
                 <div style="display: flex; gap: 6px; margin-top: 2px;">
                     <button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button>
-                    <button type="button" class="btn-clear" onclick="borrarRutaTactica()" title="Limpiar ruta del mapa">🗑️ Borrar Ruta</button>
+                    <button type="button" class="btn-clear" onclick="borrarRutaTactica()">🗑️ Borrar</button>
                 </div>
                 <div id="resultado-ruta" style="display:none; font-size: 11.5px; background:#f1f5f9; padding:7px; border-radius:3px; border-left: 3px solid #8e44ad;"></div>
             </div>
         </details>
 
-        <!-- 3. ALTA DE RECURSOS Y CORTES CON TRAZABILIDAD -->
+        <!-- 4. ALTA DE RECURSOS Y CORTES -->
         <details class="form-panel" id="panel-alta" open>
-            <summary>➕ Desplegar Unidad / Reportar Corte de Ruta</summary>
+            <summary>➕ Desplegar Unidad / Reportar Corte</summary>
             <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-                <input type="text" id="nuevo-nombre" placeholder="Detalle (Ej. Corte RN 16 Km 14 / Unimog Comunicaciones)" required />
+                <input type="text" id="nuevo-nombre" placeholder="Detalle (Ej. Corte RN 16 / Unimog)" required />
                 <div style="display: flex; gap: 5px;">
                     <select id="nueva-institucion" style="flex: 1;" required>
-                        <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA VIAL</option>
+                        <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option>
                         <option value="FAA">✈️ FAA - Fuerza Aérea</option>
                         <option value="EA">🪖 EA - Ejército</option>
                         <option value="PNA">⚓ PNA - Prefectura</option>
                         <option value="GN">🛡️ GN - Gendarmería</option>
                         <option value="DC">🚒 DC - Defensa Civil</option>
                     </select>
-                    <select id="nuevo-estado" style="width: 115px;" required>
+                    <select id="nuevo-estado" style="width: 110px;" required>
                         <option value="ASIGNADO">🟢 Operativo</option>
-                        <option value="DISPONIBLE">🟡 En Reserva</option>
-                        <option value="NO_DISPONIBLE">🔴 Crítico/Corte</option>
+                        <option value="DISPONIBLE">🟡 Reserva</option>
+                        <option value="NO_DISPONIBLE">🔴 Crítico</option>
                     </select>
                 </div>
                 <div class="coords-row">
-                    <input type="number" step="any" id="nueva-lat" placeholder="Lat (Clic en mapa)" required />
-                    <input type="number" step="any" id="nueva-lon" placeholder="Lon (Clic en mapa)" required />
+                    <input type="number" step="any" id="nueva-lat" placeholder="Lat" required />
+                    <input type="number" step="any" id="nueva-lon" placeholder="Lon" required />
                 </div>
                 <div style="display: flex; gap: 5px;">
                     <input type="text" id="nuevo-sector" placeholder="Sector / Localidad" style="flex:1;" required />
-                    <input type="text" id="nuevo-operador" placeholder="Operador / Fuente (Ej. S-3 FAA)" style="flex:1;" required />
+                    <input type="text" id="nuevo-operador" placeholder="Operador / Fuente" style="flex:1;" required />
                 </div>
                 <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
             </form>
         </details>
 
-        <!-- FILTRO Y LISTA CON BOTÓN DE ELIMINAR -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <select id="filtro-institucion" onchange="renderizarRecursos()" style="flex: 1; padding: 5px; border-radius: 4px; font-size: 12px;">
-                <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option>
-                <option value="VIALIDAD">🚧 Solo Cortes de Ruta / Alertas</option>
-                <option value="FAA">✈️ Fuerza Aérea (FAA)</option>
-                <option value="EA">🪖 Ejército Argentino (EA)</option>
-                <option value="PNA">⚓ Prefectura Naval (PNA)</option>
-                <option value="GN">🛡️ Gendarmería (GN)</option>
-                <option value="DC">🚒 Defensa Civil (DC)</option>
-            </select>
-        </div>
+        <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom: 8px; padding: 5px; border-radius: 4px; font-size: 12px;">
+            <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option>
+            <option value="VIALIDAD">🚧 Solo Cortes de Ruta / Alertas</option>
+            <option value="FAA">✈️ Fuerza Aérea (FAA)</option>
+            <option value="EA">🪖 Ejército Argentino (EA)</option>
+            <option value="PNA">⚓ Prefectura Naval (PNA)</option>
+            <option value="GN">🛡️ Gendarmería (GN)</option>
+            <option value="DC">🚒 Defensa Civil (DC)</option>
+        </select>
         <div id="lista-recursos" style="flex: 1; overflow-y: auto;"></div>
     </div>
 
     <div id="map-tactico"></div>
 </div>
 
-<!-- ================= VISTA 2: ESTRATÉGICA (RADAR ANIMADO + NASA + GLOFAS) ================= -->
+<!-- ================= VISTA 2: ESTRATÉGICA ================= -->
 <div id="vista-radar" class="view-container">
     <div id="map-radar"></div>
     
@@ -223,10 +234,9 @@
 <script>
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-    // --- CONTROL DE PESTAÑAS ---
     let mapTactico, mapRadar;
     let radarCargado = false;
-    let modoSeleccionMapa = null; // 'origen', 'destino' o null
+    let modoSeleccionMapa = null;
 
     function cambiarPestana(vista) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -255,7 +265,7 @@
     const capaRecursos = L.layerGroup().addTo(mapTactico);
     const capaRutaActiva = L.layerGroup().addTo(mapTactico);
 
-    // --- 1. DATOS HIDROLÓGICOS UNIFICADOS (VISOR TÁCTICO + GLOFAS ESTRATÉGICO) ---
+    // --- 1. DATOS HIDROLÓGICOS ---
     let estacionesHidro = JSON.parse(localStorage.getItem('cop_hidro_v2')) || [
         { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 6.15, alerta: 6.00, evacuacion: 6.50, tendencia: "Creciendo ▲", lat: -27.485, lon: -58.932, actualizado: "PNA / INA" },
         { id: "H2", estacion: "Corrientes Capital", rio: "Paraná", actual: 6.35, alerta: 6.50, evacuacion: 7.00, tendencia: "Estacionario ═", lat: -27.462, lon: -58.838, actualizado: "PNA / INA" },
@@ -270,7 +280,7 @@
         if (!document.getElementById('chk-hidro').checked) return;
 
         estacionesHidro.forEach((h, idx) => {
-            let bg = "#16a34a"; // Verde
+            let bg = "#16a34a";
             let estadoTxt = "NORMAL";
             if (h.actual >= h.evacuacion) { bg = "#dc2626"; estadoTxt = "EVACUACIÓN"; }
             else if (h.actual >= h.alerta) { bg = "#d97706"; estadoTxt = "ALERTA"; }
@@ -317,7 +327,7 @@
         }
     };
 
-    // --- 2. INFRAESTRUCTURA CRÍTICA FIJA ---
+    // --- 2. INFRAESTRUCTURA CRÍTICA ---
     const puntosInfraestructura = [
         { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Resistencia (SARE)", detalle: "Base Aérea Militar Resistencia - Pista 2770m Operativa H24", lat: -27.4499, lon: -59.0561 },
         { tipo: "PISTA", icono: "✈️", nombre: "Aeropuerto Internacional Corrientes (SARC)", detalle: "Pista 2100m Asfalto - Puente Aéreo Alternativo", lat: -27.4455, lon: -58.7619 },
@@ -346,7 +356,7 @@
         renderizarInfraestructura();
     }
 
-    // --- 3. CARTOGRAFÍA OFICIAL (CHACO Y CORRIENTES) ---
+    // --- 3. CARTOGRAFÍA OFICIAL ---
     const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
 
     async function cargarZonasExternas() {
@@ -407,11 +417,10 @@
         const f = datosZonasGeoJSON.features.find(x => nombreZona(x) === deptoSel);
         if (f) {
             mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.3 });
-            document.getElementById('sel-muni').innerHTML = `<option value="">2. ${esc(deptoSel)} (Seleccionado)</option>`;
         }
     }
 
-    // --- 4. RECURSOS SCI Y CORTES DE RUTA (CON BORRADO Y TRAZABILIDAD) ---
+    // --- 4. RECURSOS SCI Y CORTES DE RUTA (CON INTEROPERABILIDAD GEOJSON / SHEETS) ---
     function crearIcono(inst, estado) {
         if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge" title="Corte de Ruta">🚧</div>`, iconSize: [28,28], iconAnchor: [14,14] });
         const color = {"FAA":"#0284c7", "EA":"#4d7c0f", "PNA":"#1e3a8a", "GN":"#15803d", "DC":"#ea580c"}[inst] || "#64748b";
@@ -419,7 +428,7 @@
         return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color};"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot};"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
     }
 
-    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v12')) || [
+    let recursos = JSON.parse(localStorage.getItem('cop_recursos_v13')) || [
         { id: "REC-01", inst: "FAA", nombre: "Nodo Comunicaciones VHF/HF", estado: "ASIGNADO", lat: -27.451, lon: -58.986, sector: "Resistencia", efectivos: 4, operador: "C2 BAM SIS", timestamp: Date.now() - 1800000 },
         { id: "REC-02", inst: "VIALIDAD", nombre: "Corte Preventivo por Agua en Calzada", estado: "NO_DISPONIBLE", lat: -27.475, lon: -58.910, sector: "Acceso Puente Belgrano", efectivos: 0, operador: "Defensa Civil", timestamp: Date.now() - 900000 }
     ];
@@ -488,7 +497,7 @@
 
     window.eliminarRecurso = function(id) {
         recursos = recursos.filter(r => r.id !== id);
-        localStorage.setItem('cop_recursos_v12', JSON.stringify(recursos));
+        localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos));
         renderizarRecursos();
     };
 
@@ -507,12 +516,105 @@
             efectivos: inst === 'VIALIDAD' ? 0 : 4,
             timestamp: Date.now()
         });
-        localStorage.setItem('cop_recursos_v12', JSON.stringify(recursos));
+        localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos));
         document.getElementById('form-recurso').reset();
         renderizarRecursos();
     }
 
-    // --- 5. CLIC EN EL MAPA Y RUTEO TÁCTICO ---
+    // --- INTEROPERABILIDAD: GEOJSON & GOOGLE SHEETS ---
+    function exportarGeoJSON() {
+        const features = recursos.map(r => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [r.lon, r.lat] },
+            properties: { id: r.id, nombre: r.nombre, inst: r.inst, estado: r.estado, sector: r.sector, efectivos: r.efectivos, operador: r.operador, timestamp: r.timestamp }
+        }));
+        const fc = { type: "FeatureCollection", features: features };
+        const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recursos_cop_nea_${new Date().toISOString().slice(0,10)}.geojson`;
+        a.click();
+    }
+
+    function importarGeoJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+                    const nuevos = data.features.map(f => {
+                        const p = f.properties || {};
+                        const coords = f.geometry && f.geometry.coordinates ? f.geometry.coordinates : [0,0];
+                        return {
+                            id: p.id || `REC-${Math.random().toString(36).substr(2, 9)}`,
+                            nombre: p.nombre || p.name || 'Recurso Importado',
+                            inst: p.inst || 'FAA',
+                            estado: p.estado || 'ASIGNADO',
+                            lon: coords[0],
+                            lat: coords[1],
+                            sector: p.sector || 'General',
+                            efectivos: Number(p.efectivos) || 4,
+                            operador: p.operador || 'Importación GeoJSON',
+                            timestamp: p.timestamp || Date.now()
+                        };
+                    });
+                    recursos = [...nuevos, ...recursos];
+                    localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos));
+                    renderizarRecursos();
+                    alert(`✅ Se importaron ${nuevos.length} registros correctamente.`);
+                } else {
+                    alert("❌ Formato GeoJSON no válido.");
+                }
+            } catch(err) {
+                alert("❌ Error al procesar el archivo GeoJSON.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    async function sincronizarConSheets() {
+        const urlInput = document.getElementById('sheet-url-input');
+        const url = urlInput.value.trim();
+        if (!url) return alert("Ingrese la URL del Web App de Google Sheets.");
+        localStorage.setItem('cop_sheet_url', url);
+
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (Array.isArray(data)) {
+                recursos = data.map(item => ({
+                    id: item.id || `REC-${Math.random().toString(36).substr(2, 9)}`,
+                    nombre: item.nombre || item.Nombre || 'Recurso Remoto',
+                    inst: item.inst || item.Institucion || 'FAA',
+                    estado: item.estado || item.Estado || 'ASIGNADO',
+                    lat: parseFloat(item.lat || item.Latitud) || -27.45,
+                    lon: parseFloat(item.lon || item.Longitud) || -58.90,
+                    sector: item.sector || item.Sector || 'General',
+                    efectivos: Number(item.efectivos || item.Efectivos) || 4,
+                    operador: item.operador || 'Google Sheets',
+                    timestamp: item.timestamp ? Number(item.timestamp) : Date.now()
+                }));
+                localStorage.setItem('cop_recursos_v13', JSON.stringify(recursos));
+                renderizarRecursos();
+                alert("✅ Sincronización con Google Sheets completada con éxito.");
+            } else {
+                alert("❌ La respuesta de Google Sheets no tiene el formato de lista esperado.");
+            }
+        } catch(err) {
+            alert("❌ Error al conectar con Google Sheets. Verifique la URL y que esté publicada para acceso anónimo.");
+        }
+    }
+
+    // Cargar URL guardada previamente si existe
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedUrl = localStorage.getItem('cop_sheet_url');
+        if (savedUrl) document.getElementById('sheet-url-input').value = savedUrl;
+    });
+
+    // --- 5. CLIC EN EL MAPA Y RUTEO ---
     function activarSeleccionMapa(modo) {
         modoSeleccionMapa = modo;
         document.getElementById('btn-pick-origen').classList.toggle('picking', modo === 'origen');
@@ -580,7 +682,7 @@
         activarSeleccionMapa(null);
     }
 
-    // --- 6. VISOR ESTRATÉGICO (RADAR ANIMADO + NASA GIBS + CAUDALES GLOFAS SIN API KEY) ---
+    // --- 6. VISOR ESTRATÉGICO ---
     const estadoCapas = {}; let primerError = '';
     const RV = 'Radar RainViewer';
     const rioGrupoEstrategico = L.layerGroup();
@@ -652,11 +754,9 @@
     function inicializarMapaRadar() {
         mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
         
-        // Base por defecto: OpenStreetMap (jamás pide API Key) + opción oscura CARTO
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
         const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© CARTO' });
 
-        // Capas Satelitales NASA GIBS (Sin API Key)
         const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best', nasa = 'NASA GIBS';
         const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
             { maxNativeZoom: 7, maxZoom: 9, opacity: 0.85, attribution: nasa }), 'Satélite GOES-East');
@@ -681,7 +781,6 @@
             { collapsed: false }
         ).addTo(mapRadar);
 
-        // Animación de Radar (6 frames con maxNativeZoom: 7 y esquema 0_0.png libre de bloqueos)
         let frames = [], idx = 0, timer = null;
         const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
 
@@ -739,7 +838,7 @@
         radarCargado = true;
     }
 
-    // --- 7. EXPORTAR SITREP PDF COMPLETO ---
+    // --- 7. EXPORTAR SITREP PDF ---
     function generarSITREP() {
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
@@ -760,7 +859,7 @@
         doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0,10)}.pdf`);
     }
 
-    // Inicializar sistema
+    // Inicialización general
     cargarZonasExternas();
     renderizarHidrometria();
     renderizarInfraestructura();
