@@ -58,8 +58,26 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 </style>
 </head>
 <body>
+
+<!-- MODAL DE ACCESO OPERACIONAL -->
+<div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
+  <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">COP HÍDRICO NEA</h2>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Ingrese sus credenciales de servicio</p>
+    
+    <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
+    <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+    
+    <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">PIN operacional:</label>
+    <input type="password" id="login-pin" maxlength="6" placeholder="****" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
+    
+    <button onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
+    <div id="login-error" style="color: #ef4444; font-size: 0.8rem; margin-top: 0.75rem; text-align: center; display: none;">Credenciales inválidas</div>
+  </div>
+</div>
+
 <div id="top-banner">
-  <div><span class="badge-proto">PROTOTIPO · DATOS DE EJEMPLO</span><strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.1)</strong></div>
+  <div><span class="badge-proto">OPERADOR: <span id="op-name">Iniciando...</span></span><strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.1)</strong></div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="reloj-operativo" style="font-family:monospace"></span>
     <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
@@ -68,7 +86,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 <div class="tab-bar">
   <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico</button>
   <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
-  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y Pronóstico 48h</button>
+  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y Auditoría</button>
 </div>
 
 <!-- VISTA 1: TÁCTICA -->
@@ -145,7 +163,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
           <select id="nuevo-estado" style="width:110px" required><option value="ASIGNADO">🟢 Operativo</option><option value="DISPONIBLE">🟡 Reserva</option><option value="NO_DISPONIBLE">🔴 Crítico</option></select>
         </div>
         <div class="coords-row"><input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required /><input type="number" step="any" id="nueva-lon" placeholder="Lon (clic en mapa)" required /></div>
-        <div style="display:flex;gap:5px"><input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1" required /><input type="text" id="nuevo-operador" placeholder="Operador" style="flex:1" required /></div>
+        <div style="display:flex;gap:5px"><input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1" required /></div>
         <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
       </form>
     </details>
@@ -181,7 +199,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 <!-- VISTA 3: INTELIGENCIA -->
 <div id="vista-analytics" class="view-container">
   <div style="max-width:1200px;margin:0 auto;width:100%">
-    <h2 style="color:#1e293b;margin-top:0">📊 Inteligencia Operativa y Pronóstico 48h</h2>
+    <h2 style="color:#1e293b;margin-top:0">📊 Inteligencia Operativa y Auditoría</h2>
     <div class="analytics-grid">
       <div class="analytics-card" style="grid-column:span 2">
         <h4>🌤️ Pronóstico próximas 48 h (bloques de 6 h)
@@ -200,7 +218,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
       </div>
       <div class="analytics-card" style="grid-column:span 2">
-        <h4>📝 Bitácora de eventos (últimos 15)</h4>
+        <h4>📝 Bitácora de eventos y Auditoría (Local)</h4>
         <div id="bitacora" style="font-size:12px;color:#334155;max-height:200px;overflow-y:auto"></div>
       </div>
     </div>
@@ -215,9 +233,111 @@ const leer = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? d
 const guardar = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 
-// --- BITÁCORA ---
+// ==========================================
+// NUEVO: SISTEMA DE AUTENTICACIÓN CONTRA SHEETS
+// ==========================================
+// AQUI DEBE PEGAR LA URL DE SU WEB APP DE GOOGLE APPS SCRIPT
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxSEBmndbOaUt-5juYcVeWty65zk207INH18iZYu99EBjW1nEHqByEtJ0zNtkPbzKe4bQ/exec";
+
+let sesionActiva = {
+  autenticado: false,
+  email: "",
+  nombre: "",
+  rol: "",
+  pin: ""
+};
+
+async function iniciarSesionCOP() {
+  const emailInput = document.getElementById("login-email").value.trim();
+  const pinInput = document.getElementById("login-pin").value.trim();
+  const errDiv = document.getElementById("login-error");
+  const btn = document.getElementById("btn-login");
+
+  if (!emailInput || !pinInput) {
+    errDiv.innerText = "Complete ambos campos";
+    errDiv.style.display = "block";
+    return;
+  }
+
+  errDiv.style.display = "none";
+  btn.innerText = "VERIFICANDO CREDENCIALES...";
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${COP_API_URL}?action=getData&tab=Usuarios`);
+    const json = await res.json();
+
+    if (json.status !== "success") throw new Error("Fallo de conexión");
+
+    const usuarioValido = json.data.find(u => 
+      u.Email.toLowerCase() === emailInput.toLowerCase() && 
+      String(u.PIN).trim() === pinInput &&
+      String(u.Activo).toUpperCase() === "SI"
+    );
+
+    if (usuarioValido) {
+      sesionActiva = {
+        autenticado: true,
+        email: usuarioValido.Email,
+        nombre: usuarioValido.Nombre_Rango,
+        rol: usuarioValido.Rol,
+        pin: pinInput
+      };
+      
+      document.getElementById("op-name").innerText = `${usuarioValido.Nombre_Rango} (${usuarioValido.Rol})`;
+      document.getElementById("modal-login").style.display = "none";
+      
+      // Asentar en la base de datos centralizada
+      ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
+      
+      // Inicializamos mapa luego de loguear
+      if(!mapTactico) inicializarMapas();
+
+    } else {
+      errDiv.innerText = "Usuario no habilitado o PIN incorrecto";
+      errDiv.style.display = "block";
+      btn.innerText = "INGRESAR AL SISTEMA";
+      btn.disabled = false;
+    }
+  } catch (err) {
+    errDiv.innerText = "Error al conectar con la base de datos: " + err.message;
+    errDiv.style.display = "block";
+    btn.innerText = "INGRESAR AL SISTEMA";
+    btn.disabled = false;
+  }
+}
+
+// Despachador de acciones (Inserta o Actualiza en Sheets dejando rastro)
+async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
+  if (!sesionActiva.autenticado) return;
+
+  const payload = {
+    email: sesionActiva.email,
+    pin: sesionActiva.pin,
+    action: tipoAccion,
+    tab: tabDestino,
+    data: datosRegistro,
+    detalle: motivoAuditoria
+  };
+
+  try {
+    fetch(COP_API_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }).catch(e => console.error("Fallo auditoría remota:", e));
+  } catch (error) {
+    console.error("Error local al persistir auditoría:", error);
+  }
+}
+
+// --- BITÁCORA LOCAL DE APOYO ---
 let bitacora = leer(LS.log, []);
-function logEvento(t) { bitacora.unshift({ ts: Date.now(), t }); bitacora = bitacora.slice(0, 100); guardar(LS.log, bitacora); }
+function logEvento(t) { 
+  const txtCompleto = `[${sesionActiva.nombre || 'Sistema'}] ${t}`;
+  bitacora.unshift({ ts: Date.now(), t: txtCompleto }); 
+  bitacora = bitacora.slice(0, 100); 
+  guardar(LS.log, bitacora); 
+}
 const fmtFecha = ts => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 function edadTxt(ts) {
   if (!ts) return 'Sin hora';
@@ -237,14 +357,35 @@ function cambiarPestana(vista) {
   if (vista === 'analytics') actualizarDashboardAnalytics();
 }
 
-// --- MAPA TÁCTICO ---
-mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
+// --- GLOBALES MAPA TACTICO ---
+let zonasLayerTactico, capaHidrometria, capaInfraestructura, capaRecursos, capaRutaActiva;
 let datosZonasGeoJSON = { type: "FeatureCollection", features: [] };
-const zonasLayerTactico = L.layerGroup().addTo(mapTactico), capaHidrometria = L.layerGroup().addTo(mapTactico),
-      capaInfraestructura = L.layerGroup().addTo(mapTactico), capaRecursos = L.layerGroup().addTo(mapTactico), capaRutaActiva = L.layerGroup().addTo(mapTactico);
 
-// --- HIDROMETRÍA (valores por defecto = EJEMPLO hasta que se cargue un nivel real) ---
+function inicializarMapas() {
+  mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 9);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
+  zonasLayerTactico = L.layerGroup().addTo(mapTactico);
+  capaHidrometria = L.layerGroup().addTo(mapTactico);
+  capaInfraestructura = L.layerGroup().addTo(mapTactico);
+  capaRecursos = L.layerGroup().addTo(mapTactico);
+  capaRutaActiva = L.layerGroup().addTo(mapTactico);
+
+  poblarSelectorNivel(); cargarZonasExternas(); renderizarHidrometria(); renderizarInfraestructura(); renderizarRecursos(); cargarCaudalesGloFAS();
+  
+  mapTactico.on('click', e => {
+    const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
+    if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+    else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+    else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
+  });
+  
+  mapTactico.on('popupopen', ev => { 
+    const b = ev.popup.getElement().querySelector('[data-del]'); 
+    if (b) b.onclick = () => { eliminarRecurso(b.dataset.del); mapTactico.closePopup(); }; 
+  });
+}
+
+// --- HIDROMETRÍA ---
 let estacionesHidro = leer(LS.hid, null) || [
   { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 6.15, alerta: 6.00, evacuacion: 6.50, tendencia: "═", lat: -27.485, lon: -58.932, ts: null, ejemplo: true },
   { id: "H2", estacion: "Corrientes Capital", rio: "Paraná", actual: 6.35, alerta: 6.50, evacuacion: 7.00, tendencia: "═", lat: -27.462, lon: -58.838, ts: null, ejemplo: true },
@@ -264,6 +405,7 @@ function estadoHidro(h) {
   return { txt, color, tag: '', ok: true };
 }
 function renderizarHidrometria() {
+  if(!capaHidrometria) return;
   capaHidrometria.clearLayers();
   if (!document.getElementById('chk-hidro').checked) return;
   estacionesHidro.forEach(h => {
@@ -293,11 +435,15 @@ function cargarNivelManual(ev) {
   h.tendencia = h.ejemplo ? '═' : dif > 0.02 ? '▲' : dif < -0.02 ? '▼' : '═';
   h.actual = alt; if (!isNaN(ale)) h.alerta = ale; if (!isNaN(eva)) h.evacuacion = eva;
   h.ts = Date.now(); h.ejemplo = false; guardar(LS.hid, estacionesHidro);
-  logEvento(`Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`);
+  
+  const mensajeLog = `Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`;
+  logEvento(mensajeLog);
+  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: "HIDRO" }, mensajeLog); // Impacta en la nube
+  
   renderizarHidrometria(); dibujarRiosEstrategico(); prellenarNivel();
 }
 
-// --- INFRAESTRUCTURA (EJEMPLO: verificar coordenadas y capacidades con fuente oficial) ---
+// --- INFRAESTRUCTURA ---
 const puntosInfraestructura = [
   { icono: "✈️", nombre: "Aeropuerto Resistencia", detalle: "Pista/base aérea", lat: -27.4499, lon: -59.0561 },
   { icono: "✈️", nombre: "Aeropuerto Corrientes", detalle: "Pista", lat: -27.4455, lon: -58.7619 },
@@ -306,6 +452,7 @@ const puntosInfraestructura = [
   { icono: "⛺", nombre: "Centro de evacuados (ejemplo)", detalle: "Capacidad sin verificar", lat: -27.4412, lon: -58.9950 }
 ];
 function renderizarInfraestructura() {
+  if(!capaInfraestructura) return;
   capaInfraestructura.clearLayers();
   if (!document.getElementById('chk-infra').checked) return;
   puntosInfraestructura.forEach(p => L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
@@ -324,6 +471,7 @@ async function cargarZonasExternas() {
   poblarSelectorDepartamentos(datosZonasGeoJSON.features); dibujarZonasYCascada();
 }
 function dibujarZonasYCascada(feats = null) {
+  if(!zonasLayerTactico) return;
   zonasLayerTactico.clearLayers();
   L.geoJSON({ type: "FeatureCollection", features: feats || datosZonasGeoJSON.features }, {
     style: () => ({ color: '#2980b9', weight: 2, fillOpacity: 0.18 }),
@@ -357,6 +505,7 @@ let recursos = leer(LS.rec, []);
 const guardarRecursos = () => guardar(LS.rec, recursos);
 
 function renderizarRecursos() {
+  if(!capaRecursos) return;
   capaRecursos.clearLayers();
   const fInst = document.getElementById('filtro-institucion').value, verCortes = document.getElementById('chk-cortes').checked, verUni = document.getElementById('chk-unidades').checked;
   const lista = document.getElementById('lista-recursos'); lista.innerHTML = '';
@@ -375,25 +524,30 @@ function renderizarRecursos() {
 }
 function eliminarRecurso(id) {
   const r = recursos.find(x => x.id === id); if (!r || !confirm(`¿Eliminar "${r.nombre}"?`)) return;
-  recursos = recursos.filter(x => x.id !== id); guardarRecursos(); logEvento(`Baja: [${r.inst}] ${r.nombre}`); renderizarRecursos();
+  recursos = recursos.filter(x => x.id !== id); guardarRecursos(); 
+  logEvento(`Baja: [${r.inst}] ${r.nombre}`); 
+  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: r.id }, `Eliminó unidad: ${r.nombre}`);
+  renderizarRecursos();
 }
-// Delegación de eventos (sin onclick con datos dentro del HTML)
+
 document.getElementById('lista-recursos').addEventListener('click', ev => {
   const d = ev.target.closest('[data-del]'); if (d) return eliminarRecurso(d.dataset.del);
   const c = ev.target.closest('[data-center]'); if (c) { const [la, lo] = c.dataset.center.split(',').map(Number); mapTactico.setView([la, lo], 14); }
 });
-mapTactico.on('popupopen', ev => { const b = ev.popup.getElement().querySelector('[data-del]'); if (b) b.onclick = () => { eliminarRecurso(b.dataset.del); mapTactico.closePopup(); }; });
 
 function agregarRecursoEnVivo(e) {
   e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
+  const opName = sesionActiva.nombre;
   const r = { id: `REC-${Date.now()}`, nombre: document.getElementById('nuevo-nombre').value, inst, estado: document.getElementById('nuevo-estado').value,
     lat: parseFloat(document.getElementById('nueva-lat').value), lon: parseFloat(document.getElementById('nueva-lon').value),
-    sector: document.getElementById('nuevo-sector').value, operador: document.getElementById('nuevo-operador').value, efectivos: inst === 'VIALIDAD' ? 0 : 4, timestamp: Date.now(), origen: 'manual' };
-  recursos.unshift(r); guardarRecursos(); logEvento(`Alta manual: [${inst}] ${r.nombre} (${r.sector})`);
+    sector: document.getElementById('nuevo-sector').value, operador: opName, efectivos: inst === 'VIALIDAD' ? 0 : 4, timestamp: Date.now(), origen: 'manual' };
+  recursos.unshift(r); guardarRecursos(); 
+  logEvento(`Alta manual: [${inst}] ${r.nombre} (${r.sector})`);
+  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: r.id }, `Desplegó unidad manual: ${r.nombre}`);
   document.getElementById('form-recurso').reset(); renderizarRecursos();
 }
 
-// --- SINCRONIZACIÓN (fusiona: no borra lo cargado a mano; no inventa coordenadas) ---
+// --- SINCRONIZACIÓN ---
 const espera = ms => new Promise(r => setTimeout(r, ms));
 async function geocodificar(dir) {
   try { const d = await (await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(dir + ', Argentina')}&limit=1`)).json(); return d.length ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) } : null; } catch (e) { return null; }
@@ -444,12 +598,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // --- RUTEO ---
 function activarSeleccionMapa(m) { modoSeleccionMapa = m; document.getElementById('btn-pick-origen').classList.toggle('picking', m === 'origen'); document.getElementById('btn-pick-destino').classList.toggle('picking', m === 'destino'); }
-mapTactico.on('click', e => {
-  const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
-  if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-  else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-  else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
-});
+
 async function calcularRutaTactica() {
   const o = document.getElementById('ruta-origen').value, d = document.getElementById('ruta-destino').value, res = document.getElementById('resultado-ruta');
   if (!o || !d) return; res.style.display = 'block'; res.innerHTML = "⏳ Trazando...";
@@ -465,7 +614,7 @@ async function calcularRutaTactica() {
 }
 function borrarRutaTactica() { capaRutaActiva.clearLayers(); ['ruta-origen', 'ruta-destino'].forEach(i => document.getElementById(i).value = ''); document.getElementById('resultado-ruta').style.display = 'none'; activarSeleccionMapa(null); }
 
-// --- CAUDALES GloFAS (una sola carga + refresco horario) ---
+// --- CAUDALES GloFAS ---
 async function cargarCaudalesGloFAS() {
   await Promise.all(estacionesHidro.map(async s => {
     try {
@@ -556,9 +705,10 @@ function generarSITREP() {
   const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
   doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
   doc.setFontSize(9.5); doc.text(`Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
-  if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 31); }
-  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 38);
-  doc.autoTable({ startY: 41, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q GloFAS']],
+  doc.text(`Operador a cargo: ${sesionActiva.nombre || 'N/A'}`, 14, 31);
+  if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 37); }
+  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 44);
+  doc.autoTable({ startY: 47, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q GloFAS']],
     body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬]/g, '')]),
     headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
   let y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios desplegados y cortes viales", 14, y);
@@ -569,10 +719,11 @@ function generarSITREP() {
 }
 
 // --- ARRANQUE ---
-poblarSelectorNivel(); cargarZonasExternas(); renderizarHidrometria(); renderizarInfraestructura(); renderizarRecursos(); cargarCaudalesGloFAS();
+// El mapa ya no arranca automático, espera a la validación de login
 setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
-setInterval(() => { renderizarRecursos(); renderizarHidrometria(); }, 60000);
-setInterval(cargarCaudalesGloFAS, 3600000);
+setInterval(() => { if(sesionActiva.autenticado) { renderizarRecursos(); renderizarHidrometria(); } }, 60000);
+setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600000);
+
 </script>
 </body>
 </html>
