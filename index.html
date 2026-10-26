@@ -151,6 +151,23 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </div>
     </details>
 
+    <!-- NUEVO: PANEL DE MISIONES AÉREAS -->
+    <details class="form-panel" id="panel-misiones">
+      <summary>🚁 Planificar Misión Aérea</summary>
+      <form class="form-grid" onsubmit="guardarMisionVuelo(event)">
+        <input type="text" id="mis-tipo" placeholder="Tipo (Ej: MEDEVAC, Puente Aéreo)" required />
+        <select id="mis-medio" required>
+          <option value="">Cargando aeronaves disponibles...</option>
+        </select>
+        <input type="text" id="mis-ruta" placeholder="Ruta (Ej: Resistencia - Isla del Cerrito)" required />
+        <select id="mis-estado" required>
+          <option value="Planificada">🟡 Planificada</option>
+          <option value="En Curso">🟢 En Curso</option>
+        </select>
+        <button type="submit" class="btn-submit" style="background:#8e44ad">📝 Registrar Misión en Sistema</button>
+      </form>
+    </details>
+
     <details class="form-panel" id="panel-alta">
       <summary>➕ Desplegar Unidad Manual</summary>
       <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
@@ -213,6 +230,16 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         <h4>🌊 Resumen Hidrológico</h4>
         <div style="max-height:250px;overflow-y:auto"><table class="analytics-table" id="tabla-analitica-rios"><thead><tr><th>Estación</th><th>Altura</th><th>Estado</th><th>Q GloFAS</th></tr></thead><tbody></tbody></table></div>
       </div>
+      <!-- NUEVO: TABLA DE MISIONES AÉREAS EN CURSO -->
+      <div class="analytics-card">
+        <h4>🚁 Misiones Aéreas Activas</h4>
+        <div style="max-height:250px;overflow-y:auto">
+          <table class="analytics-table" id="tabla-misiones">
+            <thead><tr><th>Misión</th><th>Medio</th><th>Ruta / Destino</th><th>Estado</th></tr></thead>
+            <tbody><tr><td colspan="4" style="text-align:center;color:#64748b">Esperando login...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
       <div class="analytics-card">
         <h4>🛡️ Despliegue y Cortes</h4>
         <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
@@ -234,9 +261,8 @@ const guardar = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 
 // ==========================================
-// NUEVO: SISTEMA DE AUTENTICACIÓN CONTRA SHEETS
+// SISTEMA DE AUTENTICACIÓN CONTRA SHEETS
 // ==========================================
-// AQUI DEBE PEGAR LA URL DE SU WEB APP DE GOOGLE APPS SCRIPT
 const COP_API_URL = "https://script.google.com/macros/s/AKfycbxSEBmndbOaUt-5juYcVeWty65zk207INH18iZYu99EBjW1nEHqByEtJ0zNtkPbzKe4bQ/exec";
 
 let sesionActiva = {
@@ -246,6 +272,95 @@ let sesionActiva = {
   rol: "",
   pin: ""
 };
+
+// --- MÓDULO DE MISIONES AÉREAS ---
+async function cargarAeronavesMision() {
+  const sel = document.getElementById('mis-medio');
+  sel.innerHTML = '<option value="">Consultando Base de Datos...</option>';
+  try {
+    const res = await fetch(`${COP_API_URL}?action=getData&tab=Aeronaves`);
+    const json = await res.json();
+    if (json.status === 'success') {
+      sel.innerHTML = '<option value="">Seleccione Aeronave Disponible...</option>';
+      json.data.forEach(a => {
+        if (String(a.Disponible).trim().toUpperCase() === 'SI') {
+          sel.add(new Option(`${a.Matricula} - ${a.Tipo} (Base: ${a.Base_Asiento})`, a.Matricula));
+        }
+      });
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Error de conexión con Sheets</option>';
+  }
+}
+
+async function guardarMisionVuelo(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.innerText = "Guardando en la nube..."; 
+  btn.disabled = true;
+
+  const idMision = `MIS-${Math.floor(Date.now()/1000)}`;
+  const f = new Date();
+  const fechaHora = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')} ${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`;
+  
+  const datosMision = {
+    ID_Mision: idMision,
+    Fecha_Hora: fechaHora,
+    Tipo_Mision: document.getElementById('mis-tipo').value.trim(),
+    Medio_Asignado: document.getElementById('mis-medio').value,
+    Origen_Destino: document.getElementById('mis-ruta').value.trim(),
+    Estado: document.getElementById('mis-estado').value,
+    Operador_Responsable: sesionActiva.nombre
+  };
+
+  const detalleAuditoria = `Planificó misión ${datosMision.Tipo_Mision} con la aeronave ${datosMision.Medio_Asignado}`;
+  
+  await ejecutarAccionAuditada("Misiones", "INSERT", datosMision, detalleAuditoria);
+  logEvento(detalleAuditoria);
+  alert(`✅ Misión ${idMision} asignada exitosamente al ${datosMision.Medio_Asignado}.`);
+  
+  e.target.reset();
+  btn.innerText = "📝 Registrar Misión en Sistema"; 
+  btn.disabled = false;
+  cargarMisionesEnTabla(); // Refresca la tabla
+}
+
+// Descargar misiones de Sheets y mostrarlas en la tabla
+async function cargarMisionesEnTabla() {
+  if (!sesionActiva.autenticado) return;
+  const tb = document.querySelector('#tabla-misiones tbody');
+  tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">Actualizando...</td></tr>';
+  
+  try {
+    const res = await fetch(`${COP_API_URL}?action=getData&tab=Misiones`);
+    const json = await res.json();
+    tb.innerHTML = '';
+    
+    if (json.status === 'success' && json.data.length > 0) {
+      // Mostrar solo las misiones que no estén canceladas/finalizadas y ordenarlas
+      const activas = json.data.filter(m => !String(m.Estado).toUpperCase().includes("FINALIZADA") && !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse();
+      
+      if (activas.length === 0) {
+        tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">No hay misiones activas.</td></tr>';
+      } else {
+        activas.forEach(m => {
+          const colorEstado = m.Estado.includes("Curso") ? "#16a34a" : "#d97706";
+          tb.insertAdjacentHTML('beforeend', `<tr>
+            <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}</small></td>
+            <td><b>${esc(m.Medio_Asignado)}</b></td>
+            <td>${esc(m.Origen_Destino)}</td>
+            <td style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</td>
+          </tr>`);
+        });
+      }
+    } else {
+      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">Sin datos.</td></tr>';
+    }
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#dc2626">Error al cargar misiones.</td></tr>';
+  }
+}
+// --- FIN MÓDULO MISIONES ---
 
 async function iniciarSesionCOP() {
   const emailInput = document.getElementById("login-email").value.trim();
@@ -289,6 +404,10 @@ async function iniciarSesionCOP() {
       
       // Asentar en la base de datos centralizada
       ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
+      
+      // Llenar selector de helicópteros y tabla de misiones
+      cargarAeronavesMision();
+      cargarMisionesEnTabla();
       
       // Inicializamos mapa luego de loguear
       if(!mapTactico) inicializarMapas();
@@ -354,7 +473,7 @@ function cambiarPestana(vista) {
   document.getElementById('vista-' + vista).classList.add('active');
   if (vista === 'tactica') mapTactico.invalidateSize();
   if (vista === 'radar') { if (!radarCargado) inicializarMapaRadar(); mapRadar.invalidateSize(); dibujarRiosEstrategico(); }
-  if (vista === 'analytics') actualizarDashboardAnalytics();
+  if (vista === 'analytics') { actualizarDashboardAnalytics(); cargarMisionesEnTabla(); }
 }
 
 // --- GLOBALES MAPA TACTICO ---
@@ -438,7 +557,7 @@ function cargarNivelManual(ev) {
   
   const mensajeLog = `Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`;
   logEvento(mensajeLog);
-  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: "HIDRO" }, mensajeLog); // Impacta en la nube
+  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: "HIDRO" }, mensajeLog);
   
   renderizarHidrometria(); dibujarRiosEstrategico(); prellenarNivel();
 }
