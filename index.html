@@ -151,15 +151,23 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </div>
     </details>
 
-    <!-- NUEVO: PANEL DE MISIONES AÉREAS -->
+    <!-- PANEL DE MISIONES AÉREAS -->
     <details class="form-panel" id="panel-misiones">
       <summary>🚁 Planificar Misión Aérea</summary>
       <form class="form-grid" onsubmit="guardarMisionVuelo(event)">
-        <input type="text" id="mis-tipo" placeholder="Tipo (Ej: MEDEVAC, Puente Aéreo)" required />
-        <select id="mis-medio" required>
-          <option value="">Cargando aeronaves disponibles...</option>
-        </select>
-        <input type="text" id="mis-ruta" placeholder="Ruta (Ej: Resistencia - Isla del Cerrito)" required />
+        <input type="datetime-local" id="mis-fecha" required title="Fecha y Hora de la Misión" />
+        <input type="text" id="mis-tipo" placeholder="Tipo (Ej: MEDEVAC, Inserción)" required />
+        <select id="mis-medio" required><option value="">Cargando aeronaves disponibles...</option></select>
+        
+        <div style="display:flex;gap:4px">
+          <input type="text" id="mis-origen" placeholder="Origen (coord o texto)" required style="flex:1" />
+          <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-origen')">📍</button>
+        </div>
+        <div style="display:flex;gap:4px">
+          <input type="text" id="mis-destino" placeholder="Destino (coord o texto)" required style="flex:1" />
+          <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-destino')">🏁</button>
+        </div>
+        
         <select id="mis-estado" required>
           <option value="Planificada">🟡 Planificada</option>
           <option value="En Curso">🟢 En Curso</option>
@@ -230,7 +238,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         <h4>🌊 Resumen Hidrológico</h4>
         <div style="max-height:250px;overflow-y:auto"><table class="analytics-table" id="tabla-analitica-rios"><thead><tr><th>Estación</th><th>Altura</th><th>Estado</th><th>Q GloFAS</th></tr></thead><tbody></tbody></table></div>
       </div>
-      <!-- NUEVO: TABLA DE MISIONES AÉREAS EN CURSO -->
+      <!-- TABLA DE MISIONES AÉREAS EN CURSO -->
       <div class="analytics-card">
         <h4>🚁 Misiones Aéreas Activas</h4>
         <div style="max-height:250px;overflow-y:auto">
@@ -300,15 +308,16 @@ async function guardarMisionVuelo(e) {
   btn.disabled = true;
 
   const idMision = `MIS-${Math.floor(Date.now()/1000)}`;
-  const f = new Date();
-  const fechaHora = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')} ${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`;
+  const fechaHora = document.getElementById('mis-fecha').value.replace('T', ' '); // Toma la fecha del usuario
+  const origen = document.getElementById('mis-origen').value.trim();
+  const destino = document.getElementById('mis-destino').value.trim();
   
   const datosMision = {
     ID_Mision: idMision,
     Fecha_Hora: fechaHora,
     Tipo_Mision: document.getElementById('mis-tipo').value.trim(),
     Medio_Asignado: document.getElementById('mis-medio').value,
-    Origen_Destino: document.getElementById('mis-ruta').value.trim(),
+    Origen_Destino: `${origen} | ${destino}`, // Lo guardamos separado por barra
     Estado: document.getElementById('mis-estado').value,
     Operador_Responsable: sesionActiva.nombre
   };
@@ -317,15 +326,14 @@ async function guardarMisionVuelo(e) {
   
   await ejecutarAccionAuditada("Misiones", "INSERT", datosMision, detalleAuditoria);
   logEvento(detalleAuditoria);
-  alert(`✅ Misión ${idMision} asignada exitosamente al ${datosMision.Medio_Asignado}.`);
+  alert(`✅ Misión ${idMision} planificada exitosamente.`);
   
   e.target.reset();
   btn.innerText = "📝 Registrar Misión en Sistema"; 
   btn.disabled = false;
-  cargarMisionesEnTabla(); // Refresca la tabla
+  cargarMisionesEnTabla();
 }
 
-// Descargar misiones de Sheets y mostrarlas en la tabla
 async function cargarMisionesEnTabla() {
   if (!sesionActiva.autenticado) return;
   const tb = document.querySelector('#tabla-misiones tbody');
@@ -337,7 +345,6 @@ async function cargarMisionesEnTabla() {
     tb.innerHTML = '';
     
     if (json.status === 'success' && json.data.length > 0) {
-      // Mostrar solo las misiones que no estén canceladas/finalizadas y ordenarlas
       const activas = json.data.filter(m => !String(m.Estado).toUpperCase().includes("FINALIZADA") && !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse();
       
       if (activas.length === 0) {
@@ -345,10 +352,19 @@ async function cargarMisionesEnTabla() {
       } else {
         activas.forEach(m => {
           const colorEstado = m.Estado.includes("Curso") ? "#16a34a" : "#d97706";
+          // Separar origen y destino (compatible con el formato viejo "-" o el nuevo "|")
+          const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
+          const parts = String(m.Origen_Destino).split(separador);
+          const o = parts[0] ? parts[0].trim() : 'N/A';
+          const d = parts.length > 1 ? parts[1].trim() : 'N/A';
+          
           tb.insertAdjacentHTML('beforeend', `<tr>
-            <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}</small></td>
+            <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
             <td><b>${esc(m.Medio_Asignado)}</b></td>
-            <td>${esc(m.Origen_Destino)}</td>
+            <td>
+              O: ${esc(o)}<br>D: ${esc(d)}<br>
+              <button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o)}', '${esc(d)}')">🗺️ Ver Ruta y Clima</button>
+            </td>
             <td style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</td>
           </tr>`);
         });
@@ -358,6 +374,49 @@ async function cargarMisionesEnTabla() {
     }
   } catch (e) {
     tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#dc2626">Error al cargar misiones.</td></tr>';
+  }
+}
+
+async function dibujarRutaYMet(origen, destino) {
+  if (!origen || !destino || origen === 'N/A') return alert("Faltan datos de origen o destino");
+  
+  // 1. Cambiamos de pestaña al Visor Táctico
+  cambiarPestana('tactica');
+  
+  // 2. Llenamos el ruteador táctico y lo ejecutamos
+  document.getElementById('ruta-origen').value = origen;
+  document.getElementById('ruta-destino').value = destino;
+  await calcularRutaTactica(); // Traza la línea en el mapa
+  
+  // 3. Generamos el reporte meteorológico en ruta
+  const res = document.getElementById('resultado-ruta');
+  res.innerHTML += "<br>⏳ <i>Generando informe meteorológico (Zonas Despegue/Aterrizaje)...</i>";
+  
+  try {
+    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
+    const a = await geo(origen), b = await geo(destino);
+    if (!a || !b) throw new Error("No se pudieron ubicar las coordenadas.");
+    
+    // Consultar clima simultáneo para ambos puntos
+    const [wA, wB] = await Promise.all([
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${a[0]}&longitude=${a[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json()),
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${b[0]}&longitude=${b[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json())
+    ]);
+    
+    // Traducción táctica rápida de códigos OMM
+    const WMO = {0:"Despejado", 1:"Parc. Nublado", 2:"Nublado", 3:"Cubierto", 45:"Niebla", 51:"Llovizna", 61:"Lluvia", 71:"Nieve", 95:"Tormenta"};
+    const climaA = WMO[wA.current.weather_code] || "Variable";
+    const climaB = WMO[wB.current.weather_code] || "Variable";
+    
+    // Inyectar el informe en la pantalla
+    res.innerHTML += `
+      <div style="margin-top:8px; padding:8px; background:#1e293b; color:#fff; border-radius:4px; border-left:4px solid #3498db; font-size:12px;">
+        <b style="color:#3498db">🌤️ INFORME MET EN RUTA:</b><br>
+        📍 <b>Despegue:</b> ${wA.current.temperature_2m}°C | Viento: ${wA.current.wind_speed_10m} km/h | ${climaA}<br>
+        🏁 <b>Aterrizaje:</b> ${wB.current.temperature_2m}°C | Viento: ${wB.current.wind_speed_10m} km/h | ${climaB}
+      </div>`;
+  } catch (err) {
+    res.innerHTML += `<br><span style='color:#ef4444'>❌ Fallo al obtener clima: ${err.message}</span>`;
   }
 }
 // --- FIN MÓDULO MISIONES ---
@@ -495,6 +554,8 @@ function inicializarMapas() {
     const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
     if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
     else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+    else if (modoSeleccionMapa === 'mis-origen') { document.getElementById('mis-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
+    else if (modoSeleccionMapa === 'mis-destino') { document.getElementById('mis-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
     else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
   });
   
@@ -557,7 +618,7 @@ function cargarNivelManual(ev) {
   
   const mensajeLog = `Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`;
   logEvento(mensajeLog);
-  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: "HIDRO" }, mensajeLog);
+  ejecutarAccionAuditada("Registro_Auditoria", "INSERT", { ID: "HIDRO" }, mensajeLog); // Impacta en la nube
   
   renderizarHidrometria(); dibujarRiosEstrategico(); prellenarNivel();
 }
