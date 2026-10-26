@@ -151,7 +151,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </div>
     </details>
 
-    <!-- PANEL DE MISIONES AÉREAS -->
+    <!-- PANEL DE MISIONES AÉREAS ACTUALIZADO -->
     <details class="form-panel" id="panel-misiones">
       <summary>🚁 Planificar Misión Aérea</summary>
       <form class="form-grid" onsubmit="guardarMisionVuelo(event)">
@@ -238,16 +238,18 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         <h4>🌊 Resumen Hidrológico</h4>
         <div style="max-height:250px;overflow-y:auto"><table class="analytics-table" id="tabla-analitica-rios"><thead><tr><th>Estación</th><th>Altura</th><th>Estado</th><th>Q GloFAS</th></tr></thead><tbody></tbody></table></div>
       </div>
-      <!-- TABLA DE MISIONES AÉREAS EN CURSO -->
+      
+      <!-- TABLA DE MISIONES AÉREAS CON BOTONERA DE CICLO DE VIDA -->
       <div class="analytics-card">
         <h4>🚁 Misiones Aéreas Activas</h4>
-        <div style="max-height:250px;overflow-y:auto">
+        <div style="max-height:300px;overflow-y:auto">
           <table class="analytics-table" id="tabla-misiones">
-            <thead><tr><th>Misión</th><th>Medio</th><th>Ruta / Destino</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Misión</th><th>Medio</th><th>Ruta / Destino</th><th>Estado y Acciones</th></tr></thead>
             <tbody><tr><td colspan="4" style="text-align:center;color:#64748b">Esperando login...</td></tr></tbody>
           </table>
         </div>
       </div>
+      
       <div class="analytics-card">
         <h4>🛡️ Despliegue y Cortes</h4>
         <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
@@ -281,7 +283,9 @@ let sesionActiva = {
   pin: ""
 };
 
-// --- MÓDULO DE MISIONES AÉREAS ---
+// ==========================================
+// --- MÓDULO DE MISIONES AÉREAS AVANZADO ---
+// ==========================================
 async function cargarAeronavesMision() {
   const sel = document.getElementById('mis-medio');
   sel.innerHTML = '<option value="">Consultando Base de Datos...</option>';
@@ -308,7 +312,7 @@ async function guardarMisionVuelo(e) {
   btn.disabled = true;
 
   const idMision = `MIS-${Math.floor(Date.now()/1000)}`;
-  const fechaHora = document.getElementById('mis-fecha').value.replace('T', ' '); // Toma la fecha del usuario
+  const fechaHora = document.getElementById('mis-fecha').value.replace('T', ' ');
   const origen = document.getElementById('mis-origen').value.trim();
   const destino = document.getElementById('mis-destino').value.trim();
   
@@ -317,7 +321,7 @@ async function guardarMisionVuelo(e) {
     Fecha_Hora: fechaHora,
     Tipo_Mision: document.getElementById('mis-tipo').value.trim(),
     Medio_Asignado: document.getElementById('mis-medio').value,
-    Origen_Destino: `${origen} | ${destino}`, // Lo guardamos separado por barra
+    Origen_Destino: `${origen} | ${destino}`,
     Estado: document.getElementById('mis-estado').value,
     Operador_Responsable: sesionActiva.nombre
   };
@@ -345,27 +349,39 @@ async function cargarMisionesEnTabla() {
     tb.innerHTML = '';
     
     if (json.status === 'success' && json.data.length > 0) {
-      const activas = json.data.filter(m => !String(m.Estado).toUpperCase().includes("FINALIZADA") && !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse();
+      // Ocultamos únicamente las "CANCELADAS". Las finalizadas y suspendidas quedan en el historial
+      const activas = json.data.filter(m => !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse().slice(0, 15);
       
       if (activas.length === 0) {
-        tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">No hay misiones activas.</td></tr>';
+        tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">No hay misiones operativas recientes.</td></tr>';
       } else {
         activas.forEach(m => {
-          const colorEstado = m.Estado.includes("Curso") ? "#16a34a" : "#d97706";
-          // Separar origen y destino (compatible con el formato viejo "-" o el nuevo "|")
+          const st = String(m.Estado).toUpperCase();
+          const colorEstado = st.includes("CURSO") ? "#16a34a" : st.includes("FINALIZADA") ? "#2563eb" : st.includes("SUSPENDIDA") ? "#d97706" : "#3b82f6";
+          
           const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
           const parts = String(m.Origen_Destino).split(separador);
           const o = parts[0] ? parts[0].trim() : 'N/A';
           const d = parts.length > 1 ? parts[1].trim() : 'N/A';
           
+          // Botonera de Ciclo de Vida
+          const btnActions = `
+            <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
+              <button class="btn-pick" style="background:#16a34a;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'En Curso')" title="Despegar / Iniciar">🚀</button>
+              <button class="btn-pick" style="background:#d97706;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Suspendida')" title="Suspender">⏸️</button>
+              <button class="btn-pick" style="background:#2563eb;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Finalizada')" title="Finalizar / Aterrizar">✅</button>
+              <button class="btn-pick" style="background:#ef4444;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Cancelada')" title="Borrar / Cancelar">🗑️</button>
+              <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o)}', '${esc(d)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
+            </div>`;
+
           tb.insertAdjacentHTML('beforeend', `<tr>
             <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
             <td><b>${esc(m.Medio_Asignado)}</b></td>
+            <td>O: ${esc(o)}<br>D: ${esc(d)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o)}', '${esc(d)}')">🗺️ Trazar Vuelo</button></td>
             <td>
-              O: ${esc(o)}<br>D: ${esc(d)}<br>
-              <button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o)}', '${esc(d)}')">🗺️ Ver Ruta y Clima</button>
+              <span style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</span>
+              ${btnActions}
             </td>
-            <td style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</td>
           </tr>`);
         });
       }
@@ -377,18 +393,113 @@ async function cargarMisionesEnTabla() {
   }
 }
 
+// Actualización rápida de estado de misión
+async function cambiarEstadoMision(idMision, nuevoEstado) {
+  if (!confirm(`¿Registrar la misión ${idMision} como: ${nuevoEstado}?`)) return;
+  
+  const tb = document.querySelector('#tabla-misiones tbody');
+  tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#64748b">Actualizando estado de ${idMision} en Sheets...</td></tr>`;
+  
+  const payload = {
+    email: sesionActiva.email,
+    pin: sesionActiva.pin,
+    action: "UPDATE",
+    tab: "Misiones",
+    data: { ID_Mision: idMision, Estado: nuevoEstado },
+    detalle: `Cambió estado de misión de vuelo a: ${nuevoEstado}`
+  };
+
+  try {
+    await fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) });
+    logEvento(`Misión ${idMision} -> ${nuevoEstado}`);
+    await cargarMisionesEnTabla();
+  } catch(e) {
+    alert("Error al actualizar la misión en la nube.");
+    cargarMisionesEnTabla();
+  }
+}
+
+// Generación de PDF con METAR en Ruta y espaco para informe post-vuelo
+async function generarInformeMision(id, tipo, medio, origen, destino, estado, fechaPlan) {
+  alert("⏳ Conectando al satélite meteorológico para generar el informe. Por favor espere unos segundos...");
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  doc.setFontSize(16);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`INFORME DE MISIÓN AÉREA: ${id}`, 14, 20);
+  
+  doc.setFontSize(10);
+  doc.text(`Tipo de Operación: ${tipo}`, 14, 30);
+  doc.text(`Medio Asignado: ${medio}`, 14, 36);
+  doc.text(`Estado Actual: ${estado}`, 14, 42);
+  doc.text(`Fecha/Hora Planificada: ${fechaPlan}`, 14, 48);
+  doc.text(`Operador de Consola: ${sesionActiva.nombre}`, 14, 54);
+  doc.text(`Emisión del Reporte: ${new Date().toLocaleString('es-AR')}`, 14, 60);
+  
+  doc.text(`Punto de Origen: ${origen}`, 14, 70);
+  doc.text(`Punto de Destino: ${destino}`, 14, 76);
+  
+  doc.setFontSize(11);
+  doc.setTextColor(41, 128, 185);
+  doc.text("REPORTE METEOROLÓGICO (METAR SIMULADO OPEN-METEO)", 14, 90);
+  
+  try {
+    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
+    const a = await geo(origen), b = await geo(destino);
+    
+    if (a && b) {
+      const [wA, wB] = await Promise.all([
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${a[0]}&longitude=${a[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json()),
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${b[0]}&longitude=${b[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json())
+      ]);
+      
+      const WMO = {0:"Despejado", 1:"Parc. Nublado", 2:"Nublado", 3:"Cubierto", 45:"Niebla", 51:"Llovizna", 61:"Lluvia", 71:"Nieve", 95:"Tormenta"};
+      const climaA = WMO[wA.current.weather_code] || "Variable";
+      const climaB = WMO[wB.current.weather_code] || "Variable";
+      
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(14, 95, 180, 20, 'F');
+      doc.text(`ORIGEN (Despegue): ${wA.current.temperature_2m}°C | Viento: ${wA.current.wind_speed_10m} km/h | Condiciones: ${climaA}`, 18, 102);
+      doc.text(`DESTINO (Aterrizaje): ${wB.current.temperature_2m}°C | Viento: ${wB.current.wind_speed_10m} km/h | Condiciones: ${climaB}`, 18, 110);
+    } else {
+      doc.setFontSize(10);
+      doc.setTextColor(192, 57, 43);
+      doc.text("No se pudieron resolver las coordenadas para recuperar datos meteorológicos.", 14, 100);
+    }
+  } catch (e) {
+     doc.setFontSize(10);
+     doc.setTextColor(192, 57, 43);
+     doc.text("Error de red al consultar el satélite meteorológico.", 14, 100);
+  }
+  
+  doc.setFontSize(11);
+  doc.setTextColor(41, 128, 185);
+  doc.text("REGISTRO DE EJECUCIÓN (A rellenar por el Comandante de Aeronave)", 14, 130);
+  
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(10);
+  doc.text("Hora real de despegue: __________________", 14, 140);
+  doc.text("Hora real de aterrizaje: __________________", 100, 140);
+  doc.text("Novedades Técnicas / Operativas:", 14, 150);
+  doc.rect(14, 153, 180, 40); 
+  
+  doc.text("Firma Comandante de Aeronave", 30, 215);
+  doc.text("Firma Jefe de Operaciones", 120, 215);
+  
+  doc.save(`MISION_${id}_${estado}.pdf`);
+}
+
 async function dibujarRutaYMet(origen, destino) {
   if (!origen || !destino || origen === 'N/A') return alert("Faltan datos de origen o destino");
   
-  // 1. Cambiamos de pestaña al Visor Táctico
   cambiarPestana('tactica');
-  
-  // 2. Llenamos el ruteador táctico y lo ejecutamos
   document.getElementById('ruta-origen').value = origen;
   document.getElementById('ruta-destino').value = destino;
-  await calcularRutaTactica(); // Traza la línea en el mapa
+  await calcularRutaTactica(); 
   
-  // 3. Generamos el reporte meteorológico en ruta
   const res = document.getElementById('resultado-ruta');
   res.innerHTML += "<br>⏳ <i>Generando informe meteorológico (Zonas Despegue/Aterrizaje)...</i>";
   
@@ -397,18 +508,15 @@ async function dibujarRutaYMet(origen, destino) {
     const a = await geo(origen), b = await geo(destino);
     if (!a || !b) throw new Error("No se pudieron ubicar las coordenadas.");
     
-    // Consultar clima simultáneo para ambos puntos
     const [wA, wB] = await Promise.all([
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${a[0]}&longitude=${a[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json()),
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${b[0]}&longitude=${b[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json())
     ]);
     
-    // Traducción táctica rápida de códigos OMM
     const WMO = {0:"Despejado", 1:"Parc. Nublado", 2:"Nublado", 3:"Cubierto", 45:"Niebla", 51:"Llovizna", 61:"Lluvia", 71:"Nieve", 95:"Tormenta"};
     const climaA = WMO[wA.current.weather_code] || "Variable";
     const climaB = WMO[wB.current.weather_code] || "Variable";
     
-    // Inyectar el informe en la pantalla
     res.innerHTML += `
       <div style="margin-top:8px; padding:8px; background:#1e293b; color:#fff; border-radius:4px; border-left:4px solid #3498db; font-size:12px;">
         <b style="color:#3498db">🌤️ INFORME MET EN RUTA:</b><br>
@@ -419,7 +527,8 @@ async function dibujarRutaYMet(origen, destino) {
     res.innerHTML += `<br><span style='color:#ef4444'>❌ Fallo al obtener clima: ${err.message}</span>`;
   }
 }
-// --- FIN MÓDULO MISIONES ---
+
+// ==========================================
 
 async function iniciarSesionCOP() {
   const emailInput = document.getElementById("login-email").value.trim();
@@ -461,14 +570,11 @@ async function iniciarSesionCOP() {
       document.getElementById("op-name").innerText = `${usuarioValido.Nombre_Rango} (${usuarioValido.Rol})`;
       document.getElementById("modal-login").style.display = "none";
       
-      // Asentar en la base de datos centralizada
       ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
       
-      // Llenar selector de helicópteros y tabla de misiones
       cargarAeronavesMision();
       cargarMisionesEnTabla();
       
-      // Inicializamos mapa luego de loguear
       if(!mapTactico) inicializarMapas();
 
     } else {
@@ -485,7 +591,6 @@ async function iniciarSesionCOP() {
   }
 }
 
-// Despachador de acciones (Inserta o Actualiza en Sheets dejando rastro)
 async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
   if (!sesionActiva.autenticado) return;
 
@@ -879,7 +984,6 @@ function inicializarMapaRadar() {
   cargarRadar(); setInterval(cargarRadar, 600000); radarCargado = true;
 }
 
-// --- SITREP ---
 function generarSITREP() {
   const { jsPDF } = window.jspdf, doc = new jsPDF();
   const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
@@ -898,7 +1002,6 @@ function generarSITREP() {
   doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-// --- ARRANQUE ---
 // El mapa ya no arranca automático, espera a la validación de login
 setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
 setInterval(() => { if(sesionActiva.autenticado) { renderizarRecursos(); renderizarHidrometria(); } }, 60000);
