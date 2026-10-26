@@ -157,7 +157,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </div>
     </details>
 
-    <!-- PANEL DE MISIONES AÉREAS CON AUTOCOMPLETADO INTELIGENTE -->
+    <!-- PANEL DE MISIONES AÉREAS CON AUTOCOMPLETADO INTELIGENTE INTEGRADO -->
     <details class="form-panel" id="panel-misiones">
       <summary>🚁 Planificar Misión Aérea</summary>
       <form class="form-grid" onsubmit="guardarMisionVuelo(event)">
@@ -165,16 +165,16 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         <input type="text" id="mis-tipo" placeholder="Tipo (Ej: MEDEVAC, Inserción)" required />
         <select id="mis-medio" required><option value="">Cargando aeronaves disponibles...</option></select>
         
-        <!-- ORIGEN CON BÚSQUEDA INTELIGENTE -->
+        <!-- Origen con Autocompletado Inteligente -->
         <div class="autocomplete-container" style="display:flex;gap:4px">
-          <input type="text" id="mis-origen" placeholder="Origen (escribir lugar o coord)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-origen')" style="flex:1" />
+          <input type="text" id="mis-origen" placeholder="Origen (ej: Resistencia, Aeropuerto)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-origen')" style="flex:1" />
           <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-origen')">📍</button>
           <div id="sugerencias-origen" class="autocomplete-items"></div>
         </div>
         
-        <!-- DESTINO CON BÚSQUEDA INTELIGENTE -->
+        <!-- Destino con Autocompletado Inteligente -->
         <div class="autocomplete-container" style="display:flex;gap:4px">
-          <input type="text" id="mis-destino" placeholder="Destino (escribir lugar o coord)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-destino')" style="flex:1" />
+          <input type="text" id="mis-destino" placeholder="Destino (ej: Goya, San Javier)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-destino')" style="flex:1" />
           <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-destino')">🏁</button>
           <div id="sugerencias-destino" class="autocomplete-items"></div>
         </div>
