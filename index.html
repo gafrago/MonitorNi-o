@@ -285,7 +285,6 @@ function reiniciarExpiracion() {
   timerExpiracion = setTimeout(cerrarSesionCOP, 30 * 60 * 1000); 
 }
 
-// Resetea el timer si el usuario mueve el mouse o teclea
 document.addEventListener('mousemove', reiniciarExpiracion);
 document.addEventListener('keypress', reiniciarExpiracion);
 
@@ -339,7 +338,6 @@ async function iniciarSesionCOP() {
       
       ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
       
-      // Inicia la carga desde la base de datos centralizada
       cargarAeronavesMision();
       refrescarDatosServer();
       
@@ -375,14 +373,14 @@ async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, mot
 }
 
 // ==========================================
-// --- MÓDULO DE DB CENTRAL (FIN DEL LOCALSTORAGE) ---
+// --- MÓDULO DE DB CENTRAL ---
 // ==========================================
 
 let recursos = [];
 let estacionesHidro = [];
 let sincronizando = false;
+window.glofasIniciado = false;
 
-// Bucle de sincronización con Sheets cada 30 segundos
 async function refrescarDatosServer() {
   if (!sesionActiva.autenticado || sincronizando) return;
   sincronizando = true;
@@ -399,20 +397,37 @@ async function refrescarDatosServer() {
       recursos = resRec.data.map(r => ({
         id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, 
         lat: parseFloat(r.Lat), lon: parseFloat(r.Lon), sector: r.Sector, 
-        operador: r.Operador, efectivos: r.Efectivos, timestamp: r.Timestamp
+        operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp)
       }));
       renderizarRecursos();
     }
     
     if (resHid.status === 'success') {
+      // Coordenadas de resguardo por si fallan en la DB
+      const coordsFallback = {
+        H1: {lat:-27.485, lon:-58.932}, H2: {lat:-27.462, lon:-58.838},
+        H3: {lat:-27.310, lon:-58.580}, H4: {lat:-26.928, lon:-58.502},
+        H5: {lat:-27.950, lon:-58.810}, H6: {lat:-29.145, lon:-59.265}
+      };
+
       estacionesHidro = resHid.data.map(h => ({
         id: h.ID, estacion: h.Estacion, rio: h.Rio, actual: parseFloat(h.Actual_m),
         alerta: parseFloat(h.Alerta_m), evacuacion: parseFloat(h.Evacuacion_m),
-        tendencia: h.Tendencia, ts: h.Timestamp, lat: h.Lat || -27.45, lon: h.Lon || -58.90
+        tendencia: h.Tendencia, ts: Number(h.Timestamp), 
+        lat: parseFloat(h.Lat) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lat : -27.45), 
+        lon: parseFloat(h.Lon) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lon : -58.90)
       }));
+      
       poblarSelectorNivel();
       renderizarHidrometria();
-      dibujarRiosEstrategico();
+      
+      // Iniciamos GloFAS solo despues de tener las coordenadas correctas
+      if (!window.glofasIniciado) {
+        window.glofasIniciado = true;
+        cargarCaudalesGloFAS();
+      } else {
+        dibujarRiosEstrategico();
+      }
     }
 
     if (resMis.status === 'success') {
@@ -428,7 +443,6 @@ async function refrescarDatosServer() {
   }
 }
 
-// Carga Manual hacia BD Central (Recursos y Ríos)
 async function agregarRecursoEnVivo(e) {
   e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
   const opName = sesionActiva.nombre;
@@ -471,15 +485,12 @@ async function cargarNivelManual(ev) {
 }
 
 function eliminarRecurso(id, nombre) {
-  // ROL CHECK: Solo admin y planificador pueden borrar
   if (sesionActiva.rol.toLowerCase() === 'operador') {
     return alert("Permisos insuficientes. Contacte al Planificador o Administrador.");
   }
   if (!confirm(`¿Eliminar la unidad "${nombre}" del sistema central?`)) return;
   
   logEvento(`Baja solicitada: ${nombre}`); 
-  // Nota: Para borrar un registro real en un CRUD básico en sheets requeriríamos una accion DELETE,
-  // aquí lo auditaremos y cambiaremos el estado a INACTIVO
   ejecutarAccionAuditada("Recursos_Terreno", "UPDATE", { ID: id, Estado: "BAJA" }, `Dio de baja unidad: ${nombre}`);
   setTimeout(refrescarDatosServer, 1000);
 }
@@ -506,26 +517,38 @@ async function cargarAeronavesMision() {
 
 async function guardarMisionVuelo(e) {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.innerText = "Guardando en la nube..."; btn.disabled = true;
-
-  const datosMision = {
-    ID_Mision: `MIS-${Math.floor(Date.now()/1000)}`,
-    Fecha_Hora: document.getElementById('mis-fecha').value.replace('T', ' '),
-    Tipo_Mision: document.getElementById('mis-tipo').value.trim(),
-    Medio_Asignado: document.getElementById('mis-medio').value,
-    Origen_Destino: `${document.getElementById('mis-origen').value.trim()} | ${document.getElementById('mis-destino').value.trim()}`,
-    Estado: document.getElementById('mis-estado').value,
-    Operador_Responsable: sesionActiva.nombre
-  };
-
-  const detalleAuditoria = `Planificó misión ${datosMision.Tipo_Mision} con la aeronave ${datosMision.Medio_Asignado}`;
-  await ejecutarAccionAuditada("Misiones", "INSERT", datosMision, detalleAuditoria);
-  logEvento(detalleAuditoria);
-  alert(`✅ Misión planificada exitosamente.`);
+  const form = e.target, btn = form.querySelector('button[type="submit"]'), $ = id => document.getElementById(id);
+  const io = $('mis-origen'), idd = $('mis-destino'), txt = btn.innerText;
+  btn.disabled = true; btn.innerText = 'Ubicando puntos...';
   
-  e.target.reset(); btn.innerText = "📝 Registrar Misión en Sistema"; btn.disabled = false;
-  refrescarDatosServer();
+  try {
+    const [a, b] = await Promise.all([resolverPunto(io.value, io), resolverPunto(idd.value, idd)]);
+    if (!a || !b) { alert(`No se pudo ubicar ${!a ? 'el origen' : 'el destino'}. Elegí una sugerencia de la lista o marcá el punto en el mapa.`); return; }
+    
+    const et = (inp, p) => `${limpiarNombre(inp.value)} @${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+    
+    const datosMision = {
+      ID_Mision: `MIS-${Math.floor(Date.now()/1000)}`,
+      Fecha_Hora: $('mis-fecha').value.replace('T', ' '),
+      Tipo_Mision: $('mis-tipo').value.trim(),
+      Medio_Asignado: $('mis-medio').value,
+      Origen_Destino: `${et(io, a)} | ${et(idd, b)}`,
+      Estado: $('mis-estado').value,
+      Operador_Responsable: sesionActiva.nombre
+    };
+
+    const detalle = `Planificó misión ${datosMision.Tipo_Mision} con aeronave ${datosMision.Medio_Asignado}`;
+    btn.innerText = 'Guardando en la nube...';
+    
+    await ejecutarAccionAuditada("Misiones", "INSERT", datosMision, detalle);
+    logEvento(detalle);
+    alert(`✅ Misión planificada exitosamente.`);
+    
+    form.reset(); [io, idd].forEach(x => { delete x.dataset.lat; delete x.dataset.lon; delete x.dataset.label; });
+    refrescarDatosServer();
+  } finally {
+    btn.disabled = false; btn.innerText = txt;
+  }
 }
 
 function procesarMisiones(misionesData) {
@@ -543,8 +566,8 @@ function procesarMisiones(misionesData) {
       
       const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
       const parts = String(m.Origen_Destino).split(separador);
-      const o = parts[0] ? parts[0].trim() : 'N/A';
-      const d = parts.length > 1 ? parts[1].trim() : 'N/A';
+      const o = parts[0] ? parseTexto(parts[0]) : {nombre: 'N/A', raw: 'N/A'};
+      const d = parts.length > 1 ? parseTexto(parts[1]) : {nombre: 'N/A', raw: 'N/A'};
       
       const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
       
@@ -554,13 +577,13 @@ function procesarMisiones(misionesData) {
           <button class="btn-pick" style="background:#d97706;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Suspendida')" title="Suspender">⏸️</button>
           <button class="btn-pick" style="background:#2563eb;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Finalizada')" title="Finalizar / Aterrizar">✅</button>
           ${esAdmin ? `<button class="btn-pick" style="background:#ef4444;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Cancelada')" title="Borrar / Cancelar">🗑️</button>` : ''}
-          <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o)}', '${esc(d)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
+          <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o.raw)}', '${esc(d.raw)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
         </div>`;
 
       tb.insertAdjacentHTML('beforeend', `<tr>
         <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
         <td><b>${esc(m.Medio_Asignado)}</b></td>
-        <td>O: ${esc(o)}<br>D: ${esc(d)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o)}', '${esc(d)}')">🗺️ Trazar Vuelo</button></td>
+        <td>O: ${esc(o.nombre)}<br>D: ${esc(d.nombre)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o.raw)}', '${esc(d.raw)}', '${m.Fecha_Hora}')">🗺️ Trazar Vuelo</button></td>
         <td>
           <span style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</span>
           ${btnActions}
@@ -580,107 +603,76 @@ async function cambiarEstadoMision(idMision, nuevoEstado) {
   } catch(e) { alert("Error de red."); }
 }
 
-async function generarInformeMision(id, tipo, medio, origen, destino, estado, fechaPlan) {
+async function generarInformeMision(id, tipo, medio, origenRaw, destinoRaw, estado, fechaPlan) {
   alert("⏳ Conectando al satélite meteorológico para generar el informe. Por favor espere unos segundos...");
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const { jsPDF } = window.jspdf, doc = new jsPDF(), o = parseTexto(origenRaw), d = parseTexto(destinoRaw);
   
   doc.setFontSize(16); doc.setTextColor(30, 41, 59); doc.text(`INFORME DE MISIÓN AÉREA: ${id}`, 14, 20);
   doc.setFontSize(10);
-  doc.text(`Tipo de Operación: ${tipo}`, 14, 30); doc.text(`Medio Asignado: ${medio}`, 14, 36);
-  doc.text(`Estado Actual: ${estado}`, 14, 42); doc.text(`Fecha/Hora Planificada: ${fechaPlan}`, 14, 48);
-  doc.text(`Operador de Consola: ${sesionActiva.nombre}`, 14, 54); doc.text(`Emisión del Reporte: ${new Date().toLocaleString('es-AR')}`, 14, 60);
-  doc.text(`Punto de Origen: ${origen}`, 14, 70); doc.text(`Punto de Destino: ${destino}`, 14, 76);
+  [`Tipo de Operación: ${tipo}`, `Medio Asignado: ${medio}`, `Estado Actual: ${estado}`, `Fecha/Hora Planificada: ${fechaPlan}`,
+    `Operador de Consola: ${sesionActiva.nombre}`, `Emisión del Reporte: ${new Date().toLocaleString('es-AR')}`].forEach((l, i) => doc.text(l, 14, 30 + i * 6));
   
-  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REPORTE METEOROLÓGICO (METAR SIMULADO OPEN-METEO)", 14, 90);
+  doc.text(doc.splitTextToSize(`Punto de Origen: ${o.nombre}${o.coord ? ` (${o.coord.lat.toFixed(4)}, ${o.coord.lon.toFixed(4)})` : ''}`, 180), 14, 70);
+  doc.text(doc.splitTextToSize(`Punto de Destino: ${d.nombre}${d.coord ? ` (${d.coord.lat.toFixed(4)}, ${d.coord.lon.toFixed(4)})` : ''}`, 180), 14, 80);
+  
+  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REPORTE METEOROLÓGICO (MODELO OPEN-METEO)", 14, 95);
+  doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+  
   try {
-    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
-    const a = await geo(origen), b = await geo(destino);
-    if (a && b) {
-      const [wA, wB] = await Promise.all([
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${a[0]}&longitude=${a[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json()),
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${b[0]}&longitude=${b[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json())
-      ]);
-      const WMO = {0:"Despejado", 1:"Parc. Nublado", 2:"Nublado", 3:"Cubierto", 45:"Niebla", 51:"Llovizna", 61:"Lluvia", 71:"Nieve", 95:"Tormenta"};
-      doc.setFontSize(10); doc.setTextColor(30, 41, 59); doc.setFillColor(241, 245, 249); doc.rect(14, 95, 180, 20, 'F');
-      doc.text(`ORIGEN (Despegue): ${wA.current.temperature_2m}°C | Viento: ${wA.current.wind_speed_10m} km/h | Condiciones: ${WMO[wA.current.weather_code]||"Variable"}`, 18, 102);
-      doc.text(`DESTINO (Aterrizaje): ${wB.current.temperature_2m}°C | Viento: ${wB.current.wind_speed_10m} km/h | Condiciones: ${WMO[wB.current.weather_code]||"Variable"}`, 18, 110);
-    } else {
-      doc.setFontSize(10); doc.setTextColor(192, 57, 43); doc.text("No se pudieron resolver las coordenadas meteorológicas.", 14, 100);
-    }
+    const [a, b] = await Promise.all([resolverPunto(origenRaw), resolverPunto(destinoRaw)]);
+    if (!a || !b) throw new Error('sin coordenadas');
+    const [wa, wb] = await Promise.all([climaPunto(a.lat, a.lon, fechaPlan), climaPunto(b.lat, b.lon, fechaPlan)]);
+    
+    doc.setFillColor(241, 245, 249); doc.rect(14, 99, 182, 32, 'F');
+    doc.text(doc.splitTextToSize(`ORIGEN: ${wa.texto}`, 175), 18, 106);
+    doc.text(doc.splitTextToSize(`DESTINO: ${wb.texto}`, 175), 18, 117);
+    doc.setFontSize(8); doc.text(`Base: ${wa.cuando}. Confirmar con Servicio Met antes de despegar.`, 14, 136);
   } catch (e) {
-     doc.setFontSize(10); doc.setTextColor(192, 57, 43); doc.text("Error de red al consultar el satélite.", 14, 100);
+     doc.setTextColor(192, 57, 43); doc.text("Error de red al consultar el clima.", 14, 105);
   }
   
-  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REGISTRO DE EJECUCIÓN (A rellenar por el Comandante)", 14, 130);
+  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REGISTRO DE EJECUCIÓN (A rellenar por el Comandante)", 14, 148);
   doc.setTextColor(30, 41, 59); doc.setFontSize(10);
-  doc.text("Hora real de despegue: __________________", 14, 140); doc.text("Hora real de aterrizaje: __________________", 100, 140);
-  doc.text("Novedades Técnicas / Operativas:", 14, 150); doc.rect(14, 153, 180, 40); 
-  doc.text("Firma Comandante de Aeronave", 30, 215); doc.text("Firma Jefe de Operaciones", 120, 215);
+  doc.text("Hora real de despegue: __________________", 14, 158); doc.text("Hora real de aterrizaje: __________________", 100, 158);
+  doc.text("Novedades Técnicas / Operativas:", 14, 168); doc.rect(14, 171, 182, 40); 
+  doc.text("Firma Comandante de Aeronave", 30, 232); doc.text("Firma Jefe de Operaciones", 120, 232);
   doc.save(`MISION_${id}_${estado}.pdf`);
 }
 
-async function dibujarRutaYMet(origen, destino) {
+async function dibujarRutaYMet(origenRaw, destinoRaw, fecha) {
   cambiarPestana('tactica');
-  document.getElementById('ruta-origen').value = origen;
-  document.getElementById('ruta-destino').value = destino;
+  const o = parseTexto(origenRaw), d = parseTexto(destinoRaw);
+  const elO = document.getElementById('ruta-origen'), elD = document.getElementById('ruta-destino');
+  elO.value = o.nombre; elD.value = d.nombre;
+  if(o.coord) { elO.dataset.lat = o.coord.lat; elO.dataset.lon = o.coord.lon; elO.dataset.label = o.nombre; }
+  if(d.coord) { elD.dataset.lat = d.coord.lat; elD.dataset.lon = d.coord.lon; elD.dataset.label = d.nombre; }
+  
   await calcularRutaTactica(); 
   
   const res = document.getElementById('resultado-ruta');
-  res.innerHTML += "<br>⏳ <i>Generando informe meteorológico (Zonas Despegue/Aterrizaje)...</i>";
+  res.innerHTML += "<br>⏳ <i>Obteniendo clima en ruta...</i>";
   try {
-    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
-    const a = await geo(origen), b = await geo(destino);
-    const [wA, wB] = await Promise.all([
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${a[0]}&longitude=${a[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json()),
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${b[0]}&longitude=${b[1]}&current=temperature_2m,wind_speed_10m,weather_code`).then(r=>r.json())
-    ]);
-    const WMO = {0:"Despejado", 1:"Parc. Nublado", 2:"Nublado", 3:"Cubierto", 45:"Niebla", 51:"Llovizna", 61:"Lluvia", 71:"Nieve", 95:"Tormenta"};
+    const [a, b] = await Promise.all([resolverPunto(origenRaw, elO), resolverPunto(destinoRaw, elD)]);
+    if (!a || !b) throw new Error("Faltan coordenadas exactas.");
+    
+    const [wA, wB] = await Promise.all([climaPunto(a.lat, a.lon, fecha), climaPunto(b.lat, b.lon, fecha)]);
+    
     res.innerHTML += `
       <div style="margin-top:8px; padding:8px; background:#1e293b; color:#fff; border-radius:4px; border-left:4px solid #3498db; font-size:12px;">
-        <b style="color:#3498db">🌤️ INFORME MET EN RUTA:</b><br>
-        📍 <b>Despegue:</b> ${wA.current.temperature_2m}°C | Viento: ${wA.current.wind_speed_10m} km/h | ${WMO[wA.current.weather_code]||"Var"}<br>
-        🏁 <b>Aterrizaje:</b> ${wB.current.temperature_2m}°C | Viento: ${wB.current.wind_speed_10m} km/h | ${WMO[wB.current.weather_code]||"Var"}
+        <b style="color:#7fb3ff">🌤️ CLIMA EN RUTA</b> <small>(${esc(wA.cuando)})</small><br>
+        📍 <b>Despegue:</b> ${esc(wA.texto)}<br>
+        🏁 <b>Aterrizaje:</b> ${esc(wB.texto)}
       </div>`;
-  } catch (err) { res.innerHTML += `<br><span style='color:#ef4444'>❌ Fallo al obtener clima</span>`; }
+  } catch (err) { res.innerHTML += `<br><span style='color:#ef4444'>❌ Fallo clima: ${err.message}</span>`; }
 }
-
-// --- BUSCADOR INTELIGENTE / AUTOCOMPLETADO TÁCTICO ---
-let timeoutAutocomplete = null;
-async function buscarSugerencias(inputElement, contenedorId) {
-  const query = inputElement.value.trim();
-  const contenedor = document.getElementById(contenedorId);
-  contenedor.innerHTML = '';
-  if (query.length < 3) return;
-
-  clearTimeout(timeoutAutocomplete);
-  timeoutAutocomplete = setTimeout(async () => {
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Chaco, Corrientes, Argentina')}&limit=5`;
-      const res = await fetch(url); const data = await res.json();
-      contenedor.innerHTML = '';
-      data.forEach(lugar => {
-        const item = document.createElement('div');
-        item.innerHTML = `📍 <b>${esc(lugar.display_name.split(',')[0] || lugar.display_name)}</b><br><small style="color:#64748b">${esc(lugar.display_name)}</small>`;
-        item.onclick = () => { inputElement.value = lugar.display_name; contenedor.innerHTML = ''; };
-        contenedor.appendChild(item);
-      });
-    } catch (e) { console.error(e); }
-  }, 350);
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('.autocomplete-container')) {
-    document.querySelectorAll('.autocomplete-items').forEach(el => el.innerHTML = '');
-  }
-});
 
 // --- BITÁCORA LOCAL DE APOYO ---
 let bitacora = leer(LS.log, []);
 function logEvento(t) { 
   const txtCompleto = `[${sesionActiva.nombre || 'Sistema'}] ${t}`;
   bitacora.unshift({ ts: Date.now(), t: txtCompleto }); 
-  bitacora = bitacora.slice(0, 100); guardar(LS.log, bitacora); 
+  bitacora = bitacora.slice(0, 100); 
+  guardar(LS.log, bitacora); 
 }
 const fmtFecha = ts => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 function edadTxt(ts) {
@@ -714,7 +706,8 @@ function inicializarMapas() {
   capaRecursos = L.layerGroup().addTo(mapTactico);
   capaRutaActiva = L.layerGroup().addTo(mapTactico);
 
-  cargarZonasExternas(); renderizarInfraestructura(); cargarCaudalesGloFAS();
+  cargarZonasExternas(); 
+  renderizarInfraestructura();
   
   mapTactico.on('click', e => {
     const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
@@ -731,16 +724,6 @@ function inicializarMapas() {
   });
 }
 
-// --- HIDROMETRÍA ---
-const HORAS_VENCIMIENTO = 6;
-function estadoHidro(h) {
-  let txt = 'NORMAL', color = '#16a34a';
-  if (h.actual >= h.evacuacion) { txt = 'EVACUACIÓN'; color = '#dc2626'; }
-  else if (h.actual >= h.alerta) { txt = 'ALERTA'; color = '#d97706'; }
-  const horas = (Date.now() - (h.ts || 0)) / 3600000;
-  if (!h.ts || horas > HORAS_VENCIMIENTO) return { txt: `DESACTUALIZADO (${h.ts ? Math.floor(horas) + ' h' : 's/hora'})`, color: '#64748b', tag: ' (¡viejo!)', ok: false };
-  return { txt, color, tag: '', ok: true };
-}
 function renderizarHidrometria() {
   if(!capaHidrometria) return;
   capaHidrometria.clearLayers();
@@ -751,7 +734,7 @@ function renderizarHidrometria() {
     L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`<div style="font-size:12px;min-width:200px">
       <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br><b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
       <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia)}<br><b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
-      <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo, no oficial' : 'Cargado: ' + edadTxt(h.ts)}</small></div>`);
+      <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo' : 'Cargado: ' + edadTxt(h.ts)}</small></div>`);
   });
 }
 function poblarSelectorNivel() {
@@ -764,23 +747,7 @@ function prellenarNivel() {
   document.getElementById('nivel-alt').value = '';
 }
 
-// --- INFRAESTRUCTURA ---
-const puntosInfraestructura = [
-  { icono: "✈️", nombre: "Aeropuerto Resistencia", detalle: "Pista/base aérea", lat: -27.4499, lon: -59.0561 },
-  { icono: "✈️", nombre: "Aeropuerto Corrientes", detalle: "Pista", lat: -27.4455, lon: -58.7619 },
-  { icono: "🏥", nombre: "Hospital Julio C. Perrando (Resistencia)", detalle: "Derivación sanitaria", lat: -27.4606, lon: -58.9722 },
-  { icono: "🏥", nombre: "Hospital Escuela Gral. San Martín (Corrientes)", detalle: "Emergencias y trauma", lat: -27.4682, lon: -58.8315 }
-];
-function renderizarInfraestructura() {
-  if(!capaInfraestructura) return;
-  capaInfraestructura.clearLayers();
-  if (!document.getElementById('chk-infra').checked) return;
-  puntosInfraestructura.forEach(p => L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
-    .addTo(capaInfraestructura).bindPopup(`<b>${p.icono} ${esc(p.nombre)}</b><br><span style="font-size:11.5px">${esc(p.detalle)}</span>`));
-}
-function toggleCapas() { renderizarHidrometria(); renderizarInfraestructura(); }
-
-// --- ZONAS ---
+// --- ZONAS Y RECURSOS ---
 const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
 async function cargarZonasExternas() {
   try {
@@ -814,7 +781,6 @@ function seleccionarDeptoMapa() {
   if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.3 });
 }
 
-// --- RECURSOS (ahora desde BD Central) ---
 function crearIcono(inst, estado) {
   if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
   const color = { FAA: "#0284c7", EA: "#4d7c0f", PNA: "#1e3a8a", GN: "#15803d", DC: "#ea580c" }[inst] || "#64748b";
@@ -829,7 +795,6 @@ function renderizarRecursos() {
   const lista = document.getElementById('lista-recursos'); lista.innerHTML = '';
   let u = 0, c = 0, e = 0;
   
-  // Filtramos los que esten de baja
   const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
   
   recursosActivos.forEach(r => {
@@ -838,7 +803,6 @@ function renderizarRecursos() {
     if (esCorte) c++; else u++; e += Number(r.efectivos) || 0;
     const viejo = r.timestamp && (Date.now() - r.timestamp) > 3600000;
     
-    // Solo mostramos boton de borrar a admins/planificadores
     const botonBorrar = (sesionActiva.rol.toLowerCase() !== 'operador') 
       ? `<button data-del="${esc(r.id)}" data-nombre="${esc(r.nombre)}" style="margin-top:6px;width:100%;background:#dc2626;color:#fff;border:none;padding:4px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar</button>` 
       : '';
@@ -851,31 +815,10 @@ function renderizarRecursos() {
   document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-cortes').innerText = c; document.getElementById('kpi-efectivos').innerText = e;
 }
 
-document.getElementById('lista-recursos').addEventListener('click', ev => {
-  const c = ev.target.closest('[data-center]'); if (c) { const [la, lo] = c.dataset.center.split(',').map(Number); mapTactico.setView([la, lo], 14); }
-});
-
-
-// --- RUTEO ---
-function activarSeleccionMapa(m) { modoSeleccionMapa = m; document.getElementById('btn-pick-origen').classList.toggle('picking', m === 'origen'); document.getElementById('btn-pick-destino').classList.toggle('picking', m === 'destino'); }
-
-async function calcularRutaTactica() {
-  const o = document.getElementById('ruta-origen').value, d = document.getElementById('ruta-destino').value, res = document.getElementById('resultado-ruta');
-  if (!o || !d) return; res.style.display = 'block'; res.innerHTML = "⏳ Trazando...";
-  try {
-    const geo = async t => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t.trim()) ? t.split(',').map(Number) : (g => g ? [g.lat, g.lon] : null)(await geocodificar(t));
-    const a = await geo(o), b = await geo(d); if (!a || !b) { res.innerHTML = "❌ Dirección no encontrada."; return; }
-    const data = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`)).json();
-    if (!data.routes) { res.innerHTML = "❌ Sin ruta terrestre."; return; }
-    capaRutaActiva.clearLayers(); L.marker(a).addTo(capaRutaActiva).bindPopup("📍 Partida"); L.marker(b).addTo(capaRutaActiva).bindPopup("🏁 Destino");
-    const linea = L.geoJSON(data.routes[0].geometry, { style: { color: "#8e44ad", weight: 6, opacity: .85 } }).addTo(capaRutaActiva); mapTactico.fitBounds(linea.getBounds(), { padding: [40, 40] });
-    res.innerHTML = `<b>✅ Ruta</b>: ${(data.routes[0].distance / 1000).toFixed(1)} km | ${Math.round(data.routes[0].duration / 60)} min <small>(no considera cortes cargados)</small>`;
-  } catch (e) { res.innerHTML = "❌ Error de conexión."; }
-}
-function borrarRutaTactica() { capaRutaActiva.clearLayers(); ['ruta-origen', 'ruta-destino'].forEach(i => document.getElementById(i).value = ''); document.getElementById('resultado-ruta').style.display = 'none'; activarSeleccionMapa(null); }
-
-// --- CAUDALES GloFAS ---
+// --- INTELIGENCIA ---
+const textoQ = s => s.errQ || s.hoy == null ? 's/d' : `${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'}`;
 async function cargarCaudalesGloFAS() {
+  if (estacionesHidro.length === 0) return;
   await Promise.all(estacionesHidro.map(async s => {
     try {
       const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
@@ -886,8 +829,6 @@ async function cargarCaudalesGloFAS() {
   dibujarRiosEstrategico();
 }
 
-// --- INTELIGENCIA ---
-const textoQ = s => s.errQ || s.hoy == null ? 's/d' : `${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'}`;
 async function cargarPronostico() {
   const cont = document.getElementById('pronostico-container'), resu = document.getElementById('pronostico-resumen');
   const [lat, lon] = document.getElementById('sel-pronostico').value.split(',');
@@ -907,12 +848,15 @@ async function cargarPronostico() {
     resu.innerHTML = `<b>Lluvia acumulada 48 h: <span style="color:${total > 60 ? '#dc2626' : total > 20 ? '#d97706' : '#16a34a'}">${total.toFixed(0)} mm</span></b> <small>(modelo referencial)</small>`;
   } catch (e) { cont.innerHTML = '<span style="color:#dc2626">❌ No se pudo cargar el pronóstico.</span>'; resu.innerHTML = ''; }
 }
+
 function actualizarDashboardAnalytics() {
   const tb = document.querySelector('#tabla-analitica-rios tbody'); tb.innerHTML = '';
   estacionesHidro.forEach(h => { const e = estadoHidro(h);
     tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${textoQ(h)}</td></tr>`); });
-  const medios = recursos.filter(r => r.inst !== 'VIALIDAD').length, cortes = recursos.filter(r => r.inst === 'VIALIDAD').length, ef = recursos.reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
-  document.getElementById('analitica-fuerzas').innerHTML = `• Unidades y medios: <b>${medios}</b><br>• Cortes / alertas viales: <b style="color:#dc2626">${cortes}</b><br>• Personal en terreno: <b>${ef} efectivos</b> <br>• Estaciones hidrométricas: <b>${estacionesHidro.length}</b> (${estacionesHidro.filter(h => estadoHidro(h).ok).length} con dato vigente)`;
+  const medios = recursos.filter(r => r.inst !== 'VIALIDAD' && r.estado !== 'BAJA').length;
+  const cortes = recursos.filter(r => r.inst === 'VIALIDAD' && r.estado !== 'BAJA').length;
+  const ef = recursos.filter(r => r.estado !== 'BAJA').reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
+  document.getElementById('analitica-fuerzas').innerHTML = `• Unidades y medios: <b>${medios}</b><br>• Cortes / alertas viales: <b style="color:#dc2626">${cortes}</b><br>• Personal en terreno: <b>${ef} efectivos</b><br>• Estaciones hidrométricas: <b>${estacionesHidro.length}</b>`;
   document.getElementById('bitacora').innerHTML = bitacora.length ? bitacora.slice(0, 15).map(b => `<div style="border-bottom:1px solid #e2e8f0;padding:3px 0"><b>${fmtFecha(b.ts)}</b> — ${esc(b.t)}</div>`).join('') : '<i>Sin eventos registrados.</i>';
   cargarPronostico();
 }
@@ -921,6 +865,7 @@ function actualizarDashboardAnalytics() {
 const estadoCapas = {}, RV = 'Radar RainViewer', rioGrupoEstrategico = L.layerGroup();
 function pintarEstado() { const d = document.getElementById('estado-capas'); if (d) d.innerHTML = Object.entries(estadoCapas).map(([n, s]) => `${s.ok > 0 ? '✅' : s.err > 0 ? '⚠️' : '⏳'} ${n}`).join('<br>'); }
 function vigilar(l, n) { estadoCapas[n] = estadoCapas[n] || { ok: 0, err: 0 }; l.on('tileload', () => { estadoCapas[n].ok++; pintarEstado(); }); l.on('tileerror', () => { estadoCapas[n].err++; pintarEstado(); }); return l; }
+
 function dibujarRiosEstrategico() {
   rioGrupoEstrategico.clearLayers(); const cont = document.getElementById('lista-rios'); cont.innerHTML = '';
   estacionesHidro.forEach(r => {
@@ -930,6 +875,7 @@ function dibujarRiosEstrategico() {
     cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #444;padding:4px 0"><b style="color:${e.color === '#16a34a' ? '#4ade80' : '#fff'}">● ${esc(r.estacion)}</b><br>Q: ${textoQ(r)} | Alt: ${Number(r.actual).toFixed(2)} m<br><small>${esc(e.txt)}</small></div>`);
   });
 }
+
 function inicializarMapaRadar() {
   mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
@@ -971,7 +917,10 @@ function generarSITREP() {
     body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬]/g, '')]),
     headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
   let y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios desplegados y cortes viales", 14, y);
-  doc.autoTable({ startY: y + 3, head: [['Org.', 'Detalle', 'Sector', 'Estado', 'Fuente', 'Antiguedad']], body: recursos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', edadTxt(r.timestamp)]), headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8 } });
+  
+  const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
+  doc.autoTable({ startY: y + 3, head: [['Org.', 'Detalle', 'Sector', 'Estado', 'Fuente', 'Antiguedad']], body: recursosActivos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', edadTxt(r.timestamp)]), headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8 } });
+  
   y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitacora (ultimos eventos)", 14, y);
   doc.autoTable({ startY: y + 3, head: [['Hora', 'Evento']], body: bitacora.slice(0, 10).map(b => [fmtFecha(b.ts), b.t]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } });
   doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -983,30 +932,9 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
 </script>
 <!-- ===== INICIO COP GEOSEARCH ===== -->
 <script>
-/* cop-geosearch.js - Buscador de lugares tipo Google Maps para el COP NEA
- *
- * INSTALACION (como archivo aparte): subir este archivo junto al index.html y
- * cargarlo con una etiqueta script con src="cop-geosearch.js", despues del
- * script principal y antes del cierre del body.
- *
- * Fuentes de sugerencias (en este orden):
- *   1. Indice local, instantaneo y sin internet una vez cacheado: localidades
- *      de Chaco y Corrientes (Georef, datos.gob.ar), infraestructura,
- *      estaciones hidrometricas, unidades y cortes cargados.
- *   2. Georef /direcciones cuando se escribe "calle altura" (direccion exacta).
- *   3. Photon (OpenStreetMap) para calles y lugares mientras se escribe.
- * No usa Nominatim para autocompletar: su politica de uso lo prohibe.
- *
- * Tambien corrige: guardado de misiones (el boton equivocado y el aviso de
- * exito falso), botones de la tabla de misiones (inyeccion de codigo por
- * onclick), codigos de clima desconocidos que se mostraban como "Variable",
- * clima a la hora planificada y aviso de cortes cerca de la ruta.
- */
 (function () {
   'use strict';
-
-  /* ------------------------------ configuracion ------------------------------ */
-  const BBOX = [-62.8, -30.9, -55.5, -24.0]; // minLon,minLat,maxLon,maxLat (Chaco + Corrientes con margen)
+  const BBOX = [-62.8, -30.9, -55.5, -24.0]; 
   const GEOREF = 'https://apis.datos.gob.ar/georef/api/v2.0';
   const PHOTON = 'https://photon.komoot.io/api/';
   const LS_LOC = 'cop_gaz_localidades_v1';
@@ -1014,12 +942,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
   const ICO = { loc: '🏙️', avion: '✈️', hosp: '🏥', rio: '🌊', corte: '🚧', unidad: '🛡️', calle: '🛣️', poi: '📍', coord: '🧭' };
   const ZOOM = { loc: 12, avion: 14, hosp: 16, rio: 13, corte: 15, unidad: 15, calle: 16, poi: 15, coord: 14 };
 
-  /* -------------------------------- utilidades -------------------------------- */
   const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dentroNEA = (lat, lon) => lon >= BBOX[0] && lon <= BBOX[2] && lat >= BBOX[1] && lat <= BBOX[3];
-  const titulo = s => String(s ?? '').toLowerCase().split(/(\s+)/)
-    .map((w, i) => (i > 0 && /^(de|del|la|las|los|el|y)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const titulo = s => String(s ?? '').toLowerCase().split(/(\s+)/).map((w, i) => (i > 0 && /^(de|del|la|las|los|el|y)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
   const RE_COORD = /^\s*(-?\d{1,2}(?:[.,]\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/;
   const RE_AT = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\s*$/;
 
@@ -1053,13 +979,12 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, ms || 3500);
   }
 
-  /* ---------------------------- indice de localidades ---------------------------- */
   let localidades = [];
   async function cargarLocalidades() {
     try {
       const c = JSON.parse(localStorage.getItem(LS_LOC) || 'null');
       if (c && Date.now() - c.ts < TTL_LOC && c.items && c.items.length) { localidades = c.items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' })); return; }
-    } catch (_) { /* cache ilegible: se vuelve a pedir */ }
+    } catch (_) { }
     const items = [];
     try {
       for (const prov of ['chaco', 'corrientes']) {
@@ -1077,10 +1002,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
         }
       }
       if (items.length) {
-        try { localStorage.setItem(LS_LOC, JSON.stringify({ ts: Date.now(), items })); } catch (_) { /* sin espacio: se sigue sin cache */ }
+        try { localStorage.setItem(LS_LOC, JSON.stringify({ ts: Date.now(), items })); } catch (_) { }
         localidades = items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' }));
       }
-    } catch (e) { console.warn('Georef no disponible; el buscador usa solo datos locales y en linea:', e); }
+    } catch (e) { console.warn('Georef no disponible:', e); }
   }
 
   function puntosLocales() {
@@ -1101,7 +1026,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return res.sort((a, b) => a.score - b.score).slice(0, max || 6);
   }
 
-  /* ------------------------------ fuentes en linea ------------------------------ */
   const cacheFoto = new Map(); let abortFoto = null;
   async function buscarPhoton(q) {
     const k = norm(q); if (cacheFoto.has(k)) return cacheFoto.get(k);
@@ -1136,7 +1060,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
           const nom = d.nomenclatura || (d.calle && d.calle.nombre) || q;
           out.push({ n: titulo(nom.split(',')[0]), sub: nom.split(',').slice(1).map(s => titulo(s.trim())).join(', ') || titulo(prov), label: nom.split(',').map(s => titulo(s.trim())).join(', '), lat: u.lat, lon: u.lon, tipo: 'calle' });
         });
-      } catch (_) { /* Georef sin respuesta: se sigue con las demas fuentes */ }
+      } catch (_) { }
     }
     return out;
   }
@@ -1149,11 +1073,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     const nt = limpiarNombre(t), loc = buscarLocal(nt, 1)[0];
     if (loc && norm(loc.n) === norm(nt)) return { lat: loc.lat, lon: loc.lon };
     if (/\d/.test(nt)) { const d = await buscarDireccionGeoref(nt); if (d[0]) return { lat: d[0].lat, lon: d[0].lon }; }
-    try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { /* sin red */ }
+    try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { }
     return loc ? { lat: loc.lat, lon: loc.lon } : null;
   }
 
-  /* --------------------------- desplegable de sugerencias --------------------------- */
   function inyectarCSS() {
     if (document.getElementById('gs-css')) return;
     const s = document.createElement('style'); s.id = 'gs-css';
@@ -1216,7 +1139,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
       st.t = setTimeout(async () => {
         const conNum = /\d/.test(q);
         const [foto, dirs] = await Promise.allSettled([buscarPhoton(q), conNum ? buscarDireccionGeoref(q) : Promise.resolve([])]);
-        if (mi !== st.seq) return; // llego tarde: el usuario ya escribio otra cosa
+        if (mi !== st.seq) return; 
         if (foto.status === 'rejected' && foto.reason && foto.reason.name === 'AbortError') return;
         const extra = [...(dirs.status === 'fulfilled' ? dirs.value : []), ...(foto.status === 'fulfilled' ? foto.value : [])];
         if (foto.status === 'rejected') st.nota = 'Sin conexión al buscador en línea: solo resultados locales';
@@ -1240,7 +1163,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     });
   }
 
-  /* ------------------------------------ clima ------------------------------------ */
   const WMO = { 0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Cubierto', 45: 'Niebla', 48: 'Niebla con escarcha', 51: 'Llovizna leve', 53: 'Llovizna moderada', 55: 'Llovizna intensa', 56: 'Llovizna helada leve', 57: 'Llovizna helada intensa', 61: 'Lluvia leve', 63: 'Lluvia moderada', 65: 'Lluvia intensa', 66: 'Lluvia helada leve', 67: 'Lluvia helada intensa', 71: 'Nevada leve', 73: 'Nevada moderada', 75: 'Nevada intensa', 77: 'Granos de nieve', 80: 'Chubascos leves', 81: 'Chubascos moderados', 82: 'Chubascos violentos', 85: 'Chubascos de nieve leves', 86: 'Chubascos de nieve intensos', 95: 'Tormenta', 96: 'Tormenta con granizo leve', 99: 'Tormenta con granizo intenso' };
   async function climaPunto(lat, lon, fecha) {
     const vars = 'temperature_2m,wind_speed_10m,wind_gusts_10m,visibility,cloud_cover,weather_code';
@@ -1254,7 +1176,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return { cuando, texto: `${c.temperature_2m}°C | Viento ${c.wind_speed_10m} km/h (ráfagas ${c.wind_gusts_10m}) | Visib. ${vis} | Nubosidad ${c.cloud_cover}% | ${desc}` };
   }
 
-  /* -------------------------- cortes cerca de una ruta -------------------------- */
   function distPuntoSegM(p, a, b) {
     const k = Math.cos(p[1] * Math.PI / 180), R = 111320;
     const px = p[0] * k * R, py = p[1] * R, ax = a[0] * k * R, ay = a[1] * R, bx = b[0] * k * R, by = b[1] * R;
@@ -1271,9 +1192,8 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return res;
   }
 
-  /* ------------------------ funciones del COP que se reemplazan ------------------------ */
   window.geocodificar = async function (dir) { return resolverPunto(dir, null); };
-  window.buscarSugerencias = function () { /* reemplazado por el buscador nuevo */ };
+  window.buscarSugerencias = function () { };
 
   window.activarSeleccionMapa = function (m) {
     modoSeleccionMapa = m;
@@ -1361,7 +1281,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
   };
 
   const misiones = {};
-  window.cargarMisionesEnTabla = async function () { /* Deshabilitada temporalmente en favor de refrescarDatosServer */ };
+  window.cargarMisionesEnTabla = async function () {};
   
   window.procesarMisiones = function (misionesData) {
     const tb = document.querySelector('#tabla-misiones tbody');
@@ -1432,7 +1352,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     doc.save(`MISION_${id}_${estado}.pdf`);
   };
 
-  /* ------------------------------------ arranque ------------------------------------ */
   function iniciar() {
     inyectarCSS();
     ['mis-origen', 'mis-destino', 'ruta-origen', 'ruta-destino'].forEach(id => adjuntar(document.getElementById(id)));
@@ -1440,11 +1359,8 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     cargarLocalidades();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
-
-  if (typeof module !== 'undefined' && module.exports) module.exports = { norm, parseCoord, parseTexto, partirOD, limpiarNombre, resaltar, mezclar, distPuntoSegM };
 })();
 </script>
-<!-- ===== FIN COP GEOSEARCH ===== -->
 
 </body>
 </html>
