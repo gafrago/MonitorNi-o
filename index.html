@@ -1052,5 +1052,467 @@ setInterval(() => { if(sesionActiva.autenticado) { renderizarRecursos(); renderi
 setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600000);
 
 </script>
+  <!-- ===== INICIO COP GEOSEARCH: pegar justo antes de </body>, DESPUES del script principal ===== -->
+<script>
+/* cop-geosearch.js - Buscador de lugares tipo Google Maps para el COP NEA
+ *
+ * INSTALACION (como archivo aparte): subir este archivo junto al index.html y
+ * cargarlo con una etiqueta script con src="cop-geosearch.js", despues del
+ * script principal y antes del cierre del body.
+ *
+ * Fuentes de sugerencias (en este orden):
+ *   1. Indice local, instantaneo y sin internet una vez cacheado: localidades
+ *      de Chaco y Corrientes (Georef, datos.gob.ar), infraestructura,
+ *      estaciones hidrometricas, unidades y cortes cargados.
+ *   2. Georef /direcciones cuando se escribe "calle altura" (direccion exacta).
+ *   3. Photon (OpenStreetMap) para calles y lugares mientras se escribe.
+ * No usa Nominatim para autocompletar: su politica de uso lo prohibe.
+ *
+ * Tambien corrige: guardado de misiones (el boton equivocado y el aviso de
+ * exito falso), botones de la tabla de misiones (inyeccion de codigo por
+ * onclick), codigos de clima desconocidos que se mostraban como "Variable",
+ * clima a la hora planificada y aviso de cortes cerca de la ruta.
+ */
+(function () {
+  'use strict';
+
+  /* ------------------------------ configuracion ------------------------------ */
+  const BBOX = [-62.8, -30.9, -55.5, -24.0]; // minLon,minLat,maxLon,maxLat (Chaco + Corrientes con margen)
+  const GEOREF = 'https://apis.datos.gob.ar/georef/api/v2.0';
+  const PHOTON = 'https://photon.komoot.io/api/';
+  const LS_LOC = 'cop_gaz_localidades_v1';
+  const TTL_LOC = 30 * 24 * 3600 * 1000;
+  const ICO = { loc: '🏙️', avion: '✈️', hosp: '🏥', rio: '🌊', corte: '🚧', unidad: '🛡️', calle: '🛣️', poi: '📍', coord: '🧭' };
+  const ZOOM = { loc: 12, avion: 14, hosp: 16, rio: 13, corte: 15, unidad: 15, calle: 16, poi: 15, coord: 14 };
+
+  /* -------------------------------- utilidades -------------------------------- */
+  const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const dentroNEA = (lat, lon) => lon >= BBOX[0] && lon <= BBOX[2] && lat >= BBOX[1] && lat <= BBOX[3];
+  const titulo = s => String(s ?? '').toLowerCase().split(/(\s+)/)
+    .map((w, i) => (i > 0 && /^(de|del|la|las|los|el|y)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const RE_COORD = /^\s*(-?\d{1,2}(?:[.,]\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/;
+  const RE_AT = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\s*$/;
+
+  function parseCoord(t) {
+    const m = RE_COORD.exec(String(t ?? ''));
+    if (!m) return null;
+    const lat = parseFloat(m[1].replace(',', '.')), lon = parseFloat(m[2].replace(',', '.'));
+    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+  }
+  const limpiarNombre = t => String(t ?? '').replace(RE_AT, '').replace(/[|@]/g, ' ').replace(/\s+/g, ' ').trim();
+  function parseTexto(raw) {
+    const s = String(raw ?? '').trim(), m = RE_AT.exec(s);
+    return { raw: s, nombre: s.replace(RE_AT, '').trim() || 'N/A', coord: m ? { lat: +m[1], lon: +m[2] } : null };
+  }
+  function partirOD(v) {
+    const s = String(v ?? ''), p = s.includes('|') ? s.split('|') : s.split(' - ');
+    return [parseTexto(p[0]), parseTexto(p.slice(1).join(' - '))];
+  }
+  function resaltar(texto, q) {
+    const t = String(texto ?? ''), nt = norm(t), nq = norm(q), i = nq ? nt.indexOf(nq) : -1;
+    if (i < 0 || nt.length !== t.length) return escH(t);
+    return escH(t.slice(0, i)) + '<b>' + escH(t.slice(i, i + nq.length)) + '</b>' + escH(t.slice(i + nq.length));
+  }
+  function toast(msg, ms) {
+    let t = document.getElementById('gs-toast');
+    if (!t) {
+      t = document.createElement('div'); t.id = 'gs-toast';
+      t.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:8px 14px;border-radius:6px;font-size:12.5px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.4)';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, ms || 3500);
+  }
+
+  /* ---------------------------- indice de localidades ---------------------------- */
+  let localidades = [];
+  async function cargarLocalidades() {
+    try {
+      const c = JSON.parse(localStorage.getItem(LS_LOC) || 'null');
+      if (c && Date.now() - c.ts < TTL_LOC && c.items && c.items.length) { localidades = c.items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' })); return; }
+    } catch (_) { /* cache ilegible: se vuelve a pedir */ }
+    const items = [];
+    try {
+      for (const prov of ['chaco', 'corrientes']) {
+        let inicio = 0, total = Infinity;
+        while (inicio < total && inicio < 5000) {
+          const j = await (await fetch(`${GEOREF}/localidades?provincia=${prov}&campos=nombre,centroide,departamento,provincia&max=1000&inicio=${inicio}`)).json();
+          const lista = j.localidades || [];
+          lista.forEach(l => {
+            const lat = l.centroide && l.centroide.lat, lon = l.centroide && l.centroide.lon;
+            if (lat == null || lon == null) return;
+            const dep = titulo(l.departamento && l.departamento.nombre), pr = titulo(l.provincia && l.provincia.nombre);
+            items.push({ n: titulo(l.nombre), sub: [dep, pr].filter(Boolean).join(', '), label: [titulo(l.nombre), dep, pr].filter(Boolean).join(', '), lat, lon });
+          });
+          total = j.total || 0; if (!lista.length) break; inicio += lista.length;
+        }
+      }
+      if (items.length) {
+        try { localStorage.setItem(LS_LOC, JSON.stringify({ ts: Date.now(), items })); } catch (_) { /* sin espacio: se sigue sin cache */ }
+        localidades = items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' }));
+      }
+    } catch (e) { console.warn('Georef no disponible; el buscador usa solo datos locales y en linea:', e); }
+  }
+
+  function puntosLocales() {
+    const out = [];
+    if (typeof puntosInfraestructura !== 'undefined') puntosInfraestructura.forEach(p => out.push({ n: p.nombre, sub: p.detalle, label: p.nombre, lat: p.lat, lon: p.lon, tipo: p.icono === '✈️' ? 'avion' : p.icono === '🏥' ? 'hosp' : 'poi' }));
+    if (typeof estacionesHidro !== 'undefined') estacionesHidro.forEach(h => out.push({ n: 'Estación ' + h.estacion, sub: 'Río ' + h.rio, label: 'Estación ' + h.estacion, lat: h.lat, lon: h.lon, tipo: 'rio' }));
+    if (typeof recursos !== 'undefined') recursos.forEach(r => out.push({ n: r.nombre, sub: `[${r.inst}] ${r.sector}`, label: r.nombre, lat: r.lat, lon: r.lon, tipo: r.inst === 'VIALIDAD' ? 'corte' : 'unidad' }));
+    return out.filter(p => p.lat != null && p.lon != null).map(p => ({ ...p, nn: norm(p.n) }));
+  }
+
+  function buscarLocal(q, max) {
+    const nq = norm(q); if (nq.length < 2) return [];
+    const res = [];
+    for (const it of [...puntosLocales(), ...localidades]) {
+      const i = it.nn.indexOf(nq); if (i < 0) continue;
+      res.push({ ...it, score: (i === 0 ? 0 : it.nn.includes(' ' + nq) ? 1 : 2) + it.nn.length / 100 });
+    }
+    return res.sort((a, b) => a.score - b.score).slice(0, max || 6);
+  }
+
+  /* ------------------------------ fuentes en linea ------------------------------ */
+  const cacheFoto = new Map(); let abortFoto = null;
+  async function buscarPhoton(q) {
+    const k = norm(q); if (cacheFoto.has(k)) return cacheFoto.get(k);
+    if (abortFoto) abortFoto.abort(); abortFoto = new AbortController();
+    let sesgo = '';
+    if (typeof mapTactico !== 'undefined' && mapTactico && mapTactico.getCenter) { const c = mapTactico.getCenter(); sesgo = `&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`; }
+    const j = await (await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=8&bbox=${BBOX.join(',')}${sesgo}`, { signal: abortFoto.signal })).json();
+    const res = (j.features || []).map(f => {
+      const p = f.properties || {}, g = (f.geometry && f.geometry.coordinates) || [];
+      const lon = g[0], lat = g[1]; if (lat == null || lon == null || !dentroNEA(lat, lon)) return null;
+      const calle = [p.street, p.housenumber].filter(Boolean).join(' ');
+      const n = p.name || calle || p.city || 'Sin nombre';
+      const zona = [p.district, p.city || p.county, p.state].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i && v !== n);
+      const k1 = p.osm_key, v1 = p.osm_value || '';
+      let tipo = 'poi';
+      if (k1 === 'aeroway') tipo = 'avion';
+      else if (k1 === 'healthcare' || (k1 === 'amenity' && /hospital|clinic|doctors/.test(v1))) tipo = 'hosp';
+      else if (k1 === 'highway') tipo = 'calle';
+      else if (k1 === 'place') tipo = 'loc';
+      return { n, sub: [p.name && calle ? calle : '', ...zona].filter(Boolean).join(', '), label: [n, ...zona.slice(-2)].join(', '), lat, lon, tipo };
+    }).filter(Boolean);
+    cacheFoto.set(k, res); return res;
+  }
+
+  async function buscarDireccionGeoref(q) {
+    const out = [];
+    for (const prov of ['chaco', 'corrientes']) {
+      try {
+        const j = await (await fetch(`${GEOREF}/direcciones?direccion=${encodeURIComponent(q)}&provincia=${prov}&max=2`)).json();
+        (j.direcciones || []).forEach(d => {
+          const u = d.ubicacion || {}; if (u.lat == null || u.lon == null) return;
+          const nom = d.nomenclatura || (d.calle && d.calle.nombre) || q;
+          out.push({ n: titulo(nom.split(',')[0]), sub: nom.split(',').slice(1).map(s => titulo(s.trim())).join(', ') || titulo(prov), label: nom.split(',').map(s => titulo(s.trim())).join(', '), lat: u.lat, lon: u.lon, tipo: 'calle' });
+        });
+      } catch (_) { /* Georef sin respuesta: se sigue con las demas fuentes */ }
+    }
+    return out;
+  }
+
+  async function resolverPunto(texto, input) {
+    const t = String(texto ?? '').trim(); if (!t) return null;
+    if (input && input.dataset.lat && input.dataset.label === t) return { lat: +input.dataset.lat, lon: +input.dataset.lon };
+    const c = parseCoord(t); if (c) return c;
+    const at = RE_AT.exec(t); if (at) return { lat: +at[1], lon: +at[2] };
+    const nt = limpiarNombre(t), loc = buscarLocal(nt, 1)[0];
+    if (loc && norm(loc.n) === norm(nt)) return { lat: loc.lat, lon: loc.lon };
+    if (/\d/.test(nt)) { const d = await buscarDireccionGeoref(nt); if (d[0]) return { lat: d[0].lat, lon: d[0].lon }; }
+    try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { /* sin red */ }
+    return loc ? { lat: loc.lat, lon: loc.lon } : null;
+  }
+
+  /* --------------------------- desplegable de sugerencias --------------------------- */
+  function inyectarCSS() {
+    if (document.getElementById('gs-css')) return;
+    const s = document.createElement('style'); s.id = 'gs-css';
+    s.textContent = '.gs-box{position:absolute;left:0;right:0;top:100%;z-index:9999;background:#fff;border:1px solid #cbd5e1;border-radius:0 0 6px 6px;box-shadow:0 6px 14px rgba(0,0,0,.18);max-height:270px;overflow-y:auto;display:none}'
+      + '.gs-item{display:flex;gap:8px;padding:7px 9px;cursor:pointer;border-bottom:1px solid #e2e8f0;align-items:flex-start}'
+      + '.gs-item:hover,.gs-activo{background:#eff6ff}.gs-ico{width:18px;text-align:center;flex:none}'
+      + '.gs-main{font-size:12px;color:#0f172a}.gs-sub{font-size:10.5px;color:#64748b}'
+      + '.gs-foot{padding:4px 9px;font-size:10px;color:#64748b;background:#f8fafc}';
+    document.head.appendChild(s);
+  }
+  const cerca = (a, b, u) => Math.abs(a.lat - b.lat) < u && Math.abs(a.lon - b.lon) < u;
+  function mezclar(base, extra) {
+    const out = base.slice();
+    for (const e of extra) {
+      const nn = norm(e.n);
+      if (out.some(o => norm(o.n) === nn && cerca(o, e, e.tipo === 'loc' ? 0.05 : 0.003))) continue;
+      out.push(e); if (out.length >= 9) break;
+    }
+    return out;
+  }
+  function pintar(st, q) {
+    if (!st.items.length && !st.nota) { st.box.style.display = 'none'; return; }
+    st.box.innerHTML = st.items.map((it, i) =>
+      `<div class="gs-item${i === st.act ? ' gs-activo' : ''}" data-i="${i}"><span class="gs-ico">${ICO[it.tipo] || '📍'}</span><div><div class="gs-main">${resaltar(it.n, q)}</div><div class="gs-sub">${escH(it.sub || '')}</div></div></div>`
+    ).join('') + `<div class="gs-foot">${escH(st.nota || '© OpenStreetMap · Georef (datos.gob.ar)')}</div>`;
+    st.box.style.display = 'block';
+    const a = st.box.querySelector('.gs-activo'); if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
+  }
+  let capaBusq = null;
+  function marcarEnMapa(it) {
+    if (typeof mapTactico === 'undefined' || !mapTactico) return;
+    if (!capaBusq) capaBusq = L.layerGroup().addTo(mapTactico);
+    capaBusq.clearLayers();
+    L.marker([it.lat, it.lon]).addTo(capaBusq).bindPopup(`<b>${escH(it.n)}</b><br><small>${escH(it.sub || '')}</small>`).openPopup();
+    mapTactico.flyTo([it.lat, it.lon], ZOOM[it.tipo] || 14, { duration: 0.8 });
+  }
+  function elegir(st, it) {
+    const el = st.input;
+    el.value = it.label || it.n;
+    el.dataset.lat = it.lat; el.dataset.lon = it.lon; el.dataset.label = el.value.trim();
+    st.items = []; st.nota = ''; st.seq++; st.box.style.display = 'none';
+    marcarEnMapa(it);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function adjuntar(input) {
+    if (!input || input.dataset.gs) return;
+    input.dataset.gs = '1'; input.setAttribute('autocomplete', 'off'); input.removeAttribute('oninput');
+    const wrap = input.parentElement; if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+    const box = document.createElement('div'); box.className = 'gs-box'; wrap.appendChild(box);
+    const st = { input, box, items: [], act: -1, seq: 0, t: null, nota: '' };
+
+    const buscar = () => {
+      const q = input.value.trim(), mi = ++st.seq; clearTimeout(st.t); st.nota = '';
+      delete input.dataset.lat; delete input.dataset.lon; delete input.dataset.label;
+      const c = parseCoord(q);
+      if (c) { st.items = [{ n: `Coordenadas ${c.lat}, ${c.lon}`, sub: 'Ir a este punto', label: `${c.lat}, ${c.lon}`, lat: c.lat, lon: c.lon, tipo: 'coord' }]; st.act = 0; pintar(st, ''); return; }
+      if (q.length < 2) { st.items = []; box.style.display = 'none'; return; }
+      st.items = buscarLocal(q); st.act = st.items.length ? 0 : -1; pintar(st, q);
+      if (q.length < 3) return;
+      st.t = setTimeout(async () => {
+        const conNum = /\d/.test(q);
+        const [foto, dirs] = await Promise.allSettled([buscarPhoton(q), conNum ? buscarDireccionGeoref(q) : Promise.resolve([])]);
+        if (mi !== st.seq) return; // llego tarde: el usuario ya escribio otra cosa
+        if (foto.status === 'rejected' && foto.reason && foto.reason.name === 'AbortError') return;
+        const extra = [...(dirs.status === 'fulfilled' ? dirs.value : []), ...(foto.status === 'fulfilled' ? foto.value : [])];
+        if (foto.status === 'rejected') st.nota = 'Sin conexión al buscador en línea: solo resultados locales';
+        st.items = mezclar(st.items, extra);
+        if (st.act < 0 && st.items.length) st.act = 0;
+        pintar(st, q);
+      }, 280);
+    };
+    input.addEventListener('input', buscar);
+    input.addEventListener('focus', () => { if (input.value.trim().length >= 2 && !input.dataset.lat) buscar(); });
+    input.addEventListener('blur', () => setTimeout(() => { box.style.display = 'none'; }, 150));
+    input.addEventListener('keydown', e => {
+      if (box.style.display === 'none' || !st.items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); st.act = (st.act + 1) % st.items.length; pintar(st, input.value); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); st.act = (st.act - 1 + st.items.length) % st.items.length; pintar(st, input.value); }
+      else if (e.key === 'Enter' && st.act >= 0) { e.preventDefault(); elegir(st, st.items[st.act]); }
+      else if (e.key === 'Escape') { box.style.display = 'none'; }
+    });
+    box.addEventListener('mousedown', e => {
+      e.preventDefault(); const d = e.target.closest('.gs-item'); if (d) elegir(st, st.items[+d.dataset.i]);
+    });
+  }
+
+  /* ------------------------------------ clima ------------------------------------ */
+  const WMO = { 0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Cubierto', 45: 'Niebla', 48: 'Niebla con escarcha', 51: 'Llovizna leve', 53: 'Llovizna moderada', 55: 'Llovizna intensa', 56: 'Llovizna helada leve', 57: 'Llovizna helada intensa', 61: 'Lluvia leve', 63: 'Lluvia moderada', 65: 'Lluvia intensa', 66: 'Lluvia helada leve', 67: 'Lluvia helada intensa', 71: 'Nevada leve', 73: 'Nevada moderada', 75: 'Nevada intensa', 77: 'Granos de nieve', 80: 'Chubascos leves', 81: 'Chubascos moderados', 82: 'Chubascos violentos', 85: 'Chubascos de nieve leves', 86: 'Chubascos de nieve intensos', 95: 'Tormenta', 96: 'Tormenta con granizo leve', 99: 'Tormenta con granizo intenso' };
+  async function climaPunto(lat, lon, fecha) {
+    const vars = 'temperature_2m,wind_speed_10m,wind_gusts_10m,visibility,cloud_cover,weather_code';
+    const j = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${vars}&hourly=${vars}&forecast_days=7&timezone=America%2FArgentina%2FCordoba`)).json();
+    let c = j.current || {}, cuando = 'condiciones actuales del modelo';
+    const clave = String(fecha || '').replace(' ', 'T').slice(0, 13) + ':00';
+    const h = j.hourly, i = h && fecha ? h.time.indexOf(clave) : -1;
+    if (i >= 0) { c = {}; vars.split(',').forEach(v => { c[v] = h[v][i]; }); cuando = 'pronóstico del modelo para ' + clave.replace('T', ' '); }
+    const vis = c.visibility != null ? (c.visibility / 1000).toFixed(1) + ' km' : 's/d';
+    const desc = WMO[c.weather_code] !== undefined ? WMO[c.weather_code] : 'Código ' + c.weather_code + ' (sin traducir)';
+    return { cuando, texto: `${c.temperature_2m}°C | Viento ${c.wind_speed_10m} km/h (ráfagas ${c.wind_gusts_10m}) | Visib. ${vis} | Nubosidad ${c.cloud_cover}% | ${desc}` };
+  }
+
+  /* -------------------------- cortes cerca de una ruta -------------------------- */
+  function distPuntoSegM(p, a, b) {
+    const k = Math.cos(p[1] * Math.PI / 180), R = 111320;
+    const px = p[0] * k * R, py = p[1] * R, ax = a[0] * k * R, ay = a[1] * R, bx = b[0] * k * R, by = b[1] * R;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  function cortesCercanos(coords, metros) {
+    const res = [];
+    (typeof recursos !== 'undefined' ? recursos : []).filter(r => r.inst === 'VIALIDAD').forEach(r => {
+      const p = [r.lon, r.lat];
+      for (let i = 0; i < coords.length - 1; i++) if (distPuntoSegM(p, coords[i], coords[i + 1]) < metros) { res.push(r.nombre); break; }
+    });
+    return res;
+  }
+
+  /* ------------------------ funciones del COP que se reemplazan ------------------------ */
+  window.geocodificar = async function (dir) { return resolverPunto(dir, null); };
+  window.buscarSugerencias = function () { /* reemplazado por el buscador nuevo */ };
+
+  window.activarSeleccionMapa = function (m) {
+    modoSeleccionMapa = m;
+    document.querySelectorAll('[onclick^="activarSeleccionMapa("]').forEach(b => b.classList.toggle('picking', !!m && b.getAttribute('onclick').indexOf("'" + m + "'") >= 0));
+    if (typeof mapTactico !== 'undefined' && mapTactico) mapTactico.getContainer().style.cursor = m ? 'crosshair' : '';
+  };
+
+  window.ejecutarAccionAuditada = async function (tab, accion, datos, detalle) {
+    if (typeof sesionActiva === 'undefined' || !sesionActiva.autenticado) return null;
+    try {
+      const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ email: sesionActiva.email, pin: sesionActiva.pin, action: accion, tab, data: datos, detalle }) });
+      return await res.json();
+    } catch (err) { console.error('Fallo al registrar en el servidor:', err); return null; }
+  };
+
+  window.calcularRutaTactica = async function () {
+    const io = document.getElementById('ruta-origen'), id = document.getElementById('ruta-destino'), res = document.getElementById('resultado-ruta');
+    if (!io.value.trim() || !id.value.trim()) return;
+    res.style.display = 'block'; res.innerHTML = '⏳ Trazando...';
+    try {
+      const [a, b] = await Promise.all([resolverPunto(io.value, io), resolverPunto(id.value, id)]);
+      if (!a || !b) { res.innerHTML = `❌ No se pudo ubicar ${!a ? 'el origen' : 'el destino'}. Elegí una sugerencia de la lista o hacé clic en el mapa.`; return; }
+      const data = await (await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`)).json();
+      if (!data.routes || !data.routes.length) { res.innerHTML = '❌ Sin ruta terrestre.'; return; }
+      capaRutaActiva.clearLayers();
+      L.marker([a.lat, a.lon]).addTo(capaRutaActiva).bindPopup('📍 Partida');
+      L.marker([b.lat, b.lon]).addTo(capaRutaActiva).bindPopup('🏁 Destino');
+      const ruta = data.routes[0];
+      const linea = L.geoJSON(ruta.geometry, { style: { color: '#8e44ad', weight: 6, opacity: 0.85 } }).addTo(capaRutaActiva);
+      mapTactico.fitBounds(linea.getBounds(), { padding: [40, 40] });
+      const cortes = cortesCercanos(ruta.geometry.coordinates, 300);
+      res.innerHTML = `<b>✅ Ruta</b>: ${(ruta.distance / 1000).toFixed(1)} km | ${Math.round(ruta.duration / 60)} min`
+        + (cortes.length ? `<div style="color:#b91c1c;margin-top:4px">⚠ El trazado pasa a menos de 300 m de ${cortes.length} corte(s) cargado(s): ${cortes.map(escH).join('; ')}</div>`
+          : '<br><small>No hay cortes cargados sobre este trazado (confirmar con Vialidad).</small>');
+    } catch (e) { res.innerHTML = '❌ Error de conexión.'; }
+  };
+
+  function prefijar(id, raw) {
+    const el = document.getElementById(id), p = parseTexto(raw);
+    el.value = p.nombre;
+    if (p.coord) { el.dataset.lat = p.coord.lat; el.dataset.lon = p.coord.lon; el.dataset.label = p.nombre; }
+    else { delete el.dataset.lat; delete el.dataset.lon; delete el.dataset.label; }
+  }
+
+  window.dibujarRutaYMet = async function (origen, destino, fecha) {
+    if (!origen || !destino || origen === 'N/A') return alert('Faltan datos de origen o destino');
+    cambiarPestana('tactica');
+    prefijar('ruta-origen', origen); prefijar('ruta-destino', destino);
+    await calcularRutaTactica();
+    const res = document.getElementById('resultado-ruta');
+    try {
+      const [a, b] = await Promise.all([resolverPunto(origen), resolverPunto(destino)]);
+      if (!a || !b) throw new Error('No se pudieron ubicar las coordenadas.');
+      const [wa, wb] = await Promise.all([climaPunto(a.lat, a.lon, fecha), climaPunto(b.lat, b.lon, fecha)]);
+      res.innerHTML += `<div style="margin-top:8px;padding:8px;background:#1e293b;color:#fff;border-radius:4px;border-left:4px solid #3498db;font-size:12px">
+        <b style="color:#7fb3ff">🌤️ Clima en puntos de salida y llegada</b> <small>(${escH(wa.cuando)}; modelo, no es METAR/TAF)</small><br>
+        📍 <b>Origen:</b> ${escH(wa.texto)}<br>🏁 <b>Destino:</b> ${escH(wb.texto)}</div>`;
+    } catch (err) { res.innerHTML += `<br><span style="color:#ef4444">❌ Fallo al obtener clima: ${escH(err.message)}</span>`; }
+  };
+
+  window.guardarMisionVuelo = async function (e) {
+    e.preventDefault();
+    const form = e.target, btn = form.querySelector('button[type="submit"]'), $ = id => document.getElementById(id);
+    const io = $('mis-origen'), idd = $('mis-destino'), txt = btn.innerText;
+    btn.disabled = true; btn.innerText = 'Ubicando puntos...';
+    try {
+      const [a, b] = await Promise.all([resolverPunto(io.value, io), resolverPunto(idd.value, idd)]);
+      if (!a || !b) { alert(`No se pudo ubicar ${!a ? 'el origen' : 'el destino'}. Elegí una sugerencia de la lista o marcá el punto en el mapa (📍 / 🏁).`); return; }
+      const et = (inp, p) => `${limpiarNombre(inp.value)} @${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+      const datos = {
+        ID_Mision: `MIS-${Math.floor(Date.now() / 1000)}`, Fecha_Hora: $('mis-fecha').value.replace('T', ' '), Tipo_Mision: $('mis-tipo').value.trim(),
+        Medio_Asignado: $('mis-medio').value, Origen_Destino: `${et(io, a)} | ${et(idd, b)}`, Estado: $('mis-estado').value, Operador_Responsable: sesionActiva.nombre
+      };
+      btn.innerText = 'Guardando en la nube...';
+      const detalle = `Planificó misión ${datos.Tipo_Mision} con la aeronave ${datos.Medio_Asignado}`;
+      const r = await ejecutarAccionAuditada('Misiones', 'INSERT', datos, detalle);
+      if (r && r.status === 'success') {
+        logEvento(detalle); toast(`✅ Misión ${datos.ID_Mision} guardada`);
+        form.reset(); [io, idd].forEach(x => { delete x.dataset.lat; delete x.dataset.lon; delete x.dataset.label; });
+      } else {
+        alert('⚠ No se pudo confirmar el guardado de la misión. Los datos siguen en el formulario. Revisá la lista antes de darla por registrada.');
+      }
+      cargarMisionesEnTabla();
+    } finally { btn.disabled = false; btn.innerText = txt; }
+  };
+
+  const misiones = {};
+  window.cargarMisionesEnTabla = async function () {
+    if (typeof sesionActiva === 'undefined' || !sesionActiva.autenticado) return;
+    const tb = document.querySelector('#tabla-misiones tbody');
+    const fila = (msg, color) => { tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:${color || '#64748b'}">${escH(msg)}</td></tr>`; };
+    fila('Actualizando...');
+    try {
+      const json = await (await fetch(`${COP_API_URL}?action=getData&tab=Misiones`)).json();
+      if (json.status !== 'success' || !json.data.length) return fila('Sin datos.');
+      const activas = json.data.filter(m => !String(m.Estado).toUpperCase().includes('CANCELADA')).reverse().slice(0, 15);
+      if (!activas.length) return fila('No hay misiones operativas recientes.');
+      tb.innerHTML = '';
+      activas.forEach(m => {
+        misiones[m.ID_Mision] = m;
+        const st = String(m.Estado).toUpperCase(), [o, d] = partirOD(m.Origen_Destino), id = escH(m.ID_Mision);
+        const color = st.includes('CURSO') ? '#16a34a' : st.includes('FINALIZADA') ? '#2563eb' : st.includes('SUSPENDIDA') ? '#d97706' : '#3b82f6';
+        const btn = (acc, bg, ico, tip) => `<button class="btn-pick" style="background:${bg};padding:3px 6px" data-acc="${acc}" data-id="${id}" title="${tip}">${ico}</button>`;
+        tb.insertAdjacentHTML('beforeend', `<tr>
+          <td><b>${id}</b><br><small>${escH(m.Tipo_Mision)}<br>⏱️ ${escH(m.Fecha_Hora)}</small></td>
+          <td><b>${escH(m.Medio_Asignado)}</b></td>
+          <td>O: ${escH(o.nombre)}<br>D: ${escH(d.nombre)}<br><button class="btn-pick" style="background:#8e44ad;margin-top:4px" data-acc="trazar" data-id="${id}">🗺️ Trazar Vuelo</button></td>
+          <td><span style="color:${color};font-weight:bold">${escH(m.Estado)}</span>
+            <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">${btn('curso', '#16a34a', '🚀', 'Despegar / Iniciar')}${btn('susp', '#d97706', '⏸️', 'Suspender')}${btn('fin', '#2563eb', '✅', 'Finalizar / Aterrizar')}${btn('canc', '#ef4444', '🗑️', 'Cancelar')}${btn('pdf', '#8e44ad', '📄', 'Informe PDF')}</div></td></tr>`);
+      });
+    } catch (e) { fila('Error al cargar misiones.', '#dc2626'); }
+  };
+
+  document.getElementById('tabla-misiones').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-acc]'); if (!b) return;
+    const id = b.dataset.id, m = misiones[id]; if (!m) return;
+    const [o, d] = partirOD(m.Origen_Destino);
+    switch (b.dataset.acc) {
+      case 'curso': return cambiarEstadoMision(id, 'En Curso');
+      case 'susp': return cambiarEstadoMision(id, 'Suspendida');
+      case 'fin': return cambiarEstadoMision(id, 'Finalizada');
+      case 'canc': return cambiarEstadoMision(id, 'Cancelada');
+      case 'trazar': return dibujarRutaYMet(o.raw, d.raw, m.Fecha_Hora);
+      case 'pdf': return generarInformeMision(id, m.Tipo_Mision, m.Medio_Asignado, o.raw, d.raw, m.Estado, m.Fecha_Hora);
+    }
+  });
+
+  window.generarInformeMision = async function (id, tipo, medio, origenRaw, destinoRaw, estado, fechaPlan) {
+    toast('⏳ Generando informe con el clima del modelo...', 6000);
+    const { jsPDF } = window.jspdf, doc = new jsPDF(), o = parseTexto(origenRaw), d = parseTexto(destinoRaw);
+    doc.setFontSize(16); doc.setTextColor(30, 41, 59); doc.text(`INFORME DE MISIÓN AÉREA: ${id}`, 14, 20);
+    doc.setFontSize(10);
+    [`Tipo de Operación: ${tipo}`, `Medio Asignado: ${medio}`, `Estado Actual: ${estado}`, `Fecha/Hora Planificada: ${fechaPlan}`,
+      `Operador de Consola: ${sesionActiva.nombre}`, `Emisión del Reporte: ${new Date().toLocaleString('es-AR')}`].forEach((l, i) => doc.text(l, 14, 30 + i * 6));
+    doc.text(doc.splitTextToSize(`Punto de Origen: ${o.nombre}${o.coord ? ` (${o.coord.lat.toFixed(4)}, ${o.coord.lon.toFixed(4)})` : ''}`, 180), 14, 70);
+    doc.text(doc.splitTextToSize(`Punto de Destino: ${d.nombre}${d.coord ? ` (${d.coord.lat.toFixed(4)}, ${d.coord.lon.toFixed(4)})` : ''}`, 180), 14, 80);
+    doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text('CLIMA SEGÚN MODELO (Open-Meteo) - NO es METAR/TAF', 14, 95);
+    doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+    try {
+      const [a, b] = await Promise.all([resolverPunto(origenRaw), resolverPunto(destinoRaw)]);
+      if (!a || !b) throw new Error('sin coordenadas');
+      const [wa, wb] = await Promise.all([climaPunto(a.lat, a.lon, fechaPlan), climaPunto(b.lat, b.lon, fechaPlan)]);
+      doc.setFillColor(241, 245, 249); doc.rect(14, 99, 182, 32, 'F');
+      doc.text(doc.splitTextToSize(`ORIGEN: ${wa.texto}`, 175), 18, 106);
+      doc.text(doc.splitTextToSize(`DESTINO: ${wb.texto}`, 175), 18, 117);
+      doc.setFontSize(8); doc.text(`Base: ${wa.cuando}. Confirmar con el Servicio Meteorológico de la unidad antes de despegar.`, 14, 136);
+    } catch (e) { doc.setTextColor(192, 57, 43); doc.text('No se pudo obtener el clima. Consultar METAR/TAF y Meteorología de la unidad.', 14, 105); }
+    doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text('REGISTRO DE EJECUCIÓN (a completar por el Comandante de Aeronave)', 14, 148);
+    doc.setTextColor(30, 41, 59); doc.setFontSize(10);
+    doc.text('Hora real de despegue: __________________', 14, 158); doc.text('Hora real de aterrizaje: __________________', 100, 158);
+    doc.text('Novedades Técnicas / Operativas:', 14, 168); doc.rect(14, 171, 182, 40);
+    doc.text('Firma Comandante de Aeronave', 30, 232); doc.text('Firma Jefe de Operaciones', 120, 232);
+    doc.save(`MISION_${id}_${estado}.pdf`);
+  };
+
+  /* ------------------------------------ arranque ------------------------------------ */
+  function iniciar() {
+    inyectarCSS();
+    ['mis-origen', 'mis-destino', 'ruta-origen', 'ruta-destino'].forEach(id => adjuntar(document.getElementById(id)));
+    document.querySelectorAll('.autocomplete-items').forEach(el => { el.style.display = 'none'; });
+    cargarLocalidades();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { norm, parseCoord, parseTexto, partirOD, limpiarNombre, resaltar, mezclar, distPuntoSegM };
+})();
+</script>
+<!-- ===== FIN COP GEOSEARCH ===== -->
+
 </body>
 </html>
