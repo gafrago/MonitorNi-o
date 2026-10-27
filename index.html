@@ -116,15 +116,20 @@ table.analytics-table th{background:#2c3e50;color:#fff}
     </div>
 
     <details class="form-panel">
-      <summary>🌊 Cargar nivel de río (parte PNA/INA)</summary>
+      <summary>🌊 Gestión de Ríos (PNA/INA)</summary>
       <form class="form-grid" onsubmit="cargarNivelManual(event)">
+        <!-- Botón de extracción automática -->
+        <button type="button" class="btn-submit" style="background:#2980b9; margin-bottom:10px" onclick="forzarSyncRios(this)">
+          📡 Forzar Extracción Automática (PNA/INA)
+        </button>
+        <hr style="border-color:#cbd5e1; margin:4px 0">
         <select id="nivel-est" onchange="prellenarNivel()"></select>
         <div class="coords-row">
           <input type="number" step="0.01" id="nivel-alt" placeholder="Altura (m)" required />
           <input type="number" step="0.01" id="nivel-ale" placeholder="Alerta (m)" />
           <input type="number" step="0.01" id="nivel-eva" placeholder="Evac. (m)" />
         </div>
-        <button type="submit" class="btn-submit" style="background:#16a34a">💾 Guardar nivel a DB</button>
+        <button type="submit" class="btn-submit" style="background:#16a34a">💾 Guardar Carga Manual</button>
       </form>
     </details>
 
@@ -403,7 +408,6 @@ async function refrescarDatosServer() {
     }
     
     if (resHid.status === 'success') {
-      // Coordenadas de resguardo por si fallan en la DB
       const coordsFallback = {
         H1: {lat:-27.485, lon:-58.932}, H2: {lat:-27.462, lon:-58.838},
         H3: {lat:-27.310, lon:-58.580}, H4: {lat:-26.928, lon:-58.502},
@@ -421,7 +425,6 @@ async function refrescarDatosServer() {
       poblarSelectorNivel();
       renderizarHidrometria();
       
-      // Iniciamos GloFAS solo despues de tener las coordenadas correctas
       if (!window.glofasIniciado) {
         window.glofasIniciado = true;
         cargarCaudalesGloFAS();
@@ -482,6 +485,30 @@ async function cargarNivelManual(ev) {
   logEvento(mensajeLog);
   await ejecutarAccionAuditada("Hidrometria", "UPDATE", dataUpdate, mensajeLog); 
   refrescarDatosServer();
+}
+
+async function forzarSyncRios(btn) {
+  if (sesionActiva.rol.toLowerCase() === 'operador') return alert("Solo Planificadores o Administradores pueden forzar la sincronización satelital.");
+  
+  const textoOriginal = btn.innerText;
+  btn.innerText = "⏳ Extrayendo datos oficiales...";
+  btn.disabled = true;
+  
+  try {
+    const payload = { action: "SYNC_PNA" }; 
+    await fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) });
+    
+    setTimeout(() => {
+      refrescarDatosServer();
+      btn.innerText = "✅ ¡Actualizado con éxito!";
+      setTimeout(() => { btn.innerText = textoOriginal; btn.disabled = false; }, 3000);
+    }, 2000);
+    
+  } catch(e) {
+    alert("Fallo de red al intentar extraer los datos.");
+    btn.innerText = textoOriginal; 
+    btn.disabled = false;
+  }
 }
 
 function eliminarRecurso(id, nombre) {
@@ -635,7 +662,7 @@ async function generarInformeMision(id, tipo, medio, origenRaw, destinoRaw, esta
   doc.setTextColor(30, 41, 59); doc.setFontSize(10);
   doc.text("Hora real de despegue: __________________", 14, 158); doc.text("Hora real de aterrizaje: __________________", 100, 158);
   doc.text("Novedades Técnicas / Operativas:", 14, 168); doc.rect(14, 171, 182, 40); 
-  doc.text("Firma Comandante de Aeronave", 30, 232); doc.text("Firma Jefe de Operaciones", 120, 232);
+  doc.text("Firma Comandante de Aeronave", 30, 215); doc.text("Firma Jefe de Operaciones", 120, 215);
   doc.save(`MISION_${id}_${estado}.pdf`);
 }
 
@@ -848,7 +875,6 @@ async function cargarPronostico() {
     resu.innerHTML = `<b>Lluvia acumulada 48 h: <span style="color:${total > 60 ? '#dc2626' : total > 20 ? '#d97706' : '#16a34a'}">${total.toFixed(0)} mm</span></b> <small>(modelo referencial)</small>`;
   } catch (e) { cont.innerHTML = '<span style="color:#dc2626">❌ No se pudo cargar el pronóstico.</span>'; resu.innerHTML = ''; }
 }
-
 function actualizarDashboardAnalytics() {
   const tb = document.querySelector('#tabla-analitica-rios tbody'); tb.innerHTML = '';
   estacionesHidro.forEach(h => { const e = estadoHidro(h);
@@ -875,7 +901,6 @@ function dibujarRiosEstrategico() {
     cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #444;padding:4px 0"><b style="color:${e.color === '#16a34a' ? '#4ade80' : '#fff'}">● ${esc(r.estacion)}</b><br>Q: ${textoQ(r)} | Alt: ${Number(r.actual).toFixed(2)} m<br><small>${esc(e.txt)}</small></div>`);
   });
 }
-
 function inicializarMapaRadar() {
   mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
@@ -1264,7 +1289,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
       if (!a || !b) { alert(`No se pudo ubicar ${!a ? 'el origen' : 'el destino'}. Elegí una sugerencia de la lista o marcá el punto en el mapa (📍 / 🏁).`); return; }
       const et = (inp, p) => `${limpiarNombre(inp.value)} @${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
       const datos = {
-        ID_Mision: `MIS-${Math.floor(Date.now() / 1000)}`, Fecha_Hora: $('mis-fecha').value.replace('T', ' '), Tipo_Mision: $('mis-tipo').value.trim(),
+        ID_Mision: `MIS-${Math.floor(Date.now / 1000)}`, Fecha_Hora: $('mis-fecha').value.replace('T', ' '), Tipo_Mision: $('mis-tipo').value.trim(),
         Medio_Asignado: $('mis-medio').value, Origen_Destino: `${et(io, a)} | ${et(idd, b)}`, Estado: $('mis-estado').value, Operador_Responsable: sesionActiva.nombre
       };
       btn.innerText = 'Guardando en la nube...';
