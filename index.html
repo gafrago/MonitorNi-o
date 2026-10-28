@@ -2515,5 +2515,53 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
 </script>
 <!-- ===== FIN PARCHE COP v4.3 HIBRIDO ===== -->
 
+  <!-- ===== INICIO PROBABILIDAD DE CRECIENTE: pegar antes de </body>, DESPUES de los otros bloques ===== -->
+<script>
+(function () {
+  'use strict';
+  const UMBRAL = 1.10;   // "creciente" = caudal máximo de los próximos 7 días al menos 10 % mayor al de hoy
+
+  /* probabilidad = proporción de miembros del ensamble GloFAS (Copernicus) que superan el umbral */
+  window.probCreciente = function (daily) {
+    const claves = Object.keys(daily || {}).filter(k => k.startsWith('river_discharge_member'));
+    let n = 0, si = 0;
+    claves.forEach(k => {
+      const q = daily[k]; if (!q || q[0] == null || !(q[0] > 0)) return;
+      const max7 = Math.max(...q.slice(1, 8).filter(x => x != null)); if (!isFinite(max7)) return;
+      n++; if (max7 >= q[0] * UMBRAL) si++;
+    });
+    return n ? { p: si / n, n } : null;
+  };
+
+  async function cargar() {
+    await Promise.all((estacionesHidro || []).map(async s => {
+      try {
+        const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&ensemble=true&forecast_days=8`)).json();
+        const r = probCreciente(j.daily); s.pCrec = r ? r.p : null; s.nMiembros = r ? r.n : 0;
+      } catch (e) { s.pCrec = null; }
+    }));
+    pintar();
+  }
+
+  function pintar() {
+    const panel = document.getElementById('panel-rios'); if (!panel) return;
+    let b = document.getElementById('bloque-prob');
+    if (!b) { b = document.createElement('div'); b.id = 'bloque-prob'; const hr = panel.querySelector('hr'); panel.insertBefore(b, hr || null); }
+    const filas = (estacionesHidro || []).filter(s => s.pCrec != null).map(s => {
+      const pc = Math.round(s.pCrec * 100), col = pc >= 70 ? '#f87171' : pc >= 40 ? '#fbbf24' : '#4ade80';
+      return `<div style="padding:2px 0">${esc(s.estacion)}: <b style="color:${col}">${pc} %</b> <small>(${s.nMiembros} escenarios)</small></div>`;
+    });
+    b.innerHTML = `<hr style="border-color:#444;margin:6px 0"><b>📈 Probabilidad de creciente (7 días)</b>${filas.length ? filas.join('') : '<div style="color:#94a3b8">Sin datos del ensamble</div>'}
+      <small style="color:#94a3b8">Modelo GloFAS (Copernicus), referencial: no es un pronóstico oficial del INA.</small>`;
+  }
+
+  const _glofas = window.cargarCaudalesGloFAS;
+  window.cargarCaudalesGloFAS = async function () { if (typeof _glofas === 'function') await _glofas(); cargar(); };
+  const _rios = window.dibujarRiosEstrategico;
+  if (typeof _rios === 'function') window.dibujarRiosEstrategico = function () { _rios(); pintar(); };
+})();
+</script>
+<!-- ===== FIN PROBABILIDAD DE CRECIENTE ===== -->
+
 </body>
 </html>
