@@ -1,1943 +1,1025 @@
 <!DOCTYPE html>
-
 <html lang="es">
-
 <head>
-
 <meta charset="UTF-8">
-
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-
 <style>
-
 body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#e2e8f0}
-
 #top-banner{background:#1a252f;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000}
-
 .badge-proto{background:#e67e22;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold;margin-right:10px;font-size:11px}
-
 .tab-bar{background:#2c3e50;padding:0 16px;display:flex;gap:5px;border-bottom:3px solid #e67e22}
-
 .tab-btn{background:#34495e;color:#fff;border:none;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;border-radius:5px 5px 0 0;opacity:.75}
-
 .tab-btn:hover{opacity:1}.tab-btn.active{background:#e67e22;opacity:1}
-
 .view-container{display:none;flex:1;overflow:hidden;width:100%;position:relative}.view-container.active{display:flex}
-
 #sidebar{width:420px;background:#f8fafc;border-right:2px solid #bdc3c7;display:flex;flex-direction:column;padding:10px;overflow-y:auto;box-sizing:border-box;z-index:500}
-
 .kpi-box{display:flex;gap:6px;margin-bottom:8px}
-
 .kpi-card{flex:1;background:#2c3e50;color:#fff;padding:6px;border-radius:4px;text-align:center;font-size:11px}
-
 .kpi-card b{display:block;font-size:15px;color:#f39c12}
-
 details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #2980b9;border-radius:4px;margin-bottom:8px;padding:7px}
-
 details.form-panel summary{font-weight:bold;font-size:12.5px;color:#1e293b;cursor:pointer;outline:none}
-
 .form-grid{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px}
-
 .form-grid input,.form-grid select{padding:5px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
-
 .coords-row{display:flex;gap:5px}.coords-row input{flex:1;width:100%;box-sizing:border-box}
-
 .btn-submit,.btn-ruta,.btn-clear,.btn-pdf{color:#fff;border:none;padding:7px;border-radius:4px;font-weight:bold;cursor:pointer}
-
 .btn-submit{background:#27ae60}.btn-ruta{background:#8e44ad;flex:1}.btn-clear{background:#7f8c8d}.btn-pdf{background:#c0392b;padding:6px 12px;font-size:12px}
-
 .btn-pick{background:#2980b9;color:#fff;border:none;padding:5px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
-
 .btn-pick.picking{background:#e74c3c;animation:pulse 1s infinite}
-
 @keyframes pulse{50%{opacity:.6}}
-
 .select-zona{background:#f1f5f9;border:1px solid #94a3b8;font-weight:bold;color:#1e293b}
-
 #map-tactico{flex:1;cursor:crosshair}
-
 #map-radar{flex:1;width:100%;height:100%;background:#1e293b}
-
 #vista-analytics{background:#f1f5f9;padding:20px;overflow-y:auto;display:none;flex-direction:column;gap:15px}
-
 #vista-analytics.active{display:flex}
-
 .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
-
 .analytics-card{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:15px}
-
 .analytics-card h4{margin-top:0;color:#1e293b;border-bottom:2px solid #e67e22;padding-bottom:6px;font-size:14px}
-
 table.analytics-table{width:100%;border-collapse:collapse;font-size:12px}
-
 table.analytics-table th,table.analytics-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
-
 table.analytics-table th{background:#2c3e50;color:#fff}
-
 .layer-control-bar{position:absolute;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.95);padding:8px 12px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;display:flex;gap:12px;border:1px solid #cbd5e1}
-
 .layer-control-bar label{display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:600;color:#1e293b}
-
 .custom-div-icon{background:transparent;border:none}
-
 .pin-tactico{position:relative;width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 6px rgba(0,0,0,.45);border:2px solid #fff}
-
 .pin-tactico span.sigla{transform:rotate(45deg);color:#fff;font-weight:800;font-size:9.5px}
-
 .pin-tactico .estado-dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff}
-
 .corte-ruta-badge{background:#c0392b;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
-
 .hidro-badge{color:#fff;border:2px solid #fff;border-radius:6px;padding:2px 5px;font-size:10px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,.4);white-space:nowrap;text-align:center}
-
 .infra-badge{background:#fff;border:2px dashed #1e293b;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px}
-
 .recurso-card{background:#fff;border-left:5px solid #2980b9;padding:7px 8px;margin-bottom:6px;font-size:11.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center;border-radius:0 4px 4px 0}
-
 .btn-del-mini{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:bold;cursor:pointer}
-
 .radar-legend,#panel-rios{position:absolute;bottom:30px;z-index:1000;background:rgba(0,0,0,.85);color:#fff;padding:12px;border-radius:8px;font-size:12px;line-height:1.5;box-shadow:0 4px 10px rgba(0,0,0,.4)}
-
 .radar-legend{right:30px;max-width:300px}.radar-legend a{color:#7fb3ff}
-
 #panel-rios{left:12px;width:295px;max-height:62vh;overflow-y:auto;font-size:11.5px}
-
 .aviso{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:11px;padding:5px 7px;border-radius:3px}
 
-
-
 /* Estilos para el autocompletado táctico */
-
 .autocomplete-container { position: relative; width: 100%; }
-
 .autocomplete-items { position: absolute; border: 1px solid #cbd5e1; border-bottom: none; border-top: none; z-index: 9999; top: 100%; left: 0; right: 0; background: #fff; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-
 .autocomplete-items div { padding: 8px 10px; cursor: pointer; background: #fff; border-bottom: 1px solid #cbd5e1; font-size: 11.5px; color: #1e293b; }
-
 .autocomplete-items div:hover { background: #f1f5f9; color: #0284c7; font-weight: bold; }
-
 </style>
-
 </head>
-
 <body>
 
-
-
 <!-- MODAL DE ACCESO OPERACIONAL -->
-
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
-
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">COP HÍDRICO NEA</h2>
-
     <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Ingrese sus credenciales de servicio</p>
-
     
-
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
-
     <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
-
     
-
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">PIN operacional:</label>
-
     <input type="password" id="login-pin" maxlength="6" placeholder="****" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
-
     
-
     <button onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
-
     <div id="login-error" style="color: #ef4444; font-size: 0.8rem; margin-top: 0.75rem; text-align: center; display: none;">Credenciales inválidas</div>
-
   </div>
-
 </div>
-
-
 
 <div id="top-banner">
-
   <div>
-
     <span class="badge-proto">OPERADOR: <span id="op-name">Iniciando...</span></span>
-
     <button onclick="cerrarSesionCOP()" style="background:#e74c3c; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
-
-    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.2)</strong>
-
+    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.3 Híbrido)</strong>
   </div>
-
   <div style="display:flex;align-items:center;gap:10px">
-
     <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Conectado</span>
-
     <span id="reloj-operativo" style="font-family:monospace"></span>
-
     <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
-
   </div>
-
 </div>
-
 <div class="tab-bar">
-
   <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico</button>
-
   <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
-
-  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y Auditoría</button>
-
+  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia Híbrida (Oficial + Satelital)</button>
 </div>
-
-
 
 <!-- VISTA 1: TÁCTICA -->
-
 <div id="vista-tactica" class="view-container active">
-
   <div class="layer-control-bar">
-
     <label><input type="checkbox" id="chk-hidro" checked onchange="toggleCapas()"> 🌊 Hidrómetros</label>
-
     <label><input type="checkbox" id="chk-infra" checked onchange="toggleCapas()"> 🏥✈️ Infraestructura</label>
-
     <label><input type="checkbox" id="chk-cortes" checked onchange="renderizarRecursos()"> 🚧 Cortes</label>
-
     <label><input type="checkbox" id="chk-unidades" checked onchange="renderizarRecursos()"> 🛡️ Unidades</label>
-
   </div>
-
   <div id="sidebar">
-
     <div class="kpi-box">
-
       <div class="kpi-card"><b id="kpi-unidades">0</b>Medios Activos</div>
-
       <div class="kpi-card"><b id="kpi-cortes" style="color:#ef4444">0</b>Cortes / Alertas</div>
-
       <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
-
     </div>
 
-
-
     <details class="form-panel">
-
       <summary>🌊 Gestión de Ríos (PNA/INA)</summary>
-
       <form class="form-grid" onsubmit="cargarNivelManual(event)">
-
-        <!-- Botón de extracción automática -->
-
         <button type="button" class="btn-submit" style="background:#2980b9; margin-bottom:10px" onclick="forzarSyncRios(this)">
-
           📡 Forzar Extracción Automática (PNA/INA)
-
         </button>
-
         <hr style="border-color:#cbd5e1; margin:4px 0">
-
         <select id="nivel-est" onchange="prellenarNivel()"></select>
-
         <div class="coords-row">
-
           <input type="number" step="0.01" id="nivel-alt" placeholder="Altura (m)" required />
-
           <input type="number" step="0.01" id="nivel-ale" placeholder="Alerta (m)" />
-
           <input type="number" step="0.01" id="nivel-eva" placeholder="Evac. (m)" />
-
         </div>
-
         <button type="submit" class="btn-submit" style="background:#16a34a">💾 Guardar Carga Manual</button>
-
       </form>
-
     </details>
 
-
-
     <details class="form-panel">
-
       <summary>📍 Jurisdicciones NEA (Chaco y Corrientes)</summary>
-
       <div class="form-grid">
-
         <small style="color:#c0392b;font-weight:bold;display:none" id="alerta-geojson">⚠️ Sin archivo mapa_nea.geojson local.</small>
-
         <input type="text" id="input-buscar-depto" placeholder="🔍 Filtrar departamento..." oninput="filtrarDepartamentosTexto()" />
-
         <select id="sel-depto" class="select-zona" onchange="seleccionarDeptoMapa()"><option value="">Seleccionar Departamento...</option></select>
-
       </div>
-
     </details>
-
-
 
     <details class="form-panel">
-
       <summary>🛣️ Ruteo Táctico</summary>
-
       <div class="form-grid">
-
         <div style="display:flex;gap:4px"><input type="text" id="ruta-origen" placeholder="Origen (o clic en mapa)" style="flex:1" /><button type="button" id="btn-pick-origen" class="btn-pick" onclick="activarSeleccionMapa('origen')">📍 Origen</button></div>
-
         <div style="display:flex;gap:4px"><input type="text" id="ruta-destino" placeholder="Destino (o clic en mapa)" style="flex:1" /><button type="button" id="btn-pick-destino" class="btn-pick" onclick="activarSeleccionMapa('destino')">🏁 Destino</button></div>
-
         <div style="display:flex;gap:6px"><button type="button" class="btn-ruta" onclick="calcularRutaTactica()">🧭 Trazar Ruta</button><button type="button" class="btn-clear" onclick="borrarRutaTactica()">🗑️ Borrar</button></div>
-
         <div id="resultado-ruta" style="display:none;font-size:11.5px;background:#f1f5f9;padding:7px;border-radius:3px;border-left:3px solid #8e44ad"></div>
-
       </div>
-
     </details>
-
-
-
-    <!-- PANEL DE MISIONES AÉREAS CON AUTOCOMPLETADO INTELIGENTE INTEGRADO -->
 
     <details class="form-panel" id="panel-misiones">
-
       <summary>🚁 Planificar Misión Aérea</summary>
-
       <form class="form-grid" onsubmit="guardarMisionVuelo(event)">
-
         <input type="datetime-local" id="mis-fecha" required title="Fecha y Hora de la Misión" />
-
         <input type="text" id="mis-tipo" placeholder="Tipo (Ej: MEDEVAC, Inserción)" required />
-
         <select id="mis-medio" required><option value="">Cargando aeronaves disponibles...</option></select>
-
         
-
-        <!-- Origen con Autocompletado Inteligente -->
-
         <div class="autocomplete-container" style="display:flex;gap:4px">
-
           <input type="text" id="mis-origen" placeholder="Origen (ej: Resistencia, Aeropuerto)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-origen')" style="flex:1" />
-
           <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-origen')">📍</button>
-
           <div id="sugerencias-origen" class="autocomplete-items"></div>
-
         </div>
-
         
-
-        <!-- Destino con Autocompletado Inteligente -->
-
         <div class="autocomplete-container" style="display:flex;gap:4px">
-
           <input type="text" id="mis-destino" placeholder="Destino (ej: Goya, San Javier)" required autocomplete="off" oninput="buscarSugerencias(this, 'sugerencias-destino')" style="flex:1" />
-
           <button type="button" class="btn-pick" onclick="activarSeleccionMapa('mis-destino')">🏁</button>
-
           <div id="sugerencias-destino" class="autocomplete-items"></div>
-
         </div>
-
         
-
         <select id="mis-estado" required>
-
           <option value="Planificada">🟡 Planificada</option>
-
           <option value="En Curso">🟢 En Curso</option>
-
         </select>
-
         <button type="submit" class="btn-submit" style="background:#8e44ad">📝 Registrar Misión en Sistema</button>
-
       </form>
-
     </details>
-
-
 
     <details class="form-panel" id="panel-alta">
-
       <summary>➕ Desplegar Unidad Manual a DB</summary>
-
       <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-
         <input type="text" id="nuevo-nombre" placeholder="Detalle del recurso o incidente" required />
-
         <div style="display:flex;gap:5px">
-
           <select id="nueva-institucion" style="flex:1" required>
-
             <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option><option value="FAA">✈️ FAA - Fuerza Aérea</option><option value="EA">🪖 EA - Ejército</option>
-
             <option value="PNA">⚓ PNA - Prefectura</option><option value="GN">🛡️ GN - Gendarmería</option><option value="DC">🚒 DC - Defensa Civil</option>
-
           </select>
-
           <select id="nuevo-estado" style="width:110px" required><option value="ASIGNADO">🟢 Operativo</option><option value="DISPONIBLE">🟡 Reserva</option><option value="NO_DISPONIBLE">🔴 Crítico</option></select>
-
         </div>
-
         <div class="coords-row"><input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required /><input type="number" step="any" id="nueva-lon" placeholder="Lon (clic en mapa)" required /></div>
-
         <div style="display:flex;gap:5px"><input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1" required /></div>
-
         <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
-
       </form>
-
     </details>
 
-
-
     <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px;font-size:12px">
-
       <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option><option value="VIALIDAD">🚧 Solo Cortes / Alertas</option><option value="FAA">✈️ FAA</option>
-
       <option value="EA">🪖 EA</option><option value="PNA">⚓ PNA</option><option value="GN">🛡️ GN</option><option value="DC">🚒 DC</option>
-
     </select>
-
     <div id="lista-recursos" style="flex:1;overflow-y:auto"></div>
-
   </div>
-
   <div id="map-tactico"></div>
-
 </div>
-
-
 
 <!-- VISTA 2: RADAR -->
-
 <div id="vista-radar" class="view-container">
-
   <div id="map-radar"></div>
-
   <div class="radar-legend">
-
     <b>⛈️ Radar Meteorológico</b>
-
     <div style="margin:6px 0"><button id="rv-play" class="btn-pdf" style="padding:3px 10px;margin-right:5px">▶</button><input type="range" id="rv-slider" min="0" max="0" value="0" style="width:170px;vertical-align:middle"></div>
-
     <div>Barrido: <b id="radar-hora" style="color:#f39c12">—</b></div>
-
     <hr style="border-color:#444;margin:6px 0">
-
     <b>Estado de las fuentes:</b><div id="estado-capas">⏳ Inicializando…</div>
-
     <small>Radar gratuito: zoom máx. 7, cobertura parcial en el NEA.<br><a href="https://www.rainviewer.com" target="_blank" rel="noopener">Weather data by Rain Viewer</a> · NASA GIBS · Open-Meteo</small>
-
   </div>
-
   <div id="panel-rios">
-
     <b>🌊 Cuenca del Paraná</b>
-
     <div id="lista-rios" style="margin-top:5px">⏳ Consultando…</div>
-
     <hr style="border-color:#444;margin:6px 0">
-
     <small><b>Q (m³/s):</b> modelo GloFAS (referencial, ubicación aprox.).<br><b>Altura:</b> DB central, con antigüedad.</small>
-
   </div>
-
 </div>
 
-
-
-<!-- VISTA 3: INTELIGENCIA -->
-
+<!-- VISTA 3: INTELIGENCIA HÍBRIDA -->
 <div id="vista-analytics" class="view-container">
-
   <div style="max-width:1200px;margin:0 auto;width:100%">
-
-    <h2 style="color:#1e293b;margin-top:0">📊 Inteligencia Operativa y Auditoría</h2>
-
+    <h2 style="color:#1e293b;margin-top:0">📊 Panel de Inteligencia Híbrida (Altura Oficial + Tendencia Satelital)</h2>
     <div class="analytics-grid">
-
       <div class="analytics-card" style="grid-column:span 2">
-
         <h4>🌤️ Pronóstico próximas 48 h (bloques de 6 h)
-
           <select id="sel-pronostico" onchange="cargarPronostico()" style="float:right;font-size:12px">
-
             <option value="-27.45,-58.98">Resistencia</option><option value="-27.47,-58.83">Corrientes</option><option value="-26.93,-58.50">Puerto Bermejo</option><option value="-29.14,-59.26">Goya</option>
-
           </select></h4>
-
         <div id="pronostico-resumen" style="font-size:12.5px;color:#334155;margin-bottom:6px"></div>
-
         <div id="pronostico-container" style="display:flex;gap:10px;overflow-x:auto;padding:5px 0"><span style="color:#64748b;font-size:13px">⏳ Consultando Open-Meteo…</span></div>
-
       </div>
-
-      <div class="analytics-card">
-
-        <h4>🌊 Resumen Hidrológico</h4>
-
-        <div style="max-height:250px;overflow-y:auto"><table class="analytics-table" id="tabla-analitica-rios"><thead><tr><th>Estación</th><th>Altura</th><th>Estado</th><th>Q GloFAS</th></tr></thead><tbody></tbody></table></div>
-
-      </div>
-
-      
-
-      <!-- TABLA DE MISIONES AÉREAS CON BOTONERA DE CICLO DE VIDA -->
-
-      <div class="analytics-card">
-
-        <h4>🚁 Misiones Aéreas Activas</h4>
-
-        <div style="max-height:300px;overflow-y:auto">
-
-          <table class="analytics-table" id="tabla-misiones">
-
-            <thead><tr><th>Misión</th><th>Medio</th><th>Ruta / Destino</th><th>Estado y Acciones</th></tr></thead>
-
-            <tbody><tr><td colspan="4" style="text-align:center;color:#64748b">Esperando login...</td></tr></tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
-      
-
-      <div class="analytics-card">
-
-        <h4>🛡️ Despliegue y Cortes</h4>
-
-        <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
-
-      </div>
-
       <div class="analytics-card" style="grid-column:span 2">
-
-        <h4>📝 Bitácora de eventos y Auditoría (Local)</h4>
-
-        <div id="bitacora" style="font-size:12px;color:#334155;max-height:200px;overflow-y:auto"></div>
-
+        <h4>🌊 Cuadro Comparativo Hídrico (Oficial vs. GloFAS)</h4>
+        <div style="max-height:280px;overflow-y:auto">
+          <table class="analytics-table" id="tabla-analitica-rios">
+            <thead>
+              <tr>
+                <th>Estación / Río</th>
+                <th>Altura Oficial (m)</th>
+                <th>Estado Operativo</th>
+                <th>Caudal GloFAS</th>
+                <th>Tendencia (oficial + modelo)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
-
+      
+      <div class="analytics-card">
+        <h4>🚁 Misiones Aéreas Activas</h4>
+        <div style="max-height:300px;overflow-y:auto">
+          <table class="analytics-table" id="tabla-misiones">
+            <thead><tr><th>Misión</th><th>Medio</th><th>Ruta / Destino</th><th>Estado y Acciones</th></tr></thead>
+            <tbody><tr><td colspan="4" style="text-align:center;color:#64748b">Esperando login...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="analytics-card">
+        <h4>🛡️ Despliegue y Cortes</h4>
+        <div id="analitica-fuerzas" style="font-size:13px;line-height:1.6;color:#334155"></div>
+      </div>
+      <div class="analytics-card" style="grid-column:span 2">
+        <h4>📝 Bitácora de eventos y Auditoría (Local)</h4>
+        <div id="bitacora" style="font-size:12px;color:#334155;max-height:200px;overflow-y:auto"></div>
+      </div>
     </div>
-
   </div>
-
 </div>
-
-
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
 const LS = { log: 'cop_bitacora_v1' };
-
 const leer = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } };
-
 const guardar = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-
 let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 
-
-
 // ==========================================
-
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
-
 // ==========================================
-
 const COP_API_URL = "https://script.google.com/macros/s/AKfycbysuyT9B2-qN_JNaeNAwu2DI4Xvg1W6qffoBk19WMtevEsE05d0cZuKCOXgQeH__sLx6g/exec";
 
-
-
 let sesionActiva = { autenticado: false, email: "", nombre: "", rol: "", pin: "" };
-
 let timerExpiracion = null;
 
-
-
 function reiniciarExpiracion() {
-
   if (timerExpiracion) clearTimeout(timerExpiracion);
-
-  // La sesión expira a los 30 minutos de inactividad
-
   timerExpiracion = setTimeout(cerrarSesionCOP, 30 * 60 * 1000); 
-
 }
-
-
 
 document.addEventListener('mousemove', reiniciarExpiracion);
-
 document.addEventListener('keypress', reiniciarExpiracion);
 
-
-
 function cerrarSesionCOP() {
-
   sesionActiva = { autenticado: false, email: "", nombre: "", rol: "", pin: "" };
-
   document.getElementById("modal-login").style.display = "flex";
-
   document.getElementById("login-pin").value = "";
-
   alert("Sesión finalizada por seguridad.");
-
 }
 
-
-
 async function iniciarSesionCOP() {
-
   const emailInput = document.getElementById("login-email").value.trim();
-
   const pinInput = document.getElementById("login-pin").value.trim();
-
   const errDiv = document.getElementById("login-error");
-
   const btn = document.getElementById("btn-login");
 
-
-
   if (!emailInput || !pinInput) {
-
     errDiv.innerText = "Complete ambos campos";
-
     errDiv.style.display = "block";
-
     return;
-
   }
 
-
-
   errDiv.style.display = "none";
-
   btn.innerText = "VERIFICANDO CREDENCIALES...";
-
   btn.disabled = true;
 
-
-
   try {
-
     const res = await fetch(`${COP_API_URL}?action=getData&tab=Usuarios`);
-
     const json = await res.json();
-
-
 
     if (json.status !== "success") throw new Error("Fallo de conexión");
 
-
-
     const usuarioValido = json.data.find(u => 
-
       u.Email.toLowerCase() === emailInput.toLowerCase() && 
-
       String(u.PIN).trim() === pinInput &&
-
       String(u.Activo).toUpperCase() === "SI"
-
     );
 
-
-
     if (usuarioValido) {
-
       sesionActiva = {
-
         autenticado: true,
-
         email: usuarioValido.Email,
-
         nombre: usuarioValido.Nombre_Rango,
-
         rol: usuarioValido.Rol,
-
         pin: pinInput
-
       };
-
       
-
       document.getElementById("op-name").innerText = `${usuarioValido.Nombre_Rango} (${usuarioValido.Rol})`;
-
       document.getElementById("modal-login").style.display = "none";
-
       reiniciarExpiracion();
-
       
-
       ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
-
       
-
       cargarAeronavesMision();
-
       refrescarDatosServer();
-
       
-
       if(!mapTactico) inicializarMapas();
 
-
-
     } else {
-
       errDiv.innerText = "Usuario no habilitado o PIN incorrecto";
-
       errDiv.style.display = "block";
-
       btn.innerText = "INGRESAR AL SISTEMA";
-
       btn.disabled = false;
-
     }
-
   } catch (err) {
-
     errDiv.innerText = "Error al conectar con la base de datos: " + err.message;
-
     errDiv.style.display = "block";
-
     btn.innerText = "INGRESAR AL SISTEMA";
-
     btn.disabled = false;
-
   }
-
 }
-
-
 
 async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
-
   if (!sesionActiva.autenticado) return;
-
   const payload = {
-
     email: sesionActiva.email,
-
     pin: sesionActiva.pin,
-
     action: tipoAccion,
-
     tab: tabDestino,
-
     data: datosRegistro,
-
     detalle: motivoAuditoria
-
   };
-
   try {
-
     fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) }).catch(e => console.error(e));
-
   } catch (error) { console.error(error); }
-
 }
 
-
-
 // ==========================================
-
 // --- MÓDULO DE DB CENTRAL ---
-
 // ==========================================
-
-
 
 let recursos = [];
-
 let estacionesHidro = [];
-
 let sincronizando = false;
-
 window.glofasIniciado = false;
 
-
-
 async function refrescarDatosServer() {
-
   if (!sesionActiva.autenticado || sincronizando) return;
-
   sincronizando = true;
-
   document.getElementById('sync-status').innerText = "🟡 Sincronizando...";
-
   
-
   try {
-
     const [resRec, resHid, resMis] = await Promise.all([
-
       fetch(`${COP_API_URL}?action=getData&tab=Recursos_Terreno`).then(r => r.json()),
-
       fetch(`${COP_API_URL}?action=getData&tab=Hidrometria`).then(r => r.json()),
-
       fetch(`${COP_API_URL}?action=getData&tab=Misiones`).then(r => r.json())
-
     ]);
 
-
-
     if (resRec.status === 'success') {
-
       recursos = resRec.data.map(r => ({
-
         id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, 
-
         lat: parseFloat(r.Lat), lon: parseFloat(r.Lon), sector: r.Sector, 
-
         operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp)
-
       }));
-
       renderizarRecursos();
-
     }
-
     
-
     if (resHid.status === 'success') {
-
       const coordsFallback = {
-
         H1: {lat:-27.485, lon:-58.932}, H2: {lat:-27.462, lon:-58.838},
-
         H3: {lat:-27.310, lon:-58.580}, H4: {lat:-26.928, lon:-58.502},
-
         H5: {lat:-27.950, lon:-58.810}, H6: {lat:-29.145, lon:-59.265}
-
       };
 
-
-
       estacionesHidro = resHid.data.map(h => ({
-
         id: h.ID, estacion: h.Estacion, rio: h.Rio, actual: parseFloat(h.Actual_m),
-
         alerta: parseFloat(h.Alerta_m), evacuacion: parseFloat(h.Evacuacion_m),
-
         tendencia: h.Tendencia, ts: Number(h.Timestamp), 
-
         lat: parseFloat(h.Lat) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lat : -27.45), 
-
         lon: parseFloat(h.Lon) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lon : -58.90)
-
       }));
-
       
-
       poblarSelectorNivel();
-
       renderizarHidrometria();
-
       
-
       if (!window.glofasIniciado) {
-
         window.glofasIniciado = true;
-
         cargarCaudalesGloFAS();
-
       } else {
-
         dibujarRiosEstrategico();
-
       }
-
     }
-
-
 
     if (resMis.status === 'success') {
-
       procesarMisiones(resMis.data);
-
     }
-
     
-
     document.getElementById('sync-status').innerText = "🟢 Conectado";
-
   } catch (error) {
-
     console.error("Fallo refresco server:", error);
-
     document.getElementById('sync-status').innerText = "🔴 Fallo Sync";
-
   } finally {
-
     sincronizando = false;
-
   }
-
 }
-
-
 
 async function agregarRecursoEnVivo(e) {
-
   e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
-
   const opName = sesionActiva.nombre;
-
   const r = { 
-
     ID: `REC-${Date.now()}`, Nombre: document.getElementById('nuevo-nombre').value, 
-
     Institucion: inst, Estado: document.getElementById('nuevo-estado').value,
-
     Lat: parseFloat(document.getElementById('nueva-lat').value), 
-
     Lon: parseFloat(document.getElementById('nueva-lon').value),
-
     Sector: document.getElementById('nuevo-sector').value, 
-
     Operador: opName, Efectivos: inst === 'VIALIDAD' ? 0 : 4, Timestamp: Date.now() 
-
   };
-
   
-
   const mensajeLog = `Desplegó unidad: ${r.Nombre} (${r.Sector})`;
-
   logEvento(mensajeLog);
-
   await ejecutarAccionAuditada("Recursos_Terreno", "INSERT", r, mensajeLog);
-
   document.getElementById('form-recurso').reset(); 
-
   refrescarDatosServer();
-
 }
-
-
 
 async function cargarNivelManual(ev) {
-
   ev.preventDefault();
-
   const idEst = estacionesHidro[+document.getElementById('nivel-est').value].id;
-
   const h = estacionesHidro.find(x => x.id === idEst);
-
   const alt = parseFloat(document.getElementById('nivel-alt').value);
-
   const ale = parseFloat(document.getElementById('nivel-ale').value);
-
   const eva = parseFloat(document.getElementById('nivel-eva').value);
-
   
-
   const dif = alt - h.actual;
-
   const dataUpdate = {
-
     ID: h.id, Actual_m: alt, Timestamp: Date.now(),
-
     Tendencia: dif > 0.02 ? '▲' : dif < -0.02 ? '▼' : '═'
-
   };
-
   if (!isNaN(ale)) dataUpdate.Alerta_m = ale; 
-
   if (!isNaN(eva)) dataUpdate.Evacuacion_m = eva;
-
   
-
   const mensajeLog = `Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`;
-
   logEvento(mensajeLog);
-
   await ejecutarAccionAuditada("Hidrometria", "UPDATE", dataUpdate, mensajeLog); 
-
   refrescarDatosServer();
-
 }
-
-
 
 async function forzarSyncRios(btn) {
-
   if (sesionActiva.rol.toLowerCase() === 'operador') return alert("Solo Planificadores o Administradores pueden forzar la sincronización satelital.");
-
   
-
   const textoOriginal = btn.innerText;
-
   btn.innerText = "⏳ Extrayendo datos oficiales...";
-
   btn.disabled = true;
-
   
-
   try {
-
     const payload = { action: "SYNC_PNA" }; 
-
     await fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) });
-
     
-
     setTimeout(() => {
-
       refrescarDatosServer();
-
       btn.innerText = "✅ ¡Actualizado con éxito!";
-
       setTimeout(() => { btn.innerText = textoOriginal; btn.disabled = false; }, 3000);
-
     }, 2000);
-
     
-
   } catch(e) {
-
     alert("Fallo de red al intentar extraer los datos.");
-
     btn.innerText = textoOriginal; 
-
     btn.disabled = false;
-
   }
-
 }
-
-
 
 function eliminarRecurso(id, nombre) {
-
   if (sesionActiva.rol.toLowerCase() === 'operador') {
-
     return alert("Permisos insuficientes. Contacte al Planificador o Administrador.");
-
   }
-
   if (!confirm(`¿Eliminar la unidad "${nombre}" del sistema central?`)) return;
-
   
-
   logEvento(`Baja solicitada: ${nombre}`); 
-
   ejecutarAccionAuditada("Recursos_Terreno", "UPDATE", { ID: id, Estado: "BAJA" }, `Dio de baja unidad: ${nombre}`);
-
   setTimeout(refrescarDatosServer, 1000);
-
 }
 
-
-
 // ==========================================
-
 // --- MÓDULO DE MISIONES AÉREAS ---
-
 // ==========================================
-
 async function cargarAeronavesMision() {
-
   const sel = document.getElementById('mis-medio');
-
   sel.innerHTML = '<option value="">Consultando DB...</option>';
-
   try {
-
     const res = await fetch(`${COP_API_URL}?action=getData&tab=Aeronaves`);
-
     const json = await res.json();
-
     if (json.status === 'success') {
-
       sel.innerHTML = '<option value="">Seleccione Aeronave Disponible...</option>';
-
       json.data.forEach(a => {
-
         if (String(a.Disponible).trim().toUpperCase() === 'SI') {
-
           sel.add(new Option(`${a.Matricula} - ${a.Tipo} (Base: ${a.Base_Asiento})`, a.Matricula));
-
         }
-
       });
-
     }
-
   } catch (e) { sel.innerHTML = '<option value="">Error DB</option>'; }
-
 }
-
-
 
 async function guardarMisionVuelo(e) {
-
   e.preventDefault();
-
   const form = e.target, btn = form.querySelector('button[type="submit"]'), $ = id => document.getElementById(id);
-
   const io = $('mis-origen'), idd = $('mis-destino'), txt = btn.innerText;
-
   btn.disabled = true; btn.innerText = 'Ubicando puntos...';
-
   
-
   try {
-
     const [a, b] = await Promise.all([resolverPunto(io.value, io), resolverPunto(idd.value, idd)]);
-
     if (!a || !b) { alert(`No se pudo ubicar ${!a ? 'el origen' : 'el destino'}. Elegí una sugerencia de la lista o marcá el punto en el mapa.`); return; }
-
     
-
     const et = (inp, p) => `${limpiarNombre(inp.value)} @${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
-
     
-
     const datosMision = {
-
       ID_Mision: `MIS-${Math.floor(Date.now()/1000)}`,
-
       Fecha_Hora: $('mis-fecha').value.replace('T', ' '),
-
       Tipo_Mision: $('mis-tipo').value.trim(),
-
       Medio_Asignado: $('mis-medio').value,
-
       Origen_Destino: `${et(io, a)} | ${et(idd, b)}`,
-
       Estado: $('mis-estado').value,
-
       Operador_Responsable: sesionActiva.nombre
-
     };
 
-
-
     const detalle = `Planificó misión ${datosMision.Tipo_Mision} con aeronave ${datosMision.Medio_Asignado}`;
-
     btn.innerText = 'Guardando en la nube...';
-
     
-
     await ejecutarAccionAuditada("Misiones", "INSERT", datosMision, detalle);
-
     logEvento(detalle);
-
     alert(`✅ Misión planificada exitosamente.`);
-
     
-
     form.reset(); [io, idd].forEach(x => { delete x.dataset.lat; delete x.dataset.lon; delete x.dataset.label; });
-
     refrescarDatosServer();
-
   } finally {
-
     btn.disabled = false; btn.innerText = txt;
-
   }
-
 }
-
-
 
 function procesarMisiones(misionesData) {
-
   const tb = document.querySelector('#tabla-misiones tbody');
-
   tb.innerHTML = '';
-
   
-
   const activas = misionesData.filter(m => !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse().slice(0, 15);
-
   
-
   if (activas.length === 0) {
-
     tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">No hay misiones operativas recientes.</td></tr>';
-
   } else {
-
     activas.forEach(m => {
-
       const st = String(m.Estado).toUpperCase();
-
       const colorEstado = st.includes("CURSO") ? "#16a34a" : st.includes("FINALIZADA") ? "#2563eb" : st.includes("SUSPENDIDA") ? "#d97706" : "#3b82f6";
-
       
-
       const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
-
       const parts = String(m.Origen_Destino).split(separador);
-
       const o = parts[0] ? parseTexto(parts[0]) : {nombre: 'N/A', raw: 'N/A'};
-
       const d = parts.length > 1 ? parseTexto(parts[1]) : {nombre: 'N/A', raw: 'N/A'};
-
       
-
       const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
-
       
-
       const btnActions = `
-
         <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
-
           <button class="btn-pick" style="background:#16a34a;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'En Curso')" title="Despegar / Iniciar">🚀</button>
-
           <button class="btn-pick" style="background:#d97706;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Suspendida')" title="Suspender">⏸️</button>
-
           <button class="btn-pick" style="background:#2563eb;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Finalizada')" title="Finalizar / Aterrizar">✅</button>
-
           ${esAdmin ? `<button class="btn-pick" style="background:#ef4444;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Cancelada')" title="Borrar / Cancelar">🗑️</button>` : ''}
-
           <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o.raw)}', '${esc(d.raw)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
-
         </div>`;
 
-
-
       tb.insertAdjacentHTML('beforeend', `<tr>
-
         <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
-
         <td><b>${esc(m.Medio_Asignado)}</b></td>
-
         <td>O: ${esc(o.nombre)}<br>D: ${esc(d.nombre)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o.raw)}', '${esc(d.raw)}', '${m.Fecha_Hora}')">🗺️ Trazar Vuelo</button></td>
-
         <td>
-
           <span style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</span>
-
           ${btnActions}
-
         </td>
-
       </tr>`);
-
     });
-
   }
-
 }
-
-
 
 async function cambiarEstadoMision(idMision, nuevoEstado) {
-
   if (!confirm(`¿Registrar la misión ${idMision} como: ${nuevoEstado}?`)) return;
-
   const payload = { email: sesionActiva.email, pin: sesionActiva.pin, action: "UPDATE", tab: "Misiones", data: { ID_Mision: idMision, Estado: nuevoEstado }, detalle: `Cambió estado de vuelo a: ${nuevoEstado}` };
-
   try {
-
     await fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) });
-
     logEvento(`Misión ${idMision} -> ${nuevoEstado}`);
-
     refrescarDatosServer();
-
   } catch(e) { alert("Error de red."); }
-
 }
-
-
 
 async function generarInformeMision(id, tipo, medio, origenRaw, destinoRaw, estado, fechaPlan) {
-
   alert("⏳ Conectando al satélite meteorológico para generar el informe. Por favor espere unos segundos...");
-
   const { jsPDF } = window.jspdf, doc = new jsPDF(), o = parseTexto(origenRaw), d = parseTexto(destinoRaw);
-
   
-
   doc.setFontSize(16); doc.setTextColor(30, 41, 59); doc.text(`INFORME DE MISIÓN AÉREA: ${id}`, 14, 20);
-
   doc.setFontSize(10);
-
   [`Tipo de Operación: ${tipo}`, `Medio Asignado: ${medio}`, `Estado Actual: ${estado}`, `Fecha/Hora Planificada: ${fechaPlan}`,
-
     `Operador de Consola: ${sesionActiva.nombre}`, `Emisión del Reporte: ${new Date().toLocaleString('es-AR')}`].forEach((l, i) => doc.text(l, 14, 30 + i * 6));
-
   
-
   doc.text(doc.splitTextToSize(`Punto de Origen: ${o.nombre}${o.coord ? ` (${o.coord.lat.toFixed(4)}, ${o.coord.lon.toFixed(4)})` : ''}`, 180), 14, 70);
-
   doc.text(doc.splitTextToSize(`Punto de Destino: ${d.nombre}${d.coord ? ` (${d.coord.lat.toFixed(4)}, ${d.coord.lon.toFixed(4)})` : ''}`, 180), 14, 80);
-
   
-
   doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REPORTE METEOROLÓGICO (MODELO OPEN-METEO)", 14, 95);
-
   doc.setFontSize(10); doc.setTextColor(30, 41, 59);
-
   
-
   try {
-
     const [a, b] = await Promise.all([resolverPunto(origenRaw), resolverPunto(destinoRaw)]);
-
     if (!a || !b) throw new Error('sin coordenadas');
-
     const [wa, wb] = await Promise.all([climaPunto(a.lat, a.lon, fechaPlan), climaPunto(b.lat, b.lon, fechaPlan)]);
-
     
-
     doc.setFillColor(241, 245, 249); doc.rect(14, 99, 182, 32, 'F');
-
     doc.text(doc.splitTextToSize(`ORIGEN: ${wa.texto}`, 175), 18, 106);
-
     doc.text(doc.splitTextToSize(`DESTINO: ${wb.texto}`, 175), 18, 117);
-
     doc.setFontSize(8); doc.text(`Base: ${wa.cuando}. Confirmar con Servicio Met antes de despegar.`, 14, 136);
-
   } catch (e) {
-
      doc.setTextColor(192, 57, 43); doc.text("Error de red al consultar el clima.", 14, 105);
-
   }
-
   
-
   doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("REGISTRO DE EJECUCIÓN (A rellenar por el Comandante)", 14, 148);
-
   doc.setTextColor(30, 41, 59); doc.setFontSize(10);
-
   doc.text("Hora real de despegue: __________________", 14, 158); doc.text("Hora real de aterrizaje: __________________", 100, 158);
-
   doc.text("Novedades Técnicas / Operativas:", 14, 168); doc.rect(14, 171, 182, 40); 
-
   doc.text("Firma Comandante de Aeronave", 30, 215); doc.text("Firma Jefe de Operaciones", 120, 215);
-
   doc.save(`MISION_${id}_${estado}.pdf`);
-
 }
-
-
 
 async function dibujarRutaYMet(origenRaw, destinoRaw, fecha) {
-
   cambiarPestana('tactica');
-
   const o = parseTexto(origenRaw), d = parseTexto(destinoRaw);
-
   const elO = document.getElementById('ruta-origen'), elD = document.getElementById('ruta-destino');
-
   elO.value = o.nombre; elD.value = d.nombre;
-
   if(o.coord) { elO.dataset.lat = o.coord.lat; elO.dataset.lon = o.coord.lon; elO.dataset.label = o.nombre; }
-
   if(d.coord) { elD.dataset.lat = d.coord.lat; elD.dataset.lon = d.coord.lon; elD.dataset.label = d.nombre; }
-
   
-
   await calcularRutaTactica(); 
-
   
-
   const res = document.getElementById('resultado-ruta');
-
   res.innerHTML += "<br>⏳ <i>Obteniendo clima en ruta...</i>";
-
   try {
-
     const [a, b] = await Promise.all([resolverPunto(origenRaw, elO), resolverPunto(destinoRaw, elD)]);
-
     if (!a || !b) throw new Error("Faltan coordenadas exactas.");
-
     
-
     const [wA, wB] = await Promise.all([climaPunto(a.lat, a.lon, fecha), climaPunto(b.lat, b.lon, fecha)]);
-
     
-
     res.innerHTML += `
-
       <div style="margin-top:8px; padding:8px; background:#1e293b; color:#fff; border-radius:4px; border-left:4px solid #3498db; font-size:12px;">
-
         <b style="color:#7fb3ff">🌤️ CLIMA EN RUTA</b> <small>(${esc(wA.cuando)})</small><br>
-
         📍 <b>Despegue:</b> ${esc(wA.texto)}<br>
-
         🏁 <b>Aterrizaje:</b> ${esc(wB.texto)}
-
       </div>`;
-
   } catch (err) { res.innerHTML += `<br><span style='color:#ef4444'>❌ Fallo clima: ${err.message}</span>`; }
-
 }
-
-
 
 // --- BITÁCORA LOCAL DE APOYO ---
-
 let bitacora = leer(LS.log, []);
-
 function logEvento(t) { 
-
   const txtCompleto = `[${sesionActiva.nombre || 'Sistema'}] ${t}`;
-
   bitacora.unshift({ ts: Date.now(), t: txtCompleto }); 
-
   bitacora = bitacora.slice(0, 100); 
-
   guardar(LS.log, bitacora); 
-
 }
-
 const fmtFecha = ts => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-
 function edadTxt(ts) {
-
   if (!ts) return 'Sin hora';
-
   const m = Math.floor((Date.now() - ts) / 60000);
-
   return m < 1 ? 'Hace instantes' : m < 60 ? `Hace ${m} min` : `Hace ${Math.floor(m / 60)} h ${m % 60} min`;
-
 }
-
-
 
 // --- PESTAÑAS ---
-
 function cambiarPestana(vista) {
-
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-
   document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
-
   const i = { tactica: 0, radar: 1, analytics: 2 }[vista];
-
   document.querySelectorAll('.tab-btn')[i].classList.add('active');
-
   document.getElementById('vista-' + vista).classList.add('active');
-
   if (vista === 'tactica') mapTactico.invalidateSize();
-
   if (vista === 'radar') { if (!radarCargado) inicializarMapaRadar(); mapRadar.invalidateSize(); dibujarRiosEstrategico(); }
-
   if (vista === 'analytics') { actualizarDashboardAnalytics(); }
-
 }
-
-
 
 // --- GLOBALES MAPA TACTICO ---
-
 let zonasLayerTactico, capaHidrometria, capaInfraestructura, capaRecursos, capaRutaActiva;
-
 let datosZonasGeoJSON = { type: "FeatureCollection", features: [] };
 
-
-
 function inicializarMapas() {
-
   mapTactico = L.map('map-tactico').setView([-27.45, -58.90], 9);
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapTactico);
-
   zonasLayerTactico = L.layerGroup().addTo(mapTactico);
-
   capaHidrometria = L.layerGroup().addTo(mapTactico);
-
   capaInfraestructura = L.layerGroup().addTo(mapTactico);
-
   capaRecursos = L.layerGroup().addTo(mapTactico);
-
   capaRutaActiva = L.layerGroup().addTo(mapTactico);
 
-
-
   cargarZonasExternas(); 
-
   renderizarInfraestructura();
-
   
-
   mapTactico.on('click', e => {
-
     const lat = e.latlng.lat.toFixed(5), lon = e.latlng.lng.toFixed(5);
-
     if (modoSeleccionMapa === 'origen') { document.getElementById('ruta-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-
     else if (modoSeleccionMapa === 'destino') { document.getElementById('ruta-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-
     else if (modoSeleccionMapa === 'mis-origen') { document.getElementById('mis-origen').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-
     else if (modoSeleccionMapa === 'mis-destino') { document.getElementById('mis-destino').value = `${lat}, ${lon}`; activarSeleccionMapa(null); }
-
     else { document.getElementById('nueva-lat').value = lat; document.getElementById('nueva-lon').value = lon; }
-
   });
-
   
-
   mapTactico.on('popupopen', ev => { 
-
     const b = ev.popup.getElement().querySelector('[data-del]'); 
-
     if (b) b.onclick = () => { eliminarRecurso(b.dataset.del, b.dataset.nombre); mapTactico.closePopup(); }; 
-
   });
-
 }
 
+// ESTADO DE RÍOS NATIVO CON COLORES DE EMERGENCIA
+const HORAS_VENCIMIENTO = 36;
+const ms = ts => { const n = Number(ts); return !isFinite(n) || n <= 0 ? 0 : (n < 1e11 ? n * 1000 : n); };
 
+function estadoHidro(h) {
+  const alt = Number(h.actual), ale = Number(h.alerta), eva = Number(h.evacuacion);
+  if (!isFinite(alt)) return { txt: 'SIN DATO', color: '#64748b', tag: ' (s/d)', ok: false, nivel: 0 };
+  let txt = 'NORMAL', color = '#16a34a', nivel = 1;
+  if (isFinite(eva) && alt >= eva) { txt = 'EVACUACIÓN'; color = '#dc2626'; nivel = 3; }
+  else if (isFinite(ale) && alt >= ale) { txt = 'ALERTA'; color = '#d97706'; nivel = 2; }
+  
+  const t = ms(h.ts), horas = t ? (Date.now() - t) / 3600000 : Infinity;
+  const colorViejo = nivel === 1 ? '#64748b' : color;
+  if (horas > HORAS_VENCIMIENTO) return { txt: `${txt} (Desactualizado)`, color: colorViejo, tag: ' (viejo)', ok: false, nivel };
+  return { txt, color, tag: '', ok: true, nivel };
+}
 
 function renderizarHidrometria() {
-
   if(!capaHidrometria) return;
-
   capaHidrometria.clearLayers();
-
   if (!document.getElementById('chk-hidro').checked) return;
-
+  
   estacionesHidro.forEach(h => {
-
     const e = estadoHidro(h);
-
-    const icono = L.divIcon({ className: 'custom-div-icon', html: `<div class="hidro-badge" style="background:${e.color};${h.ejemplo ? 'border-style:dashed' : ''}">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m${e.tag}</div>`, iconSize: [140, 24], iconAnchor: [70, 12] });
-
-    L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`<div style="font-size:12px;min-width:200px">
-
-      <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br><b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
-
-      <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia)}<br><b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
-
-      <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo' : 'Cargado: ' + edadTxt(h.ts)}</small></div>`);
-
+    const icono = L.divIcon({ 
+      className: 'custom-div-icon', 
+      html: `<div class="hidro-badge" style="background:${e.color};${h.ejemplo ? 'border-style:dashed' : ''}">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m${e.tag}</div>`, 
+      iconSize: [140, 24], 
+      iconAnchor: [70, 12] 
+    });
+    
+    L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`
+      <div style="font-size:12px;min-width:200px">
+        <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br>
+        <b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
+        <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia || '')}<br>
+        <b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
+        <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo' : 'Cargado: ' + edadTxt(h.ts)}</small>
+      </div>
+    `);
   });
-
 }
 
 function poblarSelectorNivel() {
-
-  const s = document.getElementById('nivel-est'); s.innerHTML = '';
-
-  estacionesHidro.forEach((h, i) => s.add(new Option(`${h.estacion} (${h.rio})`, i))); prellenarNivel();
-
+  const s = document.getElementById('nivel-est'); if(!s) return; s.innerHTML = '';
+  estacionesHidro.forEach((h, i) => s.add(new Option(`${h.estacion} (${h.rio})`, i))); 
+  prellenarNivel();
 }
-
 function prellenarNivel() {
-
   const h = estacionesHidro[+document.getElementById('nivel-est').value]; if (!h) return;
-
   document.getElementById('nivel-ale').value = h.ejemplo ? '' : h.alerta; document.getElementById('nivel-eva').value = h.ejemplo ? '' : h.evacuacion;
-
   document.getElementById('nivel-alt').value = '';
-
 }
-
-
 
 // --- ZONAS Y RECURSOS ---
-
 const nombreZona = f => f.properties.nam || f.properties.nombre || f.properties.departamento || f.properties.FNA || '';
-
 async function cargarZonasExternas() {
-
   try {
-
     const dataCruda = await (await fetch('mapa_nea.geojson')).json();
-
     datosZonasGeoJSON.features = dataCruda.features.filter(f => { const t = JSON.stringify(f.properties).toLowerCase(); return t.includes('chaco') || t.includes('corrientes'); });
-
     document.getElementById('alerta-geojson').style.display = 'none';
-
   } catch (e) { document.getElementById('alerta-geojson').style.display = 'block'; }
-
   poblarSelectorDepartamentos(datosZonasGeoJSON.features); dibujarZonasYCascada();
-
 }
-
 function dibujarZonasYCascada(feats = null) {
-
   if(!zonasLayerTactico) return;
-
   zonasLayerTactico.clearLayers();
-
   L.geoJSON({ type: "FeatureCollection", features: feats || datosZonasGeoJSON.features }, {
-
     style: () => ({ color: '#2980b9', weight: 2, fillOpacity: 0.18 }),
-
     onEachFeature: (f, layer) => {
-
       layer.on({ mouseover: e => { e.target.setStyle({ weight: 4, fillOpacity: 0.45, color: '#2c3e50' }); e.target.bringToFront(); }, mouseout: e => e.target.setStyle({ weight: 2, fillOpacity: 0.18, color: '#2980b9' }) });
-
       layer.bindTooltip(`<b>${esc(nombreZona(f) || 'Zona')}</b>`, { sticky: true });
-
     }
-
   }).addTo(zonasLayerTactico);
-
 }
-
 function poblarSelectorDepartamentos(features) {
-
-  const s = document.getElementById('sel-depto'); s.innerHTML = '<option value="">Seleccionar Departamento...</option>';
-
+  const s = document.getElementById('sel-depto'); if(!s) return; s.innerHTML = '<option value="">Seleccionar Departamento...</option>';
   [...new Set(features.map(nombreZona).filter(Boolean))].sort().forEach(d => s.add(new Option(d, d)));
-
 }
-
 function filtrarDepartamentosTexto() {
-
   const t = document.getElementById('input-buscar-depto').value.toLowerCase();
-
   const fl = datosZonasGeoJSON.features.filter(f => nombreZona(f).toLowerCase().includes(t)); poblarSelectorDepartamentos(fl); dibujarZonasYCascada(fl);
-
 }
-
 function seleccionarDeptoMapa() {
-
   const f = datosZonasGeoJSON.features.find(x => nombreZona(x) === document.getElementById('sel-depto').value);
-
   if (f) mapTactico.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 1.3 });
-
 }
-
-
 
 function crearIcono(inst, estado) {
-
   if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
-
   const color = { FAA: "#0284c7", EA: "#4d7c0f", PNA: "#1e3a8a", GN: "#15803d", DC: "#ea580c" }[inst] || "#64748b";
-
   const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
-
   return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color}"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot}"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
-
 }
-
-
 
 function renderizarRecursos() {
-
   if(!capaRecursos) return;
-
   capaRecursos.clearLayers();
-
   const fInst = document.getElementById('filtro-institucion').value, verCortes = document.getElementById('chk-cortes').checked, verUni = document.getElementById('chk-unidades').checked;
-
-  const lista = document.getElementById('lista-recursos'); lista.innerHTML = '';
-
+  const lista = document.getElementById('lista-recursos'); if(!lista) return; lista.innerHTML = '';
   let u = 0, c = 0, e = 0;
-
   
-
   const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
-
   
-
   recursosActivos.forEach(r => {
-
     const esCorte = r.inst === 'VIALIDAD';
-
     if ((esCorte && !verCortes) || (!esCorte && !verUni) || !(fInst === 'TODAS' || r.inst === fInst)) return;
-
     if (esCorte) c++; else u++; e += Number(r.efectivos) || 0;
-
     const viejo = r.timestamp && (Date.now() - r.timestamp) > 3600000;
-
     
-
     const botonBorrar = (sesionActiva.rol.toLowerCase() !== 'operador') 
-
       ? `<button data-del="${esc(r.id)}" data-nombre="${esc(r.nombre)}" style="margin-top:6px;width:100%;background:#dc2626;color:#fff;border:none;padding:4px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar</button>` 
-
       : '';
-
       
-
     L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos).bindPopup(`<div style="font-size:12px;min-width:180px"><b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br><b>📍</b> ${esc(r.sector)}<br><b>🚦</b> ${esc(r.estado)}<br><b>👤</b> ${esc(r.operador || 'S/D')}<br><b>⏱️</b> ${edadTxt(r.timestamp)}${viejo ? ' <b style="color:#c2410c">(desactualizado)</b>' : ''}<br>${botonBorrar}</div>`);
-
     const tj = document.createElement('div'); tj.className = 'recurso-card'; tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
-
     tj.innerHTML = `<div data-center="${r.lat},${r.lon}" style="flex:1"><b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br><span style="color:#475569">📍 ${esc(r.sector)} | 👤 ${esc(r.operador || 'S/D')} | ⏱️ ${edadTxt(r.timestamp)}${viejo ? ' ⚠' : ''}</span></div>`;
-
     lista.appendChild(tj);
-
   });
-
   document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-cortes').innerText = c; document.getElementById('kpi-efectivos').innerText = e;
-
 }
 
-
+// INFRAESTRUCTURA
+window.puntosInfraestructura = [
+  { icono: '✈️', nombre: 'Aeropuerto Resistencia', detalle: 'Pista / base aérea', lat: -27.4499, lon: -59.0561 },
+  { icono: '✈️', nombre: 'Aeropuerto Corrientes', detalle: 'Pista', lat: -27.4455, lon: -58.7619 },
+  { icono: '🏥', nombre: 'Hospital Julio C. Perrando (Resistencia)', detalle: 'Derivación sanitaria', lat: -27.4606, lon: -58.9722 },
+  { icono: '🏥', nombre: 'Hospital Escuela Gral. San Martín (Corrientes)', detalle: 'Emergencias y trauma', lat: -27.4682, lon: -58.8315 }
+];
+function renderizarInfraestructura() {
+  if (typeof capaInfraestructura === 'undefined' || !capaInfraestructura) return;
+  capaInfraestructura.clearLayers();
+  const chk = document.getElementById('chk-infra'); if (chk && !chk.checked) return;
+  window.puntosInfraestructura.forEach(p => L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
+    .addTo(capaInfraestructura).bindPopup(`<b>${p.icono} ${esc(p.nombre)}</b><br><span style="font-size:11.5px">${esc(p.detalle)}</span>`));
+}
+function toggleCapas() { renderizarHidrometria(); renderizarInfraestructura(); }
 
 // --- INTELIGENCIA ---
-
 const textoQ = s => s.errQ || s.hoy == null ? 's/d' : `${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'}`;
-
 async function cargarCaudalesGloFAS() {
-
   if (estacionesHidro.length === 0) return;
-
   await Promise.all(estacionesHidro.map(async s => {
-
     try {
-
       const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&past_days=7&forecast_days=7`)).json();
-
       const d = j.daily.river_discharge, hoy = d[7], ref = d[4]; if (hoy == null) throw new Error();
-
       s.hoy = hoy; s.tend = ref ? (hoy - ref) / ref : 0; s.errQ = false;
-
     } catch (e) { s.errQ = true; }
-
   }));
-
   dibujarRiosEstrategico();
-
 }
 
-
-
 async function cargarPronostico() {
-
   const cont = document.getElementById('pronostico-container'), resu = document.getElementById('pronostico-resumen');
-
-  const [lat, lon] = document.getElementById('sel-pronostico').value.split(',');
-
+  if(!cont) return;
+  const sel = document.getElementById('sel-pronostico');
+  const [lat, lon] = sel ? sel.value.split(',') : ['-27.45', '-58.98'];
   cont.innerHTML = '<span style="color:#64748b">⏳ Consultando…</span>';
-
   try {
-
     const d = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m&forecast_days=3&timezone=America%2FArgentina%2FCordoba`)).json();
-
     const h = d.hourly, now = Date.now(); let ini = h.time.findIndex(t => new Date(t).getTime() + 3600000 > now); if (ini < 0) ini = 0;
-
     cont.innerHTML = ''; let total = 0;
-
     for (let i = ini; i < ini + 48 && i + 6 <= h.time.length; i += 6) {
-
       const rng = k => Array.from({ length: 6 }, (_, j) => h[k][i + j]).filter(x => x != null);
-
       const mm = rng('precipitation').reduce((a, b) => a + b, 0), pmax = Math.max(...rng('precipitation_probability')), vmax = Math.max(...rng('wind_speed_10m')); total += mm;
-
       const f = new Date(h.time[i]), col = mm > 30 ? '#dc2626' : mm > 10 ? '#d97706' : '#16a34a';
-
       cont.insertAdjacentHTML('beforeend', `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:8px 12px;min-width:92px;text-align:center;font-size:11.5px">
-
         <div style="color:#64748b;font-weight:bold">${f.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' })}</div><div style="font-size:13px"><b>${f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</b></div><hr style="border:0;border-top:1px solid #e2e8f0;margin:4px 0">
-
         <div>🌡️ ${h.temperature_2m[i]}°C</div><div style="color:${col};font-weight:bold">🌧️ ${mm.toFixed(1)} mm</div><div style="color:#64748b">prob. máx ${pmax}%</div><div>💨 ${vmax} km/h</div></div>`);
-
     }
-
     resu.innerHTML = `<b>Lluvia acumulada 48 h: <span style="color:${total > 60 ? '#dc2626' : total > 20 ? '#d97706' : '#16a34a'}">${total.toFixed(0)} mm</span></b> <small>(modelo referencial)</small>`;
-
   } catch (e) { cont.innerHTML = '<span style="color:#dc2626">❌ No se pudo cargar el pronóstico.</span>'; resu.innerHTML = ''; }
-
 }
 
 function actualizarDashboardAnalytics() {
-
-  const tb = document.querySelector('#tabla-analitica-rios tbody'); tb.innerHTML = '';
-
+  const tb = document.querySelector('#tabla-analitica-rios tbody'); if(!tb) return; tb.innerHTML = '';
   estacionesHidro.forEach(h => { const e = estadoHidro(h);
-
     tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${textoQ(h)}</td></tr>`); });
-
   const medios = recursos.filter(r => r.inst !== 'VIALIDAD' && r.estado !== 'BAJA').length;
-
   const cortes = recursos.filter(r => r.inst === 'VIALIDAD' && r.estado !== 'BAJA').length;
-
   const ef = recursos.filter(r => r.estado !== 'BAJA').reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
-
   document.getElementById('analitica-fuerzas').innerHTML = `• Unidades y medios: <b>${medios}</b><br>• Cortes / alertas viales: <b style="color:#dc2626">${cortes}</b><br>• Personal en terreno: <b>${ef} efectivos</b><br>• Estaciones hidrométricas: <b>${estacionesHidro.length}</b>`;
-
   document.getElementById('bitacora').innerHTML = bitacora.length ? bitacora.slice(0, 15).map(b => `<div style="border-bottom:1px solid #e2e8f0;padding:3px 0"><b>${fmtFecha(b.ts)}</b> — ${esc(b.t)}</div>`).join('') : '<i>Sin eventos registrados.</i>';
-
   cargarPronostico();
-
 }
 
-
-
 // --- VISOR ESTRATÉGICO ---
-
 const estadoCapas = {}, RV = 'Radar RainViewer', rioGrupoEstrategico = L.layerGroup();
-
 function pintarEstado() { const d = document.getElementById('estado-capas'); if (d) d.innerHTML = Object.entries(estadoCapas).map(([n, s]) => `${s.ok > 0 ? '✅' : s.err > 0 ? '⚠️' : '⏳'} ${n}`).join('<br>'); }
-
 function vigilar(l, n) { estadoCapas[n] = estadoCapas[n] || { ok: 0, err: 0 }; l.on('tileload', () => { estadoCapas[n].ok++; pintarEstado(); }); l.on('tileerror', () => { estadoCapas[n].err++; pintarEstado(); }); return l; }
 
-
-
 function dibujarRiosEstrategico() {
-
-  rioGrupoEstrategico.clearLayers(); const cont = document.getElementById('lista-rios'); cont.innerHTML = '';
-
+  rioGrupoEstrategico.clearLayers(); const cont = document.getElementById('lista-rios'); if(!cont) return; cont.innerHTML = '';
   estacionesHidro.forEach(r => {
-
     const e = estadoHidro(r);
-
     L.circleMarker([r.lat, r.lon], { radius: 9, color: '#fff', weight: 2, fillColor: e.color, fillOpacity: .95, dashArray: r.ejemplo ? '3' : null }).addTo(rioGrupoEstrategico)
-
       .bindPopup(`<b>🌊 ${esc(r.estacion)}</b><br>${esc(e.txt)}<br>Q: ${textoQ(r)}<br>Altura: <b>${Number(r.actual).toFixed(2)} m</b>`);
-
     cont.insertAdjacentHTML('beforeend', `<div style="border-top:1px solid #444;padding:4px 0"><b style="color:${e.color === '#16a34a' ? '#4ade80' : '#fff'}">● ${esc(r.estacion)}</b><br>Q: ${textoQ(r)} | Alt: ${Number(r.actual).toFixed(2)} m<br><small>${esc(e.txt)}</small></div>`);
-
   });
-
 }
 
 function inicializarMapaRadar() {
-
+  if (mapRadar) return;
   mapRadar = L.map('map-radar', { minZoom: 4, maxZoom: 9 }).setView([-27.5, -59.0], 6);
-
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 9, attribution: '© OpenStreetMap' }).addTo(mapRadar);
-
   const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 9, attribution: '© OpenStreetMap, © CARTO' });
-
   const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best', nasa = 'NASA GIBS / EOSDIS';
-
   const goes = vigilar(L.tileLayer(`${gibs}/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: .85, attribution: nasa }), 'Satélite nubes');
-
   const imerg = vigilar(L.tileLayer(`${gibs}/IMERG_Precipitation_Rate/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`, { maxNativeZoom: 6, maxZoom: 9, opacity: .7, attribution: nasa }), 'Lluvia NASA');
-
   const radarGrupo = L.layerGroup(); imerg.addTo(mapRadar); radarGrupo.addTo(mapRadar); rioGrupoEstrategico.addTo(mapRadar);
-
   L.control.layers({ 'Mapa base (OSM)': osm, 'Mapa oscuro (CARTO)': carto }, { 'Radar (RainViewer)': radarGrupo, 'Lluvia NASA IMERG': imerg, 'Nubes GOES': goes, 'Ríos': rioGrupoEstrategico }, { collapsed: false }).addTo(mapRadar);
 
-
-
   let frames = [], idx = 0, timer = null; const slider = document.getElementById('rv-slider'), btn = document.getElementById('rv-play');
-
   const capaFrame = f => { if (!f.layer) { f.layer = vigilar(L.tileLayer(`${f.host}${f.path}/256/{z}/{x}/{y}/2/0_0.png`, { maxNativeZoom: 7, maxZoom: 9, opacity: 0, updateWhenZooming: false, keepBuffer: 1, attribution: 'Weather data by <a href="https://www.rainviewer.com">Rain Viewer</a>' }), RV); radarGrupo.addLayer(f.layer); } return f.layer; };
-
   function mostrar(i) {
-
     if (!frames.length) return; idx = (i + frames.length) % frames.length;
-
-    frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? .8 : 0); }); capaFrame(frames[idx]).setOpacity(.8); slider.value = idx;
-
-    document.getElementById('radar-hora').innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-
+    frames.forEach((f, k) => { if (f.layer) f.layer.setOpacity(k === idx ? .8 : 0); }); capaFrame(frames[idx]).setOpacity(.8); if(slider) slider.value = idx;
+    const rh = document.getElementById('radar-hora'); if(rh) rh.innerText = new Date(frames[idx].time * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
-
-  function togglePlay() { if (timer) { clearInterval(timer); timer = null; btn.innerText = '▶'; return; } btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200); }
-
-  btn.onclick = togglePlay; slider.oninput = () => { if (timer) togglePlay(); mostrar(+slider.value); };
-
+  function togglePlay() { if (timer) { clearInterval(timer); timer = null; if(btn) btn.innerText = '▶'; return; } if(btn) btn.innerText = '⏸'; timer = setInterval(() => mostrar(idx + 1), 1200); }
+  if(btn) btn.onclick = togglePlay; if(slider) slider.oninput = () => { if (timer) togglePlay(); mostrar(+slider.value); };
   async function cargarRadar() {
-
     try {
-
       const data = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(), past = (data.radar && data.radar.past || []).slice(-6); if (!past.length) throw new Error();
-
       const host = data.host || 'https://tilecache.rainviewer.com', corriendo = !!timer; if (corriendo) togglePlay();
-
-      radarGrupo.clearLayers(); estadoCapas[RV] = { ok: 0, err: 0 }; frames = past.map(p => ({ time: p.time, path: p.path, host })); slider.max = frames.length - 1; mostrar(frames.length - 1); if (corriendo) togglePlay();
-
-    } catch (e) { document.getElementById('radar-hora').innerText = 'No disp.'; }
-
+      radarGrupo.clearLayers(); estadoCapas[RV] = { ok: 0, err: 0 }; frames = past.map(p => ({ time: p.time, path: p.path, host })); if(slider) slider.max = frames.length - 1; mostrar(frames.length - 1); if (corriendo) togglePlay();
+    } catch (e) { const rh = document.getElementById('radar-hora'); if(rh) rh.innerText = 'No disp.'; }
   }
-
   cargarRadar(); setInterval(cargarRadar, 600000); radarCargado = true;
-
 }
-
-
 
 function generarSITREP() {
-
   const { jsPDF } = window.jspdf, doc = new jsPDF();
-
   const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
-
   doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
-
   doc.setFontSize(9.5); doc.text(`Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
-
   doc.text(`Operador a cargo: ${sesionActiva.nombre || 'N/A'}`, 14, 31);
-
   if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 37); }
-
   doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 44);
-
   doc.autoTable({ startY: 47, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q GloFAS']],
-
     body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬]/g, '')]),
-
     headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
-
   let y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios desplegados y cortes viales", 14, y);
-
   
-
   const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
-
   doc.autoTable({ startY: y + 3, head: [['Org.', 'Detalle', 'Sector', 'Estado', 'Fuente', 'Antiguedad']], body: recursosActivos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', edadTxt(r.timestamp)]), headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8 } });
-
   
-
   y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitacora (ultimos eventos)", 14, y);
-
   doc.autoTable({ startY: y + 3, head: [['Hora', 'Evento']], body: bitacora.slice(0, 10).map(b => [fmtFecha(b.ts), b.t]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } });
-
   doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0, 10)}.pdf`);
-
 }
 
-
-
-setInterval(() => { document.getElementById('reloj-operativo').innerText = new Date().toLocaleString('es-AR'); }, 1000);
-
+setInterval(() => { const ro = document.getElementById('reloj-operativo'); if(ro) ro.innerText = new Date().toLocaleString('es-AR'); }, 1000);
 setInterval(refrescarDatosServer, 30000); // 30 segundos
-
 setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600000);
-
 </script>
 
 <!-- ===== INICIO COP GEOSEARCH ===== -->
 <script>
-/* cop-geosearch.js - Buscador de lugares tipo Google Maps para el COP NEA
- *
- * INSTALACION (como archivo aparte): subir este archivo junto al index.html y
- * cargarlo con una etiqueta script con src="cop-geosearch.js", despues del
- * script principal y antes del cierre del body.
- *
- * Fuentes de sugerencias (en este orden):
- *   1. Indice local, instantaneo y sin internet una vez cacheado: localidades
- *      de Chaco y Corrientes (Georef, datos.gob.ar), infraestructura,
- *      estaciones hidrometricas, unidades y cortes cargados.
- *   2. Georef /direcciones cuando se escribe "calle altura" (direccion exacta).
- *   3. Photon (OpenStreetMap) para calles y lugares mientras se escribe.
- * No usa Nominatim para autocompletar: su politica de uso lo prohibe.
- *
- * Tambien corrige: guardado de misiones (el boton equivocado y el aviso de
- * exito falso), botones de la tabla de misiones (inyeccion de codigo por
- * onclick), codigos de clima desconocidos que se mostraban como "Variable",
- * clima a la hora planificada y aviso de cortes cerca de la ruta.
- */
 (function () {
   'use strict';
-
-  /* ------------------------------ configuracion ------------------------------ */
-  const BBOX = [-62.8, -30.9, -55.5, -24.0]; // minLon,minLat,maxLon,maxLat (Chaco + Corrientes con margen)
+  const BBOX = [-62.8, -30.9, -55.5, -24.0]; 
   const GEOREF = 'https://apis.datos.gob.ar/georef/api/v2.0';
   const PHOTON = 'https://photon.komoot.io/api/';
   const LS_LOC = 'cop_gaz_localidades_v1';
@@ -1945,12 +1027,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
   const ICO = { loc: '🏙️', avion: '✈️', hosp: '🏥', rio: '🌊', corte: '🚧', unidad: '🛡️', calle: '🛣️', poi: '📍', coord: '🧭' };
   const ZOOM = { loc: 12, avion: 14, hosp: 16, rio: 13, corte: 15, unidad: 15, calle: 16, poi: 15, coord: 14 };
 
-  /* -------------------------------- utilidades -------------------------------- */
   const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dentroNEA = (lat, lon) => lon >= BBOX[0] && lon <= BBOX[2] && lat >= BBOX[1] && lat <= BBOX[3];
-  const titulo = s => String(s ?? '').toLowerCase().split(/(\s+)/)
-    .map((w, i) => (i > 0 && /^(de|del|la|las|los|el|y)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const titulo = s => String(s ?? '').toLowerCase().split(/(\s+)/).map((w, i) => (i > 0 && /^(de|del|la|las|los|el|y)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
   const RE_COORD = /^\s*(-?\d{1,2}(?:[.,]\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/;
   const RE_AT = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\s*$/;
 
@@ -1984,13 +1064,12 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, ms || 3500);
   }
 
-  /* ---------------------------- indice de localidades ---------------------------- */
   let localidades = [];
   async function cargarLocalidades() {
     try {
       const c = JSON.parse(localStorage.getItem(LS_LOC) || 'null');
       if (c && Date.now() - c.ts < TTL_LOC && c.items && c.items.length) { localidades = c.items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' })); return; }
-    } catch (_) { /* cache ilegible: se vuelve a pedir */ }
+    } catch (_) { }
     const items = [];
     try {
       for (const prov of ['chaco', 'corrientes']) {
@@ -2008,10 +1087,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
         }
       }
       if (items.length) {
-        try { localStorage.setItem(LS_LOC, JSON.stringify({ ts: Date.now(), items })); } catch (_) { /* sin espacio: se sigue sin cache */ }
+        try { localStorage.setItem(LS_LOC, JSON.stringify({ ts: Date.now(), items })); } catch (_) { }
         localidades = items.map(i => ({ ...i, nn: norm(i.n), tipo: 'loc' }));
       }
-    } catch (e) { console.warn('Georef no disponible; el buscador usa solo datos locales y en linea:', e); }
+    } catch (e) { console.warn('Georef no disponible:', e); }
   }
 
   function puntosLocales() {
@@ -2032,7 +1111,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return res.sort((a, b) => a.score - b.score).slice(0, max || 6);
   }
 
-  /* ------------------------------ fuentes en linea ------------------------------ */
   const cacheFoto = new Map(); let abortFoto = null;
   async function buscarPhoton(q) {
     const k = norm(q); if (cacheFoto.has(k)) return cacheFoto.get(k);
@@ -2067,7 +1145,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
           const nom = d.nomenclatura || (d.calle && d.calle.nombre) || q;
           out.push({ n: titulo(nom.split(',')[0]), sub: nom.split(',').slice(1).map(s => titulo(s.trim())).join(', ') || titulo(prov), label: nom.split(',').map(s => titulo(s.trim())).join(', '), lat: u.lat, lon: u.lon, tipo: 'calle' });
         });
-      } catch (_) { /* Georef sin respuesta: se sigue con las demas fuentes */ }
+      } catch (_) { }
     }
     return out;
   }
@@ -2080,11 +1158,10 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     const nt = limpiarNombre(t), loc = buscarLocal(nt, 1)[0];
     if (loc && norm(loc.n) === norm(nt)) return { lat: loc.lat, lon: loc.lon };
     if (/\d/.test(nt)) { const d = await buscarDireccionGeoref(nt); if (d[0]) return { lat: d[0].lat, lon: d[0].lon }; }
-    try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { /* sin red */ }
+    try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { }
     return loc ? { lat: loc.lat, lon: loc.lon } : null;
   }
 
-  /* --------------------------- desplegable de sugerencias --------------------------- */
   function inyectarCSS() {
     if (document.getElementById('gs-css')) return;
     const s = document.createElement('style'); s.id = 'gs-css';
@@ -2147,7 +1224,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
       st.t = setTimeout(async () => {
         const conNum = /\d/.test(q);
         const [foto, dirs] = await Promise.allSettled([buscarPhoton(q), conNum ? buscarDireccionGeoref(q) : Promise.resolve([])]);
-        if (mi !== st.seq) return; // llego tarde: el usuario ya escribio otra cosa
+        if (mi !== st.seq) return; 
         if (foto.status === 'rejected' && foto.reason && foto.reason.name === 'AbortError') return;
         const extra = [...(dirs.status === 'fulfilled' ? dirs.value : []), ...(foto.status === 'fulfilled' ? foto.value : [])];
         if (foto.status === 'rejected') st.nota = 'Sin conexión al buscador en línea: solo resultados locales';
@@ -2171,7 +1248,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     });
   }
 
-  /* ------------------------------------ clima ------------------------------------ */
   const WMO = { 0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Cubierto', 45: 'Niebla', 48: 'Niebla con escarcha', 51: 'Llovizna leve', 53: 'Llovizna moderada', 55: 'Llovizna intensa', 56: 'Llovizna helada leve', 57: 'Llovizna helada intensa', 61: 'Lluvia leve', 63: 'Lluvia moderada', 65: 'Lluvia intensa', 66: 'Lluvia helada leve', 67: 'Lluvia helada intensa', 71: 'Nevada leve', 73: 'Nevada moderada', 75: 'Nevada intensa', 77: 'Granos de nieve', 80: 'Chubascos leves', 81: 'Chubascos moderados', 82: 'Chubascos violentos', 85: 'Chubascos de nieve leves', 86: 'Chubascos de nieve intensos', 95: 'Tormenta', 96: 'Tormenta con granizo leve', 99: 'Tormenta con granizo intenso' };
   async function climaPunto(lat, lon, fecha) {
     const vars = 'temperature_2m,wind_speed_10m,wind_gusts_10m,visibility,cloud_cover,weather_code';
@@ -2185,7 +1261,6 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return { cuando, texto: `${c.temperature_2m}°C | Viento ${c.wind_speed_10m} km/h (ráfagas ${c.wind_gusts_10m}) | Visib. ${vis} | Nubosidad ${c.cloud_cover}% | ${desc}` };
   }
 
-  /* -------------------------- cortes cerca de una ruta -------------------------- */
   function distPuntoSegM(p, a, b) {
     const k = Math.cos(p[1] * Math.PI / 180), R = 111320;
     const px = p[0] * k * R, py = p[1] * R, ax = a[0] * k * R, ay = a[1] * R, bx = b[0] * k * R, by = b[1] * R;
@@ -2202,22 +1277,13 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     return res;
   }
 
-  /* ------------------------ funciones del COP que se reemplazan ------------------------ */
   window.geocodificar = async function (dir) { return resolverPunto(dir, null); };
-  window.buscarSugerencias = function () { /* reemplazado por el buscador nuevo */ };
+  window.buscarSugerencias = function () { };
 
   window.activarSeleccionMapa = function (m) {
     modoSeleccionMapa = m;
     document.querySelectorAll('[onclick^="activarSeleccionMapa("]').forEach(b => b.classList.toggle('picking', !!m && b.getAttribute('onclick').indexOf("'" + m + "'") >= 0));
     if (typeof mapTactico !== 'undefined' && mapTactico) mapTactico.getContainer().style.cursor = m ? 'crosshair' : '';
-  };
-
-  window.ejecutarAccionAuditada = async function (tab, accion, datos, detalle) {
-    if (typeof sesionActiva === 'undefined' || !sesionActiva.autenticado) return null;
-    try {
-      const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ email: sesionActiva.email, pin: sesionActiva.pin, action: accion, tab, data: datos, detalle }) });
-      return await res.json();
-    } catch (err) { console.error('Fallo al registrar en el servidor:', err); return null; }
   };
 
   window.calcularRutaTactica = async function () {
@@ -2293,20 +1359,26 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
 
   const misiones = {};
   window.cargarMisionesEnTabla = async function () {};
-
+  
   window.procesarMisiones = function (misionesData) {
     const tb = document.querySelector('#tabla-misiones tbody');
+    if(!tb) return;
     const fila = (msg, color) => { tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:${color || '#64748b'}">${escH(msg)}</td></tr>`; };
     if (!misionesData.length) return fila('Sin datos.');
+    
     const activas = misionesData.filter(m => !String(m.Estado).toUpperCase().includes('CANCELADA')).reverse().slice(0, 15);
     if (!activas.length) return fila('No hay misiones operativas recientes.');
+    
     tb.innerHTML = '';
-    const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
     activas.forEach(m => {
       misiones[m.ID_Mision] = m;
       const st = String(m.Estado).toUpperCase(), [o, d] = partirOD(m.Origen_Destino), id = escH(m.ID_Mision);
       const color = st.includes('CURSO') ? '#16a34a' : st.includes('FINALIZADA') ? '#2563eb' : st.includes('SUSPENDIDA') ? '#d97706' : '#3b82f6';
+      
+      const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
+      
       const btn = (acc, bg, ico, tip) => `<button class="btn-pick" style="background:${bg};padding:3px 6px" data-acc="${acc}" data-id="${id}" title="${tip}">${ico}</button>`;
+      
       tb.insertAdjacentHTML('beforeend', `<tr>
         <td><b>${id}</b><br><small>${escH(m.Tipo_Mision)}<br>⏱️ ${escH(m.Fecha_Hora)}</small></td>
         <td><b>${escH(m.Medio_Asignado)}</b></td>
@@ -2316,19 +1388,22 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     });
   };
 
-  document.getElementById('tabla-misiones').addEventListener('click', ev => {
-    const b = ev.target.closest('[data-acc]'); if (!b) return;
-    const id = b.dataset.id, m = misiones[id]; if (!m) return;
-    const [o, d] = partirOD(m.Origen_Destino);
-    switch (b.dataset.acc) {
-      case 'curso': return cambiarEstadoMision(id, 'En Curso');
-      case 'susp': return cambiarEstadoMision(id, 'Suspendida');
-      case 'fin': return cambiarEstadoMision(id, 'Finalizada');
-      case 'canc': return cambiarEstadoMision(id, 'Cancelada');
-      case 'trazar': return dibujarRutaYMet(o.raw, d.raw, m.Fecha_Hora);
-      case 'pdf': return generarInformeMision(id, m.Tipo_Mision, m.Medio_Asignado, o.raw, d.raw, m.Estado, m.Fecha_Hora);
-    }
-  });
+  const tablaMisionesEl = document.getElementById('tabla-misiones');
+  if(tablaMisionesEl) {
+    tablaMisionesEl.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-acc]'); if (!b) return;
+      const id = b.dataset.id, m = misiones[id]; if (!m) return;
+      const [o, d] = partirOD(m.Origen_Destino);
+      switch (b.dataset.acc) {
+        case 'curso': return cambiarEstadoMision(id, 'En Curso');
+        case 'susp': return cambiarEstadoMision(id, 'Suspendida');
+        case 'fin': return cambiarEstadoMision(id, 'Finalizada');
+        case 'canc': return cambiarEstadoMision(id, 'Cancelada');
+        case 'trazar': return dibujarRutaYMet(o.raw, d.raw, m.Fecha_Hora);
+        case 'pdf': return generarInformeMision(id, m.Tipo_Mision, m.Medio_Asignado, o.raw, d.raw, m.Estado, m.Fecha_Hora);
+      }
+    });
+  }
 
   window.generarInformeMision = async function (id, tipo, medio, origenRaw, destinoRaw, estado, fechaPlan) {
     toast('⏳ Generando informe con el clima del modelo...', 6000);
@@ -2358,210 +1433,24 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     doc.save(`MISION_${id}_${estado}.pdf`);
   };
 
-  /* ------------------------------------ arranque ------------------------------------ */
   function iniciar() {
     inyectarCSS();
-    ['mis-origen', 'mis-destino', 'ruta-origen', 'ruta-destino'].forEach(id => adjuntar(document.getElementById(id)));
+    ['mis-origen', 'mis-destino', 'ruta-origen', 'ruta-destino'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) adjuntar(el);
+    });
     document.querySelectorAll('.autocomplete-items').forEach(el => { el.style.display = 'none'; });
     cargarLocalidades();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
-
-  if (typeof module !== 'undefined' && module.exports) module.exports = { norm, parseCoord, parseTexto, partirOD, limpiarNombre, resaltar, mezclar, distPuntoSegM };
 })();
-
 </script>
 
-<!-- ===== INICIO PARCHE COP v4.3 HIBRIDO: pegar justo antes de </body>, DESPUES del bloque COP GEOSEARCH ===== -->
 <script>
-(function () {
-  'use strict';
-  const HORAS_VENCIMIENTO = 36; // el reporte oficial del INA se renueva una vez por dia
-  const ms = ts => { const n = Number(ts); return !isFinite(n) || n <= 0 ? 0 : (n < 1e11 ? n * 1000 : n); };
-  const fmt = v => (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? 's/d' : Number(v).toFixed(2);
-
-  /* 1) Estado de cada estacion (faltaba la funcion: por eso no se veian los rios) */
-  window.estadoHidro = function (h) {
-    const alt = Number(h.actual), ale = Number(h.alerta), eva = Number(h.evacuacion);
-    if (!isFinite(alt)) return { txt: 'SIN DATO', color: '#64748b', tag: ' (s/d)', ok: false, nivel: 0 };
-    let txt = 'NORMAL', color = '#16a34a', nivel = 1;
-    if (isFinite(eva) && alt >= eva) { txt = 'EVACUACIÓN'; color = '#dc2626'; nivel = 3; }
-    else if (isFinite(ale) && alt >= ale) { txt = 'ALERTA'; color = '#d97706'; nivel = 2; }
-    const t = ms(h.ts), horas = t ? (Date.now() - t) / 3600000 : Infinity;
-    // un dato viejo en alerta o evacuacion mantiene su color de riesgo; solo "normal" viejo pasa a gris
-    const colorViejo = nivel === 1 ? '#64748b' : color;
-    if (horas === Infinity) return { txt: txt + ' · hora s/d', color: colorViejo, tag: ' (¿hora?)', ok: false, nivel };
-    if (horas > HORAS_VENCIMIENTO) return { txt: `${txt} · DESACTUALIZADO (${Math.floor(horas)} h)`, color: colorViejo, tag: ' (¡viejo!)', ok: false, nivel };
-    return { txt, color, tag: '', ok: true, nivel };
-  };
-
-  /* 2) Infraestructura (aeropuertos y hospitales) y control de capas: se habian perdido */
-  window.puntosInfraestructura = [
-    { icono: '✈️', nombre: 'Aeropuerto Resistencia', detalle: 'Pista / base aérea', lat: -27.4499, lon: -59.0561 },
-    { icono: '✈️', nombre: 'Aeropuerto Corrientes', detalle: 'Pista', lat: -27.4455, lon: -58.7619 },
-    { icono: '🏥', nombre: 'Hospital Julio C. Perrando (Resistencia)', detalle: 'Derivación sanitaria', lat: -27.4606, lon: -58.9722 },
-    { icono: '🏥', nombre: 'Hospital Escuela Gral. San Martín (Corrientes)', detalle: 'Emergencias y trauma', lat: -27.4682, lon: -58.8315 }
-  ];
-  window.renderizarInfraestructura = function () {
-    if (typeof capaInfraestructura === 'undefined' || !capaInfraestructura) return;
-    capaInfraestructura.clearLayers();
-    const chk = document.getElementById('chk-infra'); if (chk && !chk.checked) return;
-    window.puntosInfraestructura.forEach(p => L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'custom-div-icon', html: `<div class="infra-badge">${p.icono}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
-      .addTo(capaInfraestructura).bindPopup(`<b>${p.icono} ${esc(p.nombre)}</b><br><span style="font-size:11.5px">${esc(p.detalle)}</span><br><small style="color:#9a3412">⚠ Coordenadas aproximadas: verificar con fuente oficial</small>`));
-  };
-  window.toggleCapas = function () { renderizarHidrometria(); renderizarInfraestructura(); };
-
-  /* 3) Funciones de ruteo y lista que se habian perdido */
-  window.borrarRutaTactica = function () {
-    if (typeof capaRutaActiva !== 'undefined' && capaRutaActiva) capaRutaActiva.clearLayers();
-    ['ruta-origen', 'ruta-destino'].forEach(id => { const el = document.getElementById(id); el.value = ''; delete el.dataset.lat; delete el.dataset.lon; delete el.dataset.label; });
-    document.getElementById('resultado-ruta').style.display = 'none';
-    activarSeleccionMapa(null);
-  };
-  document.getElementById('lista-recursos').addEventListener('click', ev => {
-    const c = ev.target.closest('[data-center]');
-    if (c && typeof mapTactico !== 'undefined' && mapTactico) { const [la, lo] = c.dataset.center.split(',').map(Number); mapTactico.setView([la, lo], 14); }
-  });
-
-  /* 4) Panel hibrido: altura oficial + caudal satelital + lectura combinada */
-  const signoOf = c => c === '▲' ? 1 : c === '▼' ? -1 : c === '═' ? 0 : null;
-  function lecturaCombinada(h) {
-    const o = signoOf(String(h.tendencia || '').trim());
-    const g = (h.errQ || h.hoy == null || h.tend == null) ? null : (h.tend > 0.03 ? 1 : h.tend < -0.03 ? -1 : 0);
-    const nom = s => s > 0 ? 'en ascenso' : s < 0 ? 'en descenso' : 'estable';
-    if (o === null && g === null) return '<span style="color:#64748b">Sin datos de tendencia</span>';
-    if (o === null) return `Modelo: ${nom(g)} <small>(sin tendencia oficial)</small>`;
-    if (g === null) return `Oficial: ${nom(o)} <small>(sin modelo)</small>`;
-    if (o === g) return `<b>${nom(o)}</b> <small>(oficial y modelo coinciden)</small>`;
-    if (o * g < 0) return `<span style="color:#b91c1c;font-weight:bold">⚠ Discrepancia</span> <small>oficial ${nom(o)} / modelo ${nom(g)}: prevalece el dato oficial</small>`;
-    return `Oficial: ${nom(o)} · Modelo: ${nom(g)}`;
-  }
-  window.actualizarDashboardAnalytics = function () {
-    const tb = document.querySelector('#tabla-analitica-rios tbody'); tb.innerHTML = '';
-    estacionesHidro.forEach(h => {
-      const e = estadoHidro(h), t = ms(h.ts);
-      tb.insertAdjacentHTML('beforeend', `<tr>
-        <td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td>
-        <td><b>${fmt(h.actual)} m</b> ${esc(h.tendencia || '')}<br><small>Alerta ${fmt(h.alerta)} · Evac. ${fmt(h.evacuacion)}</small></td>
-        <td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td>
-        <td>${esc(textoQ(h))}</td>
-        <td>${lecturaCombinada(h)}</td>
-        <td><small>${t ? esc(edadTxt(t)) : 'Sin hora'}</small></td></tr>`);
-    });
-    const vivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
-    const medios = vivos.filter(r => r.inst !== 'VIALIDAD').length, cortes = vivos.filter(r => r.inst === 'VIALIDAD').length;
-    const ef = vivos.reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
-    document.getElementById('analitica-fuerzas').innerHTML = `• Unidades y medios: <b>${medios}</b><br>• Cortes / alertas viales: <b style="color:#dc2626">${cortes}</b><br>• Personal en terreno: <b>${ef} efectivos</b><br>• Estaciones hidrométricas: <b>${estacionesHidro.length}</b> (${estacionesHidro.filter(h => estadoHidro(h).ok).length} con dato vigente)`;
-    document.getElementById('bitacora').innerHTML = bitacora.length ? bitacora.slice(0, 15).map(b => `<div style="border-bottom:1px solid #e2e8f0;padding:3px 0"><b>${fmtFecha(b.ts)}</b> - ${esc(b.t)}</div>`).join('') : '<i>Sin eventos registrados.</i>';
-    cargarPronostico();
-  };
-
-  const _glofas = window.cargarCaudalesGloFAS;
-  if (typeof _glofas === 'function') window.cargarCaudalesGloFAS = async function () {
-    await _glofas();
-    const v = document.getElementById('vista-analytics');
-    if (v && v.classList.contains('active')) actualizarDashboardAnalytics();
-  };
-
-  const _rios = window.dibujarRiosEstrategico;
-  if (typeof _rios === 'function') window.dibujarRiosEstrategico = function () {
-    _rios();
-    const cont = document.getElementById('lista-rios'); if (!cont || !estacionesHidro.length) return;
-    let ev = 0, al = 0, viejos = 0;
-    estacionesHidro.forEach(h => { const e = estadoHidro(h); if (e.nivel === 3) ev++; else if (e.nivel === 2) al++; if (!e.ok) viejos++; });
-    const partes = [];
-    if (ev) partes.push(`<span style="color:#f87171">🚨 ${ev} sobre evacuación</span>`);
-    if (al) partes.push(`<span style="color:#fbbf24">⚠ ${al} en alerta</span>`);
-    if (viejos) partes.push(`<span style="color:#cbd5e1">${viejos} con dato viejo o sin hora</span>`);
-    if (!partes.length) partes.push('<span style="color:#4ade80">Sin estaciones en alerta</span>');
-    cont.insertAdjacentHTML('afterbegin', `<div style="padding:4px 0;font-weight:bold">${partes.join(' · ')}</div>`);
-  };
-
-  /* 5) Extraccion forzada de datos oficiales: espera la respuesta del servidor antes de refrescar */
-  window.forzarSyncRios = async function (btn) {
-    if (sesionActiva.rol.toLowerCase() === 'operador') return alert('Solo Planificadores o Administradores pueden forzar la extracción de datos oficiales.');
-    const txt = btn.innerText; btn.disabled = true; btn.innerText = '⏳ Extrayendo datos oficiales...';
-    try {
-      const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'SYNC_PNA', email: sesionActiva.email, pin: sesionActiva.pin }) });
-      let r = null; try { r = await res.json(); } catch (_) { /* respuesta sin JSON */ }
-      sincronizando = false; await refrescarDatosServer();
-      const ult = Math.max(0, ...estacionesHidro.map(h => ms(h.ts)));
-      const cuando = ult ? new Date(ult).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 's/d';
-      btn.innerText = (r && r.status === 'success' ? '✅ Actualizado. ' : '⚠ Sin confirmación del servidor. ') + 'Última lectura: ' + cuando;
-    } catch (e) { btn.innerText = '❌ Sin conexión'; }
-    setTimeout(() => { btn.innerText = txt; btn.disabled = false; }, 5000);
-  };
-
-  /* 6) No avisar "sesion finalizada" si nadie inicio sesion */
-  const _cerrar = window.cerrarSesionCOP;
-  window.cerrarSesionCOP = function () { if (sesionActiva.autenticado) _cerrar(); };
-
-  /* 7) Textos del panel hibrido y control del error MIS-NaN */
-  function ajustar() {
-    const t = document.querySelector('#top-banner strong'); if (t) t.textContent = 'MONITOR OPERATIVO HÍDRICO NEA (COP v4.3 Híbrido)';
-    const tab = document.querySelectorAll('.tab-btn')[2]; if (tab) tab.textContent = '📊 Inteligencia Híbrida (Oficial + Satelital)';
-    const tabla = document.getElementById('tabla-analitica-rios');
-    if (tabla) {
-      tabla.querySelector('thead').innerHTML = '<tr><th>Estación / Río</th><th>Altura oficial (m)</th><th>Estado operativo</th><th>Caudal GloFAS</th><th>Tendencia (oficial + modelo)</th><th>Dato</th></tr>';
-      const card = tabla.closest('.analytics-card'); card.style.gridColumn = 'span 2'; card.querySelector('h4').textContent = '🌊 Cuadro comparativo hídrico (oficial vs. GloFAS)';
-    }
-    const pr = document.querySelector('#panel-rios small'); if (pr) pr.innerHTML = '<b>Altura:</b> dato oficial cargado (con antigüedad).<br><b>Q (m³/s):</b> modelo GloFAS, referencial y de ubicación aproximada.';
-    if (/Date\.now \/ 1000/.test(String(window.guardarMisionVuelo))) {
-      document.getElementById('top-banner').insertAdjacentHTML('afterend', '<div style="background:#b91c1c;color:#fff;padding:4px 12px;font-size:12px">⚠ Corregir en el código: "Date.now / 1000" debe ser "Date.now() / 1000". Hoy las misiones se guardan con ID inválido.</div>');
-    }
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ajustar); else ajustar();
-})();
+window.addEventListener('DOMContentLoaded', () => {
+  if(!mapRadar) inicializarMapaRadar();
+});
 </script>
-<!-- ===== FIN PARCHE COP v4.3 HIBRIDO ===== -->
-
-  <!-- ===== INICIO PROBABILIDAD DE CRECIENTE: pegar antes de </body>, DESPUES de los otros bloques ===== -->
-<script>
-(function () {
-  'use strict';
-  const UMBRAL = 1.10;   // "creciente" = caudal máximo de los próximos 7 días al menos 10 % mayor al de hoy
-
-  /* probabilidad = proporción de miembros del ensamble GloFAS (Copernicus) que superan el umbral */
-  window.probCreciente = function (daily) {
-    const claves = Object.keys(daily || {}).filter(k => k.startsWith('river_discharge_member'));
-    let n = 0, si = 0;
-    claves.forEach(k => {
-      const q = daily[k]; if (!q || q[0] == null || !(q[0] > 0)) return;
-      const max7 = Math.max(...q.slice(1, 8).filter(x => x != null)); if (!isFinite(max7)) return;
-      n++; if (max7 >= q[0] * UMBRAL) si++;
-    });
-    return n ? { p: si / n, n } : null;
-  };
-
-  async function cargar() {
-    await Promise.all((estacionesHidro || []).map(async s => {
-      try {
-        const j = await (await fetch(`https://flood-api.open-meteo.com/v1/flood?latitude=${s.lat}&longitude=${s.lon}&daily=river_discharge&ensemble=true&forecast_days=8`)).json();
-        const r = probCreciente(j.daily); s.pCrec = r ? r.p : null; s.nMiembros = r ? r.n : 0;
-      } catch (e) { s.pCrec = null; }
-    }));
-    pintar();
-  }
-
-  function pintar() {
-    const panel = document.getElementById('panel-rios'); if (!panel) return;
-    let b = document.getElementById('bloque-prob');
-    if (!b) { b = document.createElement('div'); b.id = 'bloque-prob'; const hr = panel.querySelector('hr'); panel.insertBefore(b, hr || null); }
-    const filas = (estacionesHidro || []).filter(s => s.pCrec != null).map(s => {
-      const pc = Math.round(s.pCrec * 100), col = pc >= 70 ? '#f87171' : pc >= 40 ? '#fbbf24' : '#4ade80';
-      return `<div style="padding:2px 0">${esc(s.estacion)}: <b style="color:${col}">${pc} %</b> <small>(${s.nMiembros} escenarios)</small></div>`;
-    });
-    b.innerHTML = `<hr style="border-color:#444;margin:6px 0"><b>📈 Probabilidad de creciente (7 días)</b>${filas.length ? filas.join('') : '<div style="color:#94a3b8">Sin datos del ensamble</div>'}
-      <small style="color:#94a3b8">Modelo GloFAS (Copernicus), referencial: no es un pronóstico oficial del INA.</small>`;
-  }
-
-  const _glofas = window.cargarCaudalesGloFAS;
-  window.cargarCaudalesGloFAS = async function () { if (typeof _glofas === 'function') await _glofas(); cargar(); };
-  const _rios = window.dibujarRiosEstrategico;
-  if (typeof _rios === 'function') window.dibujarRiosEstrategico = function () { _rios(); pintar(); };
-})();
-</script>
-<!-- ===== FIN PROBABILIDAD DE CRECIENTE ===== -->
 
 </body>
 </html>
