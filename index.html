@@ -1746,5 +1746,449 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN FIX RIOS DEFINITIVO ===== -->
+
+  <!-- ===== INICIO MÓDULO AUTOMÁTICO: CORTES VIALES Y ZONAS INUNDADAS ===== -->
+<script>
+(function () {
+  'use strict';
+
+  // 1. Capas nuevas para Zonas Inundadas y Cortes Automáticos
+  let capaZonasInundadas = null;
+  let capaNasaFloodTactico = null;
+  let autoCortesGenerados = [];
+
+  // Polígonos ribereños críticos del NEA que se activan automáticamente según cota de Alerta / Evacuación
+  const ZONAS_RIBERENAS_NEA = [
+    {
+      idEstacion: 'H1',
+      nombre: 'Valle de Inundación Barranqueras - Puerto Vilelas - Antequeras',
+      umbral: 'alerta', // se pinta en amarillo en alerta y rojo en evacuación
+      poligono: [
+        [-27.435, -58.915], [-27.445, -58.885], [-27.525, -58.910],
+        [-27.545, -58.935], [-27.515, -58.955], [-27.465, -58.935]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H1-1', nombre: 'Corte Preventivo: Camino a Isla del Cerrito / Antequeras (RP 63) por desborde', lat: -27.428, lon: -58.895, sector: 'Antequeras / RP 63', umbralMin: 'alerta' },
+        { id: 'AUTO-VIAL-H1-2', nombre: 'Anegamiento: Bajada Puerto Vilelas / Camino Costero', lat: -27.518, lon: -58.938, sector: 'Puerto Vilelas', umbralMin: 'evacuacion' }
+      ]
+    },
+    {
+      idEstacion: 'H2',
+      nombre: 'Ribera Costanera Corrientes Capital y Bajos del Río Paraná',
+      umbral: 'alerta',
+      poligono: [
+        [-27.455, -58.855], [-27.450, -58.815], [-27.475, -58.820],
+        [-27.495, -58.845], [-27.480, -58.860]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H2-1', nombre: 'Alerta Vial: Anegamiento Costanera Sur / Zona Portuaria Corrientes', lat: -27.472, lon: -58.842, sector: 'Corrientes Capital', umbralMin: 'evacuacion' }
+      ]
+    },
+    {
+      idEstacion: 'H3',
+      nombre: 'Confluencia Paso de la Patria - Isla del Cerrito',
+      umbral: 'alerta',
+      poligono: [
+        [-27.280, -58.625], [-27.275, -58.550], [-27.325, -58.545],
+        [-27.345, -58.600], [-27.315, -58.635]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H3-1', nombre: 'Corte Vial: RP 63 Acceso Isla del Cerrito (Tramo Bajo)', lat: -27.318, lon: -58.665, sector: 'Isla del Cerrito', umbralMin: 'alerta' },
+        { id: 'AUTO-VIAL-H3-2', nombre: 'Anegamiento Costero: Camino Ribereño Paso de la Patria', lat: -27.312, lon: -58.572, sector: 'Paso de la Patria', umbralMin: 'evacuacion' }
+      ]
+    },
+    {
+      idEstacion: 'H4',
+      nombre: 'Planicie de Desborde Río Paraguay - Puerto Bermejo / Las Palmas',
+      umbral: 'alerta',
+      poligono: [
+        [-26.895, -58.525], [-26.905, -58.475], [-26.965, -58.495],
+        [-26.955, -58.535]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H4-1', nombre: 'Corte Preventivo: RP 1 Acceso Antiguo Puerto Bermejo', lat: -26.929, lon: -58.508, sector: 'Puerto Bermejo', umbralMin: 'alerta' }
+      ]
+    },
+    {
+      idEstacion: 'H5',
+      nombre: 'Bajos Ribereños Empedrado y Desembocadura Arroyo',
+      umbral: 'alerta',
+      poligono: [
+        [-27.925, -58.825], [-27.930, -58.790], [-27.975, -58.795],
+        [-27.970, -58.830]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H5-1', nombre: 'Alerta Vial: Bajada Costanera Empedrado', lat: -27.952, lon: -58.808, sector: 'Empedrado', umbralMin: 'evacuacion' }
+      ]
+    },
+    {
+      idEstacion: 'H6',
+      nombre: 'Riacho Goya - Zona Insular y Costanera Baja Goya',
+      umbral: 'alerta',
+      poligono: [
+        [-29.110, -59.300], [-29.115, -59.245], [-29.180, -59.250],
+        [-29.175, -59.305]
+      ],
+      cortesAsociados: [
+        { id: 'AUTO-VIAL-H6-1', nombre: 'Corte por Crecida: Zona Puerto Boca / Costanera Baja Goya', lat: -29.148, lon: -59.272, sector: 'Goya', umbralMin: 'alerta' }
+      ]
+    }
+  ];
+
+  function asegurarCapas() {
+    if (typeof mapTactico === 'undefined' || !mapTactico) return false;
+    if (!capaZonasInundadas) {
+      capaZonasInundadas = L.layerGroup().addTo(mapTactico);
+    }
+    if (!capaNasaFloodTactico) {
+      const gibs = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+      capaNasaFloodTactico = L.tileLayer(`${gibs}/MODIS_Combined_Flood_2Day/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`, {
+        maxNativeZoom: 8, maxZoom: 18, opacity: 0.65, attribution: 'NASA GIBS Flood'
+      });
+    }
+    return true;
+  }
+
+  // 2. Función principal: Calcula zonas inundadas y cortes automáticos según la altura de los ríos
+  window.actualizarInundacionesYCortesAuto = function () {
+    if (!asegurarCapas()) return;
+    capaZonasInundadas.clearLayers();
+
+    const chkInund = document.getElementById('chk-inundaciones');
+    const mostrarPoligonos = !chkInund || chkInund.checked;
+
+    // Limpiar cortes automáticos previos de la memoria para recalcularlos según el nivel actual
+    if (typeof recursos !== 'undefined' && Array.isArray(recursos)) {
+      recursos = recursos.filter(r => !String(r.id || '').startsWith('AUTO-VIAL-'));
+    }
+    autoCortesGenerados = [];
+
+    let zonasActivas = 0;
+    let cortesActivados = 0;
+
+    ZONAS_RIBERENAS_NEA.forEach(z => {
+      const h = (typeof estacionesHidro !== 'undefined' ? estacionesHidro : []).find(x => x.id === z.idEstacion);
+      if (!h || !isFinite(h.actual)) return;
+
+      const enEvacuacion = isFinite(h.evacuacion) && h.actual >= h.evacuacion;
+      const enAlerta = isFinite(h.alerta) && h.actual >= h.alerta;
+
+      if (!enAlerta && !enEvacuacion) return;
+      zonasActivas++;
+
+      const colorPoligono = enEvacuacion ? '#dc2626' : '#f59e0b';
+      const estadoTxt = enEvacuacion ? 'DESBORDE / EVACUACIÓN' : 'RIESGO / ALERTA HÍDRICA';
+
+      if (mostrarPoligonos) {
+        L.polygon(z.poligono, {
+          color: colorPoligono,
+          weight: 2,
+          dashArray: enEvacuacion ? null : '6, 4',
+          fillColor: colorPoligono,
+          fillOpacity: enEvacuacion ? 0.38 : 0.24
+        }).addTo(capaZonasInundadas).bindPopup(`
+          <div style="font-size:12px;min-width:210px">
+            <b style="color:${colorPoligono}">🌊🟥 ZONA INUNDADA / ANEGADA</b><br>
+            <b>Sector:</b> ${esc(z.nombre)}<br>
+            <b>Estación ref.:</b> ${esc(h.estacion)} (${Number(h.actual).toFixed(2)} m)<br>
+            <b>Condición:</b> <b style="color:${colorPoligono}">${estadoTxt}</b><br>
+            <small style="color:#64748b">Proyección automática por cota hidrométrica</small>
+          </div>
+        `);
+      }
+
+      // Evaluar cortes viales automáticos asociados a esta crecida
+      (z.cortesAsociados || []).forEach(c => {
+        const activar = (c.umbralMin === 'alerta' && (enAlerta || enEvacuacion)) || (c.umbralMin === 'evacuacion' && enEvacuacion);
+        if (activar && typeof recursos !== 'undefined') {
+          cortesActivados++;
+          const nuevoCorte = {
+            id: c.id,
+            nombre: c.nombre,
+            inst: 'VIALIDAD',
+            estado: enEvacuacion ? 'NO_DISPONIBLE' : 'ASIGNADO',
+            lat: c.lat,
+            lon: c.lon,
+            sector: c.sector,
+            operador: 'Auto-Cota COP',
+            efectivos: 0,
+            timestamp: h.ts || Date.now()
+          };
+          recursos.push(nuevoCorte);
+          autoCortesGenerados.push(nuevoCorte);
+        }
+      });
+    });
+
+    if (typeof renderizarRecursos === 'function') renderizarRecursos();
+
+    const stBox = document.getElementById('auto-inund-status');
+    if (stBox) {
+      stBox.innerHTML = zonasActivas > 0
+        ? `<b style="color:#dc2626">🚨 ${zonasActivas} zona(s) inundada(s) y ${cortesActivados} corte(s) vial(es) activos por cota.</b>`
+        : `<span style="color:#16a34a">✅ Sin desbordes críticos según cotas actuales.</span>`;
+    }
+  };
+
+  // 3. Consulta en vivo a OpenStreetMap (Overpass API) para cortes de ruta reales en Chaco y Corrientes
+  window.sincronizarCortesOSM = async function (btn) {
+    if (!asegurarCapas()) return;
+    const txtOrig = btn ? btn.innerText : '';
+    if (btn) { btn.disabled = true; btn.innerText = '⏳ Buscando cortes en red vial NEA...'; }
+
+    try {
+      // Busca barreras, cortes, rutas inundadas o en construcción en rutas primarias/secundarias del NEA
+      const query = `[out:json][timeout:15];
+        (
+          way["highway"~"trunk|primary|secondary"]["access"~"no|private"](-30.5,-61.5,-25.5,-56.5);
+          way["highway"~"trunk|primary|secondary"]["impassable"="yes"](-30.5,-61.5,-25.5,-56.5);
+          node["barrier"="roadblock"](-30.5,-61.5,-25.5,-56.5);
+        );
+        out center 25;`;
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query)
+      });
+      const json = await res.json();
+      let agregados = 0;
+
+      (json.elements || []).forEach((el, idx) => {
+        const lat = el.lat || (el.center && el.center.lat);
+        const lon = el.lon || (el.center && el.center.lon);
+        if (!lat || !lon) return;
+        const idOsm = `OSM-VIAL-${el.id}`;
+        if (recursos.some(r => r.id === idOsm)) return;
+
+        const tags = el.tags || {};
+        const ref = tags.ref || tags.name || 'Ruta NEA';
+        const motivo = tags.description || tags.note || (tags.impassable === 'yes' ? 'Intransitable / Anegada' : 'Restricción / Corte Vial');
+
+        recursos.push({
+          id: idOsm,
+          nombre: `[${ref}] ${motivo}`,
+          inst: 'VIALIDAD',
+          estado: 'NO_DISPONIBLE',
+          lat: lat,
+          lon: lon,
+          sector: ref,
+          operador: 'OSM Live',
+          efectivos: 0,
+          timestamp: Date.now()
+        });
+        agregados++;
+      });
+
+      if (typeof renderizarRecursos === 'function') renderizarRecursos();
+      if (btn) btn.innerText = `✅ ${agregados} restricción(es) detectadas`;
+    } catch (e) {
+      console.warn('Overpass OSM no disponible:', e);
+      if (btn) btn.innerText = '⚠ Red OSM ocupada (reintentar)';
+    } finally {
+      if (btn) setTimeout(() => { btn.innerText = txtOrig; btn.disabled = false; }, 3500);
+    }
+  };
+
+  // 4. Lector automático de Partes de Vialidad Nacional (Texto pegado) y archivos GeoJSON/CSV
+  window.procesarParteVialidad = async function () {
+    const el = document.getElementById('texto-parte-vialidad');
+    const texto = el ? el.value.trim() : '';
+    if (!texto) return alert('Pegue el parte de rutas cortadas o estado de rutas (ej: "RN 12 km 1040 San Cosme Corte total por agua en calzada").');
+
+    const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+    let cargados = 0;
+
+    for (const linea of lineas) {
+      // Extrae ruta (ej. RN 11, RN 12, RP 63, Ruta 16) y busca ubicación
+      const matchRuta = linea.match(/\b(RN|RP|RUTA\s+NACIONAL|RUTA\s+PROVINCIAL|RUTA)\s*\d+\b/i);
+      const rutaNom = matchRuta ? matchRuta[0].toUpperCase() : 'RUTA';
+      // Limpiamos palabras genéricas para geocodificar la localidad o paraje mencionado
+      const limpioParaGeo = linea.replace(/\b(corte|total|parcial|agua|calzada|precaucion|desvio|km\s*\d+|transito|asistido)\b/gi, ' ').trim();
+
+      let pt = null;
+      if (typeof window.resolverPunto === 'function') {
+        pt = await window.resolverPunto(limpioParaGeo, null);
+      }
+      if (!pt) continue;
+
+      const nuevoCorte = {
+        ID: `VIAL-${Date.now()}-${cargados}`,
+        Nombre: `${rutaNom}: ${linea.slice(0, 90)}`,
+        Institucion: 'VIALIDAD',
+        Estado: /total|interrumpido|cerrado/i.test(linea) ? 'NO_DISPONIBLE' : 'ASIGNADO',
+        Lat: pt.lat,
+        Lon: pt.lon,
+        Sector: rutaNom,
+        Operador: (typeof sesionActiva !== 'undefined' && sesionActiva.nombre) ? sesionActiva.nombre : 'Auto-Vialidad',
+        Efectivos: 0,
+        Timestamp: Date.now()
+      };
+
+      recursos.push({
+        id: nuevoCorte.ID,
+        nombre: nuevoCorte.Nombre,
+        inst: 'VIALIDAD',
+        estado: nuevoCorte.Estado,
+        lat: nuevoCorte.Lat,
+        lon: nuevoCorte.Lon,
+        sector: nuevoCorte.Sector,
+        operador: nuevoCorte.Operador,
+        efectivos: 0,
+        timestamp: nuevoCorte.Timestamp
+      });
+      cargados++;
+
+      if (typeof ejecutarAccionAuditada === 'function') {
+        ejecutarAccionAuditada('Recursos_Terreno', 'INSERT', nuevoCorte, `Ingesta automática corte vial: ${nuevoCorte.Nombre}`);
+      }
+    }
+
+    if (typeof renderizarRecursos === 'function') renderizarRecursos();
+    if (cargados > 0) {
+      el.value = '';
+      alert(`✅ Se georreferenciaron y cargaron ${cargados} corte(s) de ruta automáticamente en el mapa.`);
+    } else {
+      alert('⚠ No se pudo identificar una localidad del NEA en las líneas pegadas. Incluya el nombre de la localidad o paraje junto a la ruta (ej: "RN 12 Itatí - Corte parcial").');
+    }
+  };
+
+  // 5. Carga directa de archivos GeoJSON (Manchas de inundación CONAE / IGN o Cortes)
+  window.cargarArchivoInundacionOCortes = async function (ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    if (!asegurarCapas()) return;
+
+    try {
+      const txt = await file.text();
+      if (file.name.toLowerCase().endsWith('.geojson') || file.name.toLowerCase().endsWith('.json')) {
+        const gj = JSON.parse(txt);
+        const layer = L.geoJSON(gj, {
+          style: f => ({
+            color: '#dc2626',
+            weight: 2,
+            fillColor: '#ef4444',
+            fillOpacity: 0.4
+          }),
+          pointToLayer: (f, latlng) => {
+            // Si el GeoJSON trae puntos, los carga como cortes de ruta
+            const p = f.properties || {};
+            const nom = p.nombre || p.name || p.descripcion || 'Alerta Vial / Punto Anegado';
+            recursos.push({
+              id: `GJ-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              nombre: nom,
+              inst: 'VIALIDAD',
+              estado: 'NO_DISPONIBLE',
+              lat: latlng.lat,
+              lon: latlng.lng,
+              sector: p.ruta || p.sector || 'GeoJSON',
+              operador: 'Archivo Oficial',
+              efectivos: 0,
+              timestamp: Date.now()
+            });
+            return L.marker(latlng, { icon: crearIcono('VIALIDAD', 'NO_DISPONIBLE') });
+          },
+          onEachFeature: (f, l) => {
+            const p = f.properties || {};
+            const titulo = p.nombre || p.name || p.layer || 'Zona Inundada Oficial (CONAE/IGN)';
+            l.bindPopup(`<b>🌊🟥 ${esc(titulo)}</b><br><small>Fuente: Archivo ${esc(file.name)}</small>`);
+          }
+        }).addTo(capaZonasInundadas);
+
+        if (typeof renderizarRecursos === 'function') renderizarRecursos();
+        if (layer.getBounds && layer.getBounds().isValid()) {
+          mapTactico.fitBounds(layer.getBounds(), { padding: [30, 30] });
+        }
+        alert(`✅ Archivo GeoJSON "${file.name}" cargado en el mapa táctico.`);
+      } else {
+        // Si es TXT o CSV, lo procesa como listado de cortes viales
+        document.getElementById('texto-parte-vialidad').value = txt;
+        await window.procesarParteVialidad();
+      }
+    } catch (e) {
+      alert('Error al leer el archivo: ' + e.message);
+    }
+  };
+
+  window.toggleCapaNasaFlood = function (chk) {
+    if (!asegurarCapas()) return;
+    if (chk.checked) capaNasaFloodTactico.addTo(mapTactico);
+    else mapTactico.removeLayer(capaNasaFloodTactico);
+  };
+
+  // 6. Inyección de controles en la interfaz sin alterar el HTML existente
+  function inyectarUI() {
+    // Agregar checkbox en la barra flotante de capas del mapa táctico
+    const bar = document.querySelector('.layer-control-bar');
+    if (bar && !document.getElementById('chk-inundaciones')) {
+      bar.insertAdjacentHTML('beforeend', `
+        <label><input type="checkbox" id="chk-inundaciones" checked onchange="actualizarInundacionesYCortesAuto()"> 🟥 Zonas Inundadas</label>
+        <label title="Agua en superficie detectada por satélite NASA MODIS"><input type="checkbox" id="chk-nasa-flood" onchange="toggleCapaNasaFlood(this)"> 🛰️ Mancha Satelital</label>
+      `);
+    }
+
+    // Agregar panel en el sidebar debajo del panel de PDF de Prefectura
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !document.getElementById('panel-auto-inundaciones')) {
+      const refPanel = sidebar.querySelector('details.form-panel');
+      const htmlPanel = `
+        <details class="form-panel" id="panel-auto-inundaciones" open style="border-left-color:#dc2626">
+          <summary>🚧🌊 Cortes Viales y Zonas Inundadas (Auto)</summary>
+          <div class="form-grid">
+            <div id="auto-inund-status" style="font-size:11.5px;padding:4px 6px;background:#fef2f2;border:1px solid #fecaca;border-radius:4px">
+              ⏳ Calculando proyección por cota hidrométrica...
+            </div>
+            <div style="display:flex;gap:5px">
+              <button type="button" class="btn-submit" style="background:#dc2626;flex:1;font-size:11px" onclick="actualizarInundacionesYCortesAuto()">
+                🌊 Recalcular por Cota
+              </button>
+              <button type="button" class="btn-submit" style="background:#d97706;flex:1;font-size:11px" onclick="sincronizarCortesOSM(this)">
+                🛰️ Buscar Cortes (OSM)
+              </button>
+            </div>
+            <hr style="border-color:#e2e8f0;margin:2px 0">
+            <label style="font-weight:bold;color:#1e293b;font-size:11.5px">📂 Cargar Mancha Inundación (.geojson) o Cortes (.txt/.csv):</label>
+            <input type="file" accept=".geojson,.json,.csv,.txt" onchange="cargarArchivoInundacionOCortes(event)" style="padding:4px;background:#fff" />
+            <details style="margin-top:2px">
+              <summary style="font-size:11px;color:#64748b;cursor:pointer">📋 O pegar Parte de Vialidad Nacional...</summary>
+              <div style="margin-top:5px;display:flex;flex-direction:column;gap:4px">
+                <textarea id="texto-parte-vialidad" rows="2" placeholder="Ej: RN 12 Itatí - Corte parcial por agua en calzada"></textarea>
+                <button type="button" class="btn-submit" style="background:#b91c1c" onclick="procesarParteVialidad()">🚧 Georreferenciar Cortes</button>
+              </div>
+            </details>
+          </div>
+        </details>
+      `;
+      if (refPanel) refPanel.insertAdjacentHTML('afterend', htmlPanel);
+      else sidebar.insertAdjacentHTML('afterbegin', htmlPanel);
+    }
+
+    // Si existe un archivo local zonas_inundadas.geojson en el servidor, lo carga automáticamente al iniciar
+    fetch('zonas_inundadas.geojson').then(r => {
+      if (!r.ok) throw new Error();
+      return r.json();
+    }).then(gj => {
+      if (asegurarCapas()) {
+        L.geoJSON(gj, {
+          style: { color: '#dc2626', weight: 2, fillColor: '#ef4444', fillOpacity: 0.35 }
+        }).addTo(capaZonasInundadas);
+      }
+    }).catch(() => {});
+  }
+
+  // Enganchamos el cálculo automático cada vez que se redibujan los hidrómetros (por PDF, carga manual o servidor)
+  const _origRenderHidro = window.renderizarHidrometria;
+  window.renderizarHidrometria = function () {
+    if (typeof _origRenderHidro === 'function') _origRenderHidro();
+    window.actualizarInundacionesYCortesAuto();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { inyectarUI(); setTimeout(window.actualizarInundacionesYCortesAuto, 800); });
+  } else {
+    inyectarUI();
+    setTimeout(window.actualizarInundacionesYCortesAuto, 800);
+  }
+})();
+</script>
+<!-- ===== FIN MÓDULO AUTOMÁTICO: CORTES VIALES Y ZONAS INUNDADAS ===== -->
 </body>
 </html>
