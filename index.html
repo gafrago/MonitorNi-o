@@ -219,7 +219,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
     <b>🌊 Cuenca del Paraná</b>
     <div id="lista-rios" style="margin-top:5px">⏳ Consultando…</div>
     <hr style="border-color:#444;margin:6px 0">
-    <small><b>Q (m³/s):</b> modelo GloFAS (referencial, ubicación aprox.).<br><b>Altura:</b> DB central, con antigüedad.</small>
+    <small><b>Q (m³/s):</b> Oficial INA (🛡️) o GloFAS (🛰️).<br><b>Altura:</b> DB central, con antigüedad.</small>
   </div>
 </div>
 
@@ -245,7 +245,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
                 <th>Estación / Río</th>
                 <th>Altura Oficial (m)</th>
                 <th>Estado Operativo</th>
-                <th>Caudal GloFAS</th>
+                <th>Caudal (INA / GloFAS)</th>
                 <th>Tendencia (oficial + modelo)</th>
               </tr>
             </thead>
@@ -393,6 +393,11 @@ let estacionesHidro = [];
 let sincronizando = false;
 window.glofasIniciado = false;
 
+const parseNumSeguro = (val) => {
+  if (val === undefined || val === null || val === '') return NaN;
+  return parseFloat(String(val).replace(',', '.').trim());
+};
+
 async function refrescarDatosServer() {
   if (!sesionActiva.autenticado || sincronizando) return;
   sincronizando = true;
@@ -408,7 +413,7 @@ async function refrescarDatosServer() {
     if (resRec.status === 'success') {
       recursos = resRec.data.map(r => ({
         id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, 
-        lat: parseFloat(r.Lat), lon: parseFloat(r.Lon), sector: r.Sector, 
+        lat: parseNumSeguro(r.Lat), lon: parseNumSeguro(r.Lon), sector: r.Sector, 
         operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp)
       }));
       renderizarRecursos();
@@ -421,13 +426,34 @@ async function refrescarDatosServer() {
         H5: {lat:-27.950, lon:-58.810}, H6: {lat:-29.145, lon:-59.265}
       };
 
-      estacionesHidro = resHid.data.map(h => ({
-        id: h.ID, estacion: h.Estacion, rio: h.Rio, actual: parseFloat(h.Actual_m),
-        alerta: parseFloat(h.Alerta_m), evacuacion: parseFloat(h.Evacuacion_m),
-        tendencia: h.Tendencia, ts: Number(h.Timestamp), 
-        lat: parseFloat(h.Lat) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lat : -27.45), 
-        lon: parseFloat(h.Lon) || (coordsFallback[h.ID] ? coordsFallback[h.ID].lon : -58.90)
-      }));
+      estacionesHidro = resHid.data.map(h => {
+        const idLimpio = String(h.ID).trim();
+        let lat = parseNumSeguro(h.Lat);
+        let lon = parseNumSeguro(h.Lon);
+        
+        if (Math.abs(lat) > 90) lat = lat / 1000;
+        if (Math.abs(lon) > 180) lon = lon / 1000;
+        
+        if (isNaN(lat) || isNaN(lon)) {
+           lat = coordsFallback[idLimpio] ? coordsFallback[idLimpio].lat : -27.45;
+           lon = coordsFallback[idLimpio] ? coordsFallback[idLimpio].lon : -58.90;
+        }
+
+        return {
+          id: idLimpio, 
+          estacion: String(h.Estacion || 'S/D').trim(), 
+          rio: String(h.Rio || '').trim(), 
+          actual: parseNumSeguro(h.Actual_m),
+          alerta: parseNumSeguro(h.Alerta_m), 
+          evacuacion: parseNumSeguro(h.Evacuacion_m),
+          tendencia: String(h.Tendencia || '═').trim(), 
+          ts: Number(h.Timestamp || 0), 
+          lat: lat, 
+          lon: lon,
+          qIna: parseNumSeguro(h.Q_m3s),
+          fuente: String(h.Fuente || 'Manual').trim()
+        };
+      });
       
       poblarSelectorNivel();
       renderizarHidrometria();
@@ -440,7 +466,7 @@ async function refrescarDatosServer() {
       }
     }
 
-    if (resMis.status === 'success') {
+    if (resMis.status === 'success' && !sesionActiva.invitado) {
       procesarMisiones(resMis.data);
     }
     
@@ -783,7 +809,6 @@ function renderizarHidrometria() {
   
   estacionesHidro.forEach(h => {
     const e = estadoHidro(h);
-    // Forzamos la división por 10000 si las coordenadas se guardaron sin punto decimal en la DB
     let lat = Number(h.lat);
     let lon = Number(h.lon);
     if (Math.abs(lat) > 180) lat = lat / 1000;
@@ -905,7 +930,12 @@ function renderizarInfraestructura() {
 function toggleCapas() { renderizarHidrometria(); renderizarInfraestructura(); }
 
 // --- INTELIGENCIA ---
-const textoQ = s => s.errQ || s.hoy == null ? 's/d' : `${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'}`;
+const textoQ = s => {
+  if (s.qIna > 0) return `🛡️ ${s.qIna.toLocaleString('es-AR')} m³/s (INA)`;
+  if (!s.errQ && s.hoy != null) return `🛰️ ${s.hoy.toFixed(0)} m³/s ${s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬'} (GloFAS)`;
+  return 's/d';
+};
+
 async function cargarCaudalesGloFAS() {
   if (estacionesHidro.length === 0) return;
   await Promise.all(estacionesHidro.map(async s => {
@@ -943,7 +973,7 @@ async function cargarPronostico() {
 function actualizarDashboardAnalytics() {
   const tb = document.querySelector('#tabla-analitica-rios tbody'); if(!tb) return; tb.innerHTML = '';
   estacionesHidro.forEach(h => { const e = estadoHidro(h);
-    tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${textoQ(h)}</td></tr>`); });
+    tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b><br><small>${esc(h.rio)}</small></td><td>${Number(h.actual).toFixed(2)} m</td><td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${textoQ(h)}</td><td>${esc(h.tendencia || '═')}</td></tr>`); });
   const medios = recursos.filter(r => r.inst !== 'VIALIDAD' && r.estado !== 'BAJA').length;
   const cortes = recursos.filter(r => r.inst === 'VIALIDAD' && r.estado !== 'BAJA').length;
   const ef = recursos.filter(r => r.estado !== 'BAJA').reduce((a, r) => a + (Number(r.efectivos) || 0), 0);
@@ -1005,8 +1035,8 @@ function generarSITREP() {
   doc.text(`Operador a cargo: ${sesionActiva.nombre || 'N/A'}`, 14, 31);
   if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 37); }
   doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 44);
-  doc.autoTable({ startY: 47, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q GloFAS']],
-    body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬]/g, '')]),
+  doc.autoTable({ startY: 47, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q (INA / GloFAS)']],
+    body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬🛡️🛰️]/g, '').trim()]),
     headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
   let y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(192, 57, 43); doc.text("2. Medios desplegados y cortes viales", 14, y);
   
@@ -1460,10 +1490,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
- 
-});
-</script>
-  <!-- ===== INICIO FIX RIOS: pegar antes de </body>, DESPUES de todos los demas bloques ===== -->
+<!-- ===== INICIO FIX RIOS: pegar antes de </body>, DESPUES de todos los demas bloques ===== -->
 <script>
 (function () {
   'use strict';
@@ -1471,7 +1498,7 @@ window.addEventListener('DOMContentLoaded', () => {
   sincronizando = true;   // deja inerte la sincronizacion vieja (la del setInterval); la nueva usa su propio control
 
   /* numeros que vienen de la hoja: "6,15" (texto con coma), 6.15, o 615 / -27485 (sin punto decimal) */
-  const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v));
+  const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'string' ? parseFloat(v.replace(',', '.').trim()) : Number(v));
   const bajarA = (v, max) => { let n = num(v), g = 0; while (isFinite(n) && Math.abs(n) > max && g++ < 8) n /= 10; return n; };
   const FALLBACK = { H1: [-27.485, -58.932], H2: [-27.462, -58.838], H3: [-27.310, -58.580], H4: [-26.928, -58.502], H5: [-27.950, -58.810], H6: [-29.145, -59.265] };
   const pedir = async tab => (await fetch(`${COP_API_URL}?action=getData&tab=${tab}`)).json();
@@ -1494,11 +1521,24 @@ window.addEventListener('DOMContentLoaded', () => {
       paso('Ríos', async () => {
         const j = await pedir('Hidrometria'); if (j.status !== 'success') throw new Error(j.message || j.status);
         estacionesHidro = j.data.map(h => {
-          const fb = FALLBACK[h.ID] || [];
+          const idLimpio = String(h.ID || '').trim();
+          const fb = FALLBACK[idLimpio] || [];
           let lat = bajarA(h.Lat, 90), lon = bajarA(h.Lon, 180);
           if (!isFinite(lat) || !isFinite(lon)) { lat = fb[0]; lon = fb[1]; }
-          return { id: h.ID, estacion: h.Estacion, rio: h.Rio, actual: bajarA(h.Actual_m, 20), alerta: bajarA(h.Alerta_m, 20), evacuacion: bajarA(h.Evacuacion_m, 20),
-            tendencia: h.Tendencia, ts: Number(h.Timestamp), lat, lon };
+          return {
+            id: idLimpio,
+            estacion: String(h.Estacion || 'S/D').trim(),
+            rio: String(h.Rio || '').trim(),
+            actual: bajarA(h.Actual_m, 20),
+            alerta: bajarA(h.Alerta_m, 20),
+            evacuacion: bajarA(h.Evacuacion_m, 20),
+            tendencia: String(h.Tendencia || '═').trim(),
+            ts: Number(h.Timestamp || 0),
+            lat,
+            lon,
+            qIna: num(h.Q_m3s),
+            fuente: String(h.Fuente || 'Manual').trim()
+          };
         }).filter(h => isFinite(h.lat) && isFinite(h.lon));
         const lista = document.getElementById('lista-rios');
         if (!estacionesHidro.length && lista) lista.innerHTML = '<span style="color:#fbbf24">La hoja Hidrometria no devolvió estaciones con coordenadas.</span>';
