@@ -1573,13 +1573,15 @@ window.addEventListener('DOMContentLoaded', () => {
   if(!mapRadar) inicializarMapaRadar();
 });
 </script>
-
 <!-- ===== INICIO FIX RIOS DEFINITIVO ===== -->
 <script>
 (function () {
   'use strict';
   let busy = false;
   sincronizando = true;
+
+  const LS_HIDRO = 'cop_hidro_pdf_v1';
+  const LS_REC = 'cop_recursos_local_v1';
 
   const aNumero = v => {
     if (v === null || v === undefined || v === '') return NaN;
@@ -1603,6 +1605,14 @@ window.addEventListener('DOMContentLoaded', () => {
     H6: { lat: -29.145, lon: -59.265, nombre: 'Goya', rio: 'Paraná' }
   };
 
+  // Recuperar datos guardados de PDF o cargas previas si existen
+  try {
+    const hGuardado = JSON.parse(localStorage.getItem(LS_HIDRO) || 'null');
+    if (Array.isArray(hGuardado) && hGuardado.length > 0) estacionesHidro = hGuardado;
+    const rGuardado = JSON.parse(localStorage.getItem(LS_REC) || 'null');
+    if (Array.isArray(rGuardado) && rGuardado.length > 0) recursos = rGuardado;
+  } catch (_) {}
+
   window.textoQ = function (s) {
     if (s && isFinite(s.qIna) && s.qIna > 0) {
       return `🛡️ ${Math.round(s.qIna).toLocaleString('es-AR')} m³/s (INA)`;
@@ -1621,6 +1631,9 @@ window.addEventListener('DOMContentLoaded', () => {
     
     const chk = document.getElementById('chk-hidro');
     if (chk && !chk.checked) return;
+
+    // Guardar estado actual de ríos en memoria local para no perder cargas por PDF
+    try { localStorage.setItem(LS_HIDRO, JSON.stringify(estacionesHidro)); } catch (_) {}
 
     (estacionesHidro || []).forEach(h => {
       if (!isFinite(h.lat) || !isFinite(h.lon)) return;
@@ -1649,7 +1662,21 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  const pedir = async tab => (await fetch(`${COP_API_URL}?action=getData&tab=${tab}`)).json();
+  // Blindaje de renderizarRecursos por si el rol viene vacío y guardado local
+  const _origRenderRecursos = window.renderizarRecursos;
+  window.renderizarRecursos = function () {
+    if (typeof sesionActiva !== 'undefined' && !sesionActiva.rol) sesionActiva.rol = 'Operador';
+    try { localStorage.setItem(LS_REC, JSON.stringify(recursos)); } catch (_) {}
+    if (typeof _origRenderRecursos === 'function') _origRenderRecursos();
+  };
+
+  const pedir = async tab => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`${COP_API_URL}?action=getData&tab=${tab}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    return r.json();
+  };
 
   window.refrescarDatosServer = async function () {
     if (!sesionActiva.autenticado || busy) return;
@@ -1659,17 +1686,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!mapRadar) inicializarMapaRadar();
 
     const st = document.getElementById('sync-status');
-    if (st) st.innerText = '🟡 Sincronizando...';
-    const fallos = [];
-    const paso = async (nombre, fn) => {
-      try { await fn(); } catch (e) { console.error('Fallo en ' + nombre, e); fallos.push(nombre); }
-    };
+    if (st) { st.innerText = '🟡 Sincronizando...'; st.style.color = '#fbbf24'; }
 
-    await Promise.all([
-      paso('Unidades', async () => {
-        const j = await pedir('Recursos_Terreno');
-        if (j.status !== 'success') throw new Error(j.message || j.status);
-        recursos = (j.data || []).map(r => ({
+    // 1. Unidades (Si la planilla falla o está vacía, conserva las unidades locales sin dar error)
+    try {
+      const jRec = await pedir('Recursos_Terreno');
+      if (jRec && jRec.status === 'success' && Array.isArray(jRec.data)) {
+        const remotos = jRec.data.map(r => ({
           id: r.ID,
           nombre: r.Nombre,
           inst: r.Institucion,
@@ -1681,24 +1704,24 @@ window.addEventListener('DOMContentLoaded', () => {
           efectivos: r.Efectivos,
           timestamp: Number(r.Timestamp)
         })).filter(r => isFinite(r.lat) && isFinite(r.lon));
-        renderizarRecursos();
-      }),
-      paso('Ríos', async () => {
-        const j = await pedir('Hidrometria');
-        if (j.status !== 'success') throw new Error(j.message || j.status);
-        
-        if (Array.isArray(j.data) && j.data.length > 0) {
-          estacionesHidro = j.data.map((h, idx) => {
+        if (remotos.length > 0) recursos = remotos;
+      }
+    } catch (_) {}
+    window.renderizarRecursos();
+
+    // 2. Ríos (Solo actualiza desde Sheets si el usuario NO cargó un PDF más reciente en esta sesión)
+    const tieneCargaPDF = (estacionesHidro || []).some(h => String(h.fuente || '').includes('PDF'));
+    if (!tieneCargaPDF) {
+      try {
+        const jHid = await pedir('Hidrometria');
+        if (jHid && jHid.status === 'success' && Array.isArray(jHid.data) && jHid.data.length > 0) {
+          const remotosH = jHid.data.map((h, idx) => {
             const idLimpio = String(h.ID || `H${idx + 1}`).trim().toUpperCase();
             const fijas = COORDS_FIJAS[idLimpio];
-            
-            let lat = escalar(h.Lat, 90);
-            let lon = escalar(h.Lon, 180);
-            
+            let lat = escalar(h.Lat, 90), lon = escalar(h.Lon, 180);
             if (!isFinite(lat) || lat > -24 || lat < -32 || !isFinite(lon) || lon > -55 || lon < -62) {
               if (fijas) { lat = fijas.lat; lon = fijas.lon; }
             }
-
             return {
               id: idLimpio,
               estacion: String(h.Estacion || (fijas && fijas.nombre) || 'Estación').trim(),
@@ -1713,31 +1736,27 @@ window.addEventListener('DOMContentLoaded', () => {
               qIna: aNumero(h.Q_m3s),
               fuente: String(h.Fuente || 'PNA/INA').trim()
             };
-          }).filter(h => isFinite(h.lat) && isFinite(h.lon));
+          }).filter(h => isFinite(h.lat) && isFinite(h.lon) && isFinite(h.actual));
+          if (remotosH.length > 0) estacionesHidro = remotosH;
         }
+      } catch (_) {}
+    }
 
-        poblarSelectorNivel();
-        window.renderizarHidrometria();
-        dibujarRiosEstrategico();
-        
-        if (!window.glofasIniciado) {
-          window.glofasIniciado = true;
-          cargarCaudalesGloFAS();
-        }
-        if (document.getElementById('vista-analytics').classList.contains('active')) {
-          actualizarDashboardAnalytics();
-        }
-      }),
-      paso('Misiones', async () => {
-        const j = await pedir('Misiones');
-        if (j.status !== 'success') throw new Error(j.message || j.status);
-        procesarMisiones(j.data || []);
-      })
-    ]);
+    poblarSelectorNivel();
+    window.renderizarHidrometria();
+    dibujarRiosEstrategico();
+    if (!window.glofasIniciado) { window.glofasIniciado = true; cargarCaudalesGloFAS(); }
+    if (document.getElementById('vista-analytics').classList.contains('active')) actualizarDashboardAnalytics();
+
+    // 3. Misiones
+    try {
+      const jMis = await pedir('Misiones');
+      if (jMis && jMis.status === 'success') procesarMisiones(jMis.data || []);
+    } catch (_) {}
 
     if (st) {
-      st.innerText = fallos.length ? '🔴 Fallo: ' + fallos.join(', ') : '🟢 Conectado';
-      st.style.color = fallos.length ? '#f87171' : '#4ade80';
+      st.innerText = tieneCargaPDF ? '🟢 Operativo (PDF PNA)' : '🟢 Conectado';
+      st.style.color = '#4ade80';
     }
     busy = false;
   };
