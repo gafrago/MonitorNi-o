@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<!-- LECTOR NATIVO DE PDFS EN EL NAVEGADOR -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#e2e8f0}
 #top-banner{background:#1a252f;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000}
@@ -56,7 +58,6 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 #panel-rios{left:12px;width:295px;max-height:62vh;overflow-y:auto;font-size:11.5px}
 .aviso{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:11px;padding:5px 7px;border-radius:3px}
 
-/* Estilos para el autocompletado táctico */
 .autocomplete-container { position: relative; width: 100%; }
 .autocomplete-items { position: absolute; border: 1px solid #cbd5e1; border-bottom: none; border-top: none; z-index: 9999; top: 100%; left: 0; right: 0; background: #fff; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
 .autocomplete-items div { padding: 8px 10px; cursor: pointer; background: #fff; border-bottom: 1px solid #cbd5e1; font-size: 11.5px; color: #1e293b; }
@@ -86,7 +87,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
   <div>
     <span class="badge-proto">OPERADOR: <span id="op-name">Iniciando...</span></span>
     <button onclick="cerrarSesionCOP()" style="background:#e74c3c; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
-    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.6 Ingesta Directa & Híbrido)</strong>
+    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.7 Carga PDF Directa)</strong>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Conectado</span>
@@ -115,23 +116,27 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
     </div>
 
-    <!-- PANEL: INGESTA DIRECTA DESDE REPORTE OFICIAL -->
+    <!-- PANEL OFICIAL: SUBIDA DIRECTA DE ARCHIVO PDF -->
     <details class="form-panel" open>
-      <summary>📄 Ingesta Rápida (Pegar Reporte Oficial PNA)</summary>
+      <summary>📄 Cargar Reporte Oficial PNA (Archivo PDF)</summary>
       <div class="form-grid">
-        <small style="color:#475569">Pegue aquí el texto copiado del PDF de Prefectura para actualizar los ríos instantáneamente:</small>
-        <textarea id="texto-reporte-pna" rows="4" placeholder="Copie y pegue aquí las líneas del PDF de Prefectura (ej: BARRANQUERAS | PARANA | 7.23...)"></textarea>
-        <button type="button" class="btn-submit" style="background:#0284c7" onclick="procesarTextoOficialPNA()">⚡ Procesar y Actualizar Mapa</button>
+        <label style="font-weight:bold; color:#1e293b;">Seleccione el archivo PDF oficial:</label>
+        <input type="file" id="input-pdf-pna" accept=".pdf" onchange="cargarPDFOficialPNA(event)" style="padding:6px; background:#fff; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;" />
+        <div id="pdf-status" style="font-size:11.5px; color:#475569; margin-top:2px;">Suba el PDF de Prefectura (ej: <i>doc.pdf</i>) para actualizar el mapa al instante.</div>
+        
+        <details style="margin-top:4px;">
+          <summary style="font-size:11px; color:#64748b; cursor:pointer;">O pegar texto copiado...</summary>
+          <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+            <textarea id="texto-reporte-pna" rows="3" placeholder="Pegue texto aquí si no tiene el PDF a mano..."></textarea>
+            <button type="button" class="btn-submit" style="background:#0284c7" onclick="procesarTextoOficialPNA()">⚡ Procesar Texto</button>
+          </div>
+        </details>
       </div>
     </details>
 
     <details class="form-panel">
-      <summary>🌊 Gestión de Ríos (Carga Manual y Forzado)</summary>
+      <summary>🌊 Gestión Manual de Ríos</summary>
       <form class="form-grid" onsubmit="cargarNivelManual(event)">
-        <button type="button" class="btn-submit" style="background:#2980b9; margin-bottom:10px" onclick="forzarSyncRios(this)">
-          📡 Forzar Sincronización Remota (INA/PNA)
-        </button>
-        <hr style="border-color:#cbd5e1; margin:4px 0">
         <select id="nivel-est" onchange="prellenarNivel()"></select>
         <div class="coords-row">
           <input type="number" step="0.01" id="nivel-alt" placeholder="Altura (m)" required />
@@ -229,7 +234,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
     <b>🌊 Cuenca del Paraná</b>
     <div id="lista-rios" style="margin-top:5px">⏳ Consultando…</div>
     <hr style="border-color:#444;margin:6px 0">
-    <small><b>Q (m³/s):</b> Oficial INA (🛡️) o GloFAS (🛰️).<br><b>Altura:</b> Registro Oficial (con antigüedad).</small>
+    <small><b>Q (m³/s):</b> Oficial INA (🛡️) o GloFAS (🛰️).<br><b>Altura:</b> Registro Oficial PNA.</small>
   </div>
 </div>
 
@@ -409,170 +414,148 @@ const parseNumSeguro = (val) => {
 };
 
 // ==========================================
-// PROCESADOR INTELIGENTE DE REPORTE PNA (TEXTO/PDF)
+// INGESTA INTELIGENTE DE ARCHIVO PDF (PREFECTURA)
 // ==========================================
-function procesarTextoOficialPNA() {
-  const texto = document.getElementById('texto-reporte-pna').value;
-  if (!texto.trim()) { alert("Pegue el texto copiado del reporte oficial en el cuadro."); return; }
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
 
-  const diccAliases = {
-    "BARRANQUERAS": ["BARRANQUERAS"],
-    "CORRIENTES": ["CORRIENTES"],
-    "PASO DE LA PATRIA": ["PASO DE LA PATRIA", "PASO DE LA PATRIA / CERRITO", "CERRITO"],
-    "PUERTO BERMEJO": ["PUERTO BERMEJO", "PTO. BERMEJO", "BERMEJO"],
-    "EMPEDRADO": ["EMPEDRADO"],
-    "GOYA": ["GOYA"],
-    "ITATI": ["ITATI", "ITATÍ"],
-    "ITUZAINGO": ["ITUZAINGO", "ITUZAINGÓ"],
-    "BELLA VISTA": ["BELLA VISTA"],
-    "ISLA DEL CERRITO": ["ISLA DEL CERRITO"]
-  };
+async function cargarPDFOficialPNA(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('pdf-status');
+  if (statusEl) statusEl.innerHTML = '⏳ <i>Leyendo páginas del PDF oficial...</i>';
 
-  const lineas = texto.split('\n');
-  let actualizadas = 0;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
 
-  lineas.forEach(linea => {
-    const lUpper = linea.toUpperCase();
-    if (!lUpper.includes('|') && !/\d/.test(lUpper)) return;
-
-    (estacionesHidro || []).forEach(h => {
-      const nombreH = h.estacion.toUpperCase();
-      let match = false;
-
-      // Comprobación directa
-      if (lUpper.includes(nombreH)) match = true;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
       
-      // Comprobación por alias
-      if (!match) {
-        for (const [clave, aliases] of Object.entries(diccAliases)) {
-          if (aliases.some(a => nombreH.includes(a)) && aliases.some(a => lUpper.includes(a))) {
-            match = true;
-            break;
-          }
+      let lastY = null, pageText = '';
+      for (let item of textContent.items) {
+        if (lastY === null || Math.abs(item.transform[5] - lastY) > 4) {
+          pageText += '\n';
+          lastY = item.transform[5];
+        } else {
+          pageText += ' ';
         }
+        pageText += item.str;
       }
+      fullText += pageText + '\n';
+    }
 
-      if (match) {
-        const tokens = linea.split('|').map(t => t.trim()).filter(Boolean);
-        // En reportes PNA: Puerto | Río | Ult. Reg | Variación | Periodo | Fecha | Estado | Reg. Ant | Alerta | Evacuación
-        for (let i = 0; i < tokens.length; i++) {
-          const num = parseFloat(tokens[i].replace(',', '.'));
-          if (!isNaN(num) && num > -3 && num < 35 && tokens[i].includes('.')) {
-            h.actual = num;
-            h.ts = Date.now();
-            h.fuente = "PNA Oficial (PDF)";
-
-            // Detectar tendencia
-            if (lUpper.includes('CRECE')) h.tendencia = '▲';
-            else if (lUpper.includes('BAJA')) h.tendencia = '▼';
-            else if (lUpper.includes('ESTAC')) h.tendencia = '═';
-
-            // Umbrales si vienen al final de la línea
-            const ultimosNums = tokens.slice(-3).map(x => parseFloat(x.replace(',', '.'))).filter(n => !isNaN(n) && n > 0 && n < 35);
-            if (ultimosNums.length >= 2) {
-              h.alerta = ultimosNums[ultimosNums.length - 2];
-              h.evacuacion = ultimosNums[ultimosNums.length - 1];
-            }
-
-            actualizadas++;
-            logEvento(`Ingesta PNA: ${h.estacion} -> ${h.actual} m`);
-            ejecutarAccionAuditada("Hidrometria", "UPDATE", { ID: h.id, Actual_m: h.actual, Tendencia: h.tendencia, Timestamp: h.ts }, `Ingesta PNA: ${h.actual}m`);
-            break;
-          }
-        }
-      }
-    });
-  });
-
-  if (actualizadas > 0) {
-    poblarSelectorNivel();
-    if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
-    if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
-    if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
-    alert(`✅ Operación exitosa: Se actualizaron ${actualizadas} estaciones en el sistema y mapa táctico.`);
-  } else {
-    alert("⚠ No se identificaron estaciones coincidentes en el texto pegado. Asegúrese de incluir las filas con los nombres de puerto (ej: BARRANQUERAS, CORRIENTES, etc.).");
+    if (statusEl) statusEl.innerHTML = '⏳ <i>Procesando estaciones y alturas...</i>';
+    procesarTextoLineasPNA(fullText, file.name);
+  } catch (err) {
+    console.error(err);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ Error al leer PDF: ${err.message}</span>`;
+    alert("Error al procesar el archivo PDF. Asegúrese de que sea un PDF oficial legible.");
   }
 }
 
-async function refrescarDatosServer() {
-  if (!sesionActiva.autenticado || sincronizando) return;
-  sincronizando = true;
-  document.getElementById('sync-status').innerText = "🟡 Sincronizando...";
-  
-  try {
-    const [resRec, resHid, resMis] = await Promise.all([
-      fetch(`${COP_API_URL}?action=getData&tab=Recursos_Terreno`).then(r => r.json()),
-      fetch(`${COP_API_URL}?action=getData&tab=Hidrometria`).then(r => r.json()),
-      fetch(`${COP_API_URL}?action=getData&tab=Misiones`).then(r => r.json())
-    ]);
+function procesarTextoOficialPNA() {
+  const texto = document.getElementById('texto-reporte-pna').value;
+  if (!texto.trim()) { alert("Pegue el texto copiado del reporte en el cuadro."); return; }
+  procesarTextoLineasPNA(texto, "Texto Pegado");
+}
 
-    if (resRec.status === 'success') {
-      recursos = resRec.data.map(r => ({
-        id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, 
-        lat: parseNumSeguro(r.Lat), lon: parseNumSeguro(r.Lon), sector: r.Sector, 
-        operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp)
-      }));
-      renderizarRecursos();
-    }
-    
-    if (resHid.status === 'success') {
-      const coordsFallback = {
-        H1: {lat:-27.485, lon:-58.932}, H2: {lat:-27.462, lon:-58.838},
-        H3: {lat:-27.310, lon:-58.580}, H4: {lat:-26.928, lon:-58.502},
-        H5: {lat:-27.950, lon:-58.810}, H6: {lat:-29.145, lon:-59.265}
-      };
+function procesarTextoLineasPNA(fullText, nombreArchivo) {
+  if (!fullText || !fullText.trim()) return;
 
-      estacionesHidro = resHid.data.map(h => {
-        const idLimpio = String(h.ID).trim();
-        let lat = parseNumSeguro(h.Lat);
-        let lon = parseNumSeguro(h.Lon);
-        
-        if (Math.abs(lat) > 90) lat = lat / 1000;
-        if (Math.abs(lon) > 180) lon = lon / 1000;
-        
-        if (isNaN(lat) || isNaN(lon)) {
-           lat = coordsFallback[idLimpio] ? coordsFallback[idLimpio].lat : -27.45;
-           lon = coordsFallback[idLimpio] ? coordsFallback[idLimpio].lon : -58.90;
+  const dicc = {
+    "H1": ["BARRANQUERAS"],
+    "H2": ["CORRIENTES"],
+    "H3": ["PASO DE LA PATRIA"],
+    "H4": ["PUERTO BERMEJO", "BERMEJO"],
+    "H5": ["EMPEDRADO"],
+    "H6": ["GOYA"]
+  };
+
+  const lineas = fullText.split('\n').map(l => l.trim()).filter(Boolean);
+  let actualizadas = 0;
+  const encontradas = {};
+
+  for (let idx = 0; idx < lineas.length; idx++) {
+    const linea = lineas[idx];
+    const uLine = linea.toUpperCase();
+
+    for (const [hid, aliases] of Object.entries(dicc)) {
+      if (encontradas[hid]) continue;
+
+      const coincide = aliases.some(a => uLine.includes(a));
+      if (coincide) {
+        const tokens1 = linea.replace(/[|;]/g, ' ').split(/\s+/);
+        const nums1 = [];
+        for (let t of tokens1) {
+          const n = parseFloat(t.replace(',', '.'));
+          if (!isNaN(n) && isFinite(n)) nums1.push(n);
         }
 
-        return {
-          id: idLimpio, 
-          estacion: String(h.Estacion || 'S/D').trim(), 
-          rio: String(h.Rio || '').trim(), 
-          actual: parseNumSeguro(h.Actual_m),
-          alerta: parseNumSeguro(h.Alerta_m), 
-          evacuacion: parseNumSeguro(h.Evacuacion_m),
-          tendencia: String(h.Tendencia || '═').trim(), 
-          ts: Number(h.Timestamp || 0), 
-          lat: lat, 
-          lon: lon,
-          qIna: parseNumSeguro(h.Q_m3s),
-          fuente: String(h.Fuente || 'Manual').trim()
-        };
-      });
-      
-      poblarSelectorNivel();
-      renderizarHidrometria();
-      
-      if (!window.glofasIniciado) {
-        window.glofasIniciado = true;
-        cargarCaudalesGloFAS();
-      } else {
-        dibujarRiosEstrategico();
+        if (nums1.length === 0) continue;
+
+        const actual = nums1[0];
+
+        let tendencia = '═';
+        if (uLine.includes('CRECE') || uLine.includes('▲')) tendencia = '▲';
+        else if (uLine.includes('BAJA') || uLine.includes('▼')) tendencia = '▼';
+        else if (uLine.includes('ESTAC')) tendencia = '═';
+
+        let alerta = null, evacuacion = null;
+        if (idx + 1 < lineas.length) {
+          const tokens2 = lineas[idx + 1].replace(/[|;]/g, ' ').split(/\s+/);
+          const nums2 = [];
+          for (let t of tokens2) {
+            const n = parseFloat(t.replace(',', '.'));
+            if (!isNaN(n) && isFinite(n)) nums2.push(n);
+          }
+          if (nums2.length >= 2) {
+            alerta = nums2[nums2.length - 2];
+            evacuacion = nums2[nums2.length - 1];
+          }
+        }
+
+        const h = (estacionesHidro || []).find(x => x.id === hid);
+        if (h) {
+          h.actual = actual;
+          h.tendencia = tendencia;
+          h.ts = Date.now();
+          h.fuente = "PNA Oficial (PDF)";
+          if (alerta !== null && !isNaN(alerta) && alerta > 0) h.alerta = alerta;
+          if (evacuacion !== null && !isNaN(evacuacion) && evacuacion > 0) h.evacuacion = evacuacion;
+
+          actualizadas++;
+          encontradas[hid] = true;
+          logEvento(`Ingesta PDF: ${h.estacion} -> ${actual} m (${tendencia})`);
+
+          ejecutarAccionAuditada("Hidrometria", "UPDATE", {
+            ID: h.id,
+            Actual_m: h.actual,
+            Alerta_m: h.alerta,
+            Evacuacion_m: h.evacuacion,
+            Tendencia: h.tendencia,
+            Timestamp: h.ts
+          }, `Ingesta PDF ${h.estacion}: ${actual}m`);
+        }
       }
     }
+  }
 
-    if (resMis.status === 'success' && !sesionActiva.invitado) {
-      procesarMisiones(resMis.data);
-    }
-    
-    document.getElementById('sync-status').innerText = "🟢 Conectado";
-  } catch (error) {
-    console.error("Fallo refresco server:", error);
-    document.getElementById('sync-status').innerText = "🔴 Fallo Sync";
-  } finally {
-    sincronizando = false;
+  poblarSelectorNivel();
+  if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
+  if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
+  if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
+
+  const statusEl = document.getElementById('pdf-status');
+  if (actualizadas > 0) {
+    if (statusEl) statusEl.innerHTML = `<b style="color:#16a34a">✅ ${actualizadas} estaciones actualizadas desde ${nombreArchivo || 'reporte'}</b>`;
+    alert(`✅ Operación completada con éxito:\nSe actualizaron ${actualizadas} estaciones hidrométricas desde el reporte oficial.`);
+  } else {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">⚠ No se identificaron estaciones coincidentes en el archivo.</span>`;
+    alert("No se identificaron las estaciones del NEA (Barranqueras, Corrientes, Paso de la Patria, Bermejo, Empedrado, Goya) en el reporte.");
   }
 }
 
@@ -615,30 +598,6 @@ async function cargarNivelManual(ev) {
   logEvento(mensajeLog);
   await ejecutarAccionAuditada("Hidrometria", "UPDATE", dataUpdate, mensajeLog); 
   refrescarDatosServer();
-}
-
-async function forzarSyncRios(btn) {
-  if (sesionActiva.rol.toLowerCase() === 'operador') return alert("Solo Planificadores o Administradores pueden forzar la sincronización.");
-  
-  const textoOriginal = btn.innerText;
-  btn.innerText = "⏳ Extrayendo datos oficiales...";
-  btn.disabled = true;
-  
-  try {
-    const payload = { action: "SYNC_PNA" }; 
-    await fetch(COP_API_URL, { method: "POST", body: JSON.stringify(payload) });
-    
-    setTimeout(() => {
-      refrescarDatosServer();
-      btn.innerText = "✅ ¡Actualizado con éxito!";
-      setTimeout(() => { btn.innerText = textoOriginal; btn.disabled = false; }, 3000);
-    }, 2000);
-    
-  } catch(e) {
-    alert("Fallo de red al intentar extraer los datos.");
-    btn.innerText = textoOriginal; 
-    btn.disabled = false;
-  }
 }
 
 function eliminarRecurso(id, nombre) {
@@ -710,44 +669,44 @@ async function guardarMisionVuelo(e) {
 
 function procesarMisiones(misionesData) {
   const tb = document.querySelector('#tabla-misiones tbody');
-  tb.innerHTML = '';
+  if(!tb) return;
+  const fila = (msg, color) => { tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:${color || '#64748b'}">${escH(msg)}</td></tr>`; };
+  if (!misionesData.length) return fila('Sin datos.');
   
   const activas = misionesData.filter(m => !String(m.Estado).toUpperCase().includes("CANCELADA")).reverse().slice(0, 15);
+  if (!activas.length) return fila('No hay misiones operativas recientes.');
   
-  if (activas.length === 0) {
-    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">No hay misiones operativas recientes.</td></tr>';
-  } else {
-    activas.forEach(m => {
-      const st = String(m.Estado).toUpperCase();
-      const colorEstado = st.includes("CURSO") ? "#16a34a" : st.includes("FINALIZADA") ? "#2563eb" : st.includes("SUSPENDIDA") ? "#d97706" : "#3b82f6";
-      
-      const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
-      const parts = String(m.Origen_Destino).split(separador);
-      const o = parts[0] ? parseTexto(parts[0]) : {nombre: 'N/A', raw: 'N/A'};
-      const d = parts.length > 1 ? parseTexto(parts[1]) : {nombre: 'N/A', raw: 'N/A'};
-      
-      const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
-      
-      const btnActions = `
-        <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
-          <button class="btn-pick" style="background:#16a34a;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'En Curso')" title="Despegar / Iniciar">🚀</button>
-          <button class="btn-pick" style="background:#d97706;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Suspendida')" title="Suspender">⏸️</button>
-          <button class="btn-pick" style="background:#2563eb;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Finalizada')" title="Finalizar / Aterrizar">✅</button>
-          ${esAdmin ? `<button class="btn-pick" style="background:#ef4444;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Cancelada')" title="Borrar / Cancelar">🗑️</button>` : ''}
-          <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o.raw)}', '${esc(d.raw)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
-        </div>`;
+  tb.innerHTML = '';
+  activas.forEach(m => {
+    const st = String(m.Estado).toUpperCase();
+    const colorEstado = st.includes("CURSO") ? "#16a34a" : st.includes("FINALIZADA") ? "#2563eb" : st.includes("SUSPENDIDA") ? "#d97706" : "#3b82f6";
+    
+    const separador = String(m.Origen_Destino).includes('|') ? '|' : '-';
+    const parts = String(m.Origen_Destino).split(separador);
+    const o = parts[0] ? parseTexto(parts[0]) : {nombre: 'N/A', raw: 'N/A'};
+    const d = parts.length > 1 ? parseTexto(parts[1]) : {nombre: 'N/A', raw: 'N/A'};
+    
+    const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
+    
+    const btnActions = `
+      <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
+        <button class="btn-pick" style="background:#16a34a;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'En Curso')" title="Despegar / Iniciar">🚀</button>
+        <button class="btn-pick" style="background:#d97706;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Suspendida')" title="Suspender">⏸️</button>
+        <button class="btn-pick" style="background:#2563eb;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Finalizada')" title="Finalizar / Aterrizar">✅</button>
+        ${esAdmin ? `<button class="btn-pick" style="background:#ef4444;padding:3px 6px" onclick="cambiarEstadoMision('${m.ID_Mision}', 'Cancelada')" title="Borrar / Cancelar">🗑️</button>` : ''}
+        <button class="btn-pick" style="background:#8e44ad;padding:3px 6px" onclick="generarInformeMision('${m.ID_Mision}', '${esc(m.Tipo_Mision)}', '${m.Medio_Asignado}', '${esc(o.raw)}', '${esc(d.raw)}', '${m.Estado}', '${m.Fecha_Hora}')" title="Generar Informe PDF">📄</button>
+      </div>`;
 
-      tb.insertAdjacentHTML('beforeend', `<tr>
-        <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
-        <td><b>${esc(m.Medio_Asignado)}</b></td>
-        <td>O: ${esc(o.nombre)}<br>D: ${esc(d.nombre)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o.raw)}', '${esc(d.raw)}', '${m.Fecha_Hora}')">🗺️ Trazar Vuelo</button></td>
-        <td>
-          <span style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</span>
-          ${btnActions}
-        </td>
-      </tr>`);
-    });
-  }
+    tb.insertAdjacentHTML('beforeend', `<tr>
+      <td><b>${esc(m.ID_Mision)}</b><br><small>${esc(m.Tipo_Mision)}<br>⏱️ ${esc(m.Fecha_Hora)}</small></td>
+      <td><b>${esc(m.Medio_Asignado)}</b></td>
+      <td>O: ${esc(o.nombre)}<br>D: ${esc(d.nombre)}<br><button class="btn-pick" style="background:#8e44ad; margin-top:4px" onclick="dibujarRutaYMet('${esc(o.raw)}', '${esc(d.raw)}', '${m.Fecha_Hora}')">🗺️ Trazar Vuelo</button></td>
+      <td>
+        <span style="color:${colorEstado};font-weight:bold">${esc(m.Estado)}</span>
+        ${btnActions}
+      </td>
+    </tr>`);
+  });
 }
 
 async function cambiarEstadoMision(idMision, nuevoEstado) {
