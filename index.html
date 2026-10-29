@@ -22,7 +22,7 @@ body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-directio
 details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #2980b9;border-radius:4px;margin-bottom:8px;padding:7px}
 details.form-panel summary{font-weight:bold;font-size:12.5px;color:#1e293b;cursor:pointer;outline:none}
 .form-grid{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px}
-.form-grid input,.form-grid select{padding:5px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
+.form-grid input,.form-grid select,.form-grid textarea{padding:5px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
 .coords-row{display:flex;gap:5px}.coords-row input{flex:1;width:100%;box-sizing:border-box}
 .btn-submit,.btn-ruta,.btn-clear,.btn-pdf{color:#fff;border:none;padding:7px;border-radius:4px;font-weight:bold;cursor:pointer}
 .btn-submit{background:#27ae60}.btn-ruta{background:#8e44ad;flex:1}.btn-clear{background:#7f8c8d}.btn-pdf{background:#c0392b;padding:6px 12px;font-size:12px}
@@ -86,7 +86,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
   <div>
     <span class="badge-proto">OPERADOR: <span id="op-name">Iniciando...</span></span>
     <button onclick="cerrarSesionCOP()" style="background:#e74c3c; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
-    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.3 Híbrido)</strong>
+    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.6 Ingesta Directa & Híbrido)</strong>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Conectado</span>
@@ -115,11 +115,21 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       <div class="kpi-card"><b id="kpi-efectivos">0</b>Efectivos</div>
     </div>
 
+    <!-- PANEL: INGESTA DIRECTA DESDE REPORTE OFICIAL -->
+    <details class="form-panel" open>
+      <summary>📄 Ingesta Rápida (Pegar Reporte Oficial PNA)</summary>
+      <div class="form-grid">
+        <small style="color:#475569">Pegue aquí el texto copiado del PDF de Prefectura para actualizar los ríos instantáneamente:</small>
+        <textarea id="texto-reporte-pna" rows="4" placeholder="Copie y pegue aquí las líneas del PDF de Prefectura (ej: BARRANQUERAS | PARANA | 7.23...)"></textarea>
+        <button type="button" class="btn-submit" style="background:#0284c7" onclick="procesarTextoOficialPNA()">⚡ Procesar y Actualizar Mapa</button>
+      </div>
+    </details>
+
     <details class="form-panel">
-      <summary>🌊 Gestión de Ríos (PNA/INA)</summary>
+      <summary>🌊 Gestión de Ríos (Carga Manual y Forzado)</summary>
       <form class="form-grid" onsubmit="cargarNivelManual(event)">
         <button type="button" class="btn-submit" style="background:#2980b9; margin-bottom:10px" onclick="forzarSyncRios(this)">
-          📡 Forzar Extracción Automática (PNA/INA)
+          📡 Forzar Sincronización Remota (INA/PNA)
         </button>
         <hr style="border-color:#cbd5e1; margin:4px 0">
         <select id="nivel-est" onchange="prellenarNivel()"></select>
@@ -219,7 +229,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
     <b>🌊 Cuenca del Paraná</b>
     <div id="lista-rios" style="margin-top:5px">⏳ Consultando…</div>
     <hr style="border-color:#444;margin:6px 0">
-    <small><b>Q (m³/s):</b> Oficial INA (🛡️) o GloFAS (🛰️).<br><b>Altura:</b> DB central, con antigüedad.</small>
+    <small><b>Q (m³/s):</b> Oficial INA (🛡️) o GloFAS (🛰️).<br><b>Altura:</b> Registro Oficial (con antigüedad).</small>
   </div>
 </div>
 
@@ -398,6 +408,93 @@ const parseNumSeguro = (val) => {
   return parseFloat(String(val).replace(',', '.').trim());
 };
 
+// ==========================================
+// PROCESADOR INTELIGENTE DE REPORTE PNA (TEXTO/PDF)
+// ==========================================
+function procesarTextoOficialPNA() {
+  const texto = document.getElementById('texto-reporte-pna').value;
+  if (!texto.trim()) { alert("Pegue el texto copiado del reporte oficial en el cuadro."); return; }
+
+  const diccAliases = {
+    "BARRANQUERAS": ["BARRANQUERAS"],
+    "CORRIENTES": ["CORRIENTES"],
+    "PASO DE LA PATRIA": ["PASO DE LA PATRIA", "PASO DE LA PATRIA / CERRITO", "CERRITO"],
+    "PUERTO BERMEJO": ["PUERTO BERMEJO", "PTO. BERMEJO", "BERMEJO"],
+    "EMPEDRADO": ["EMPEDRADO"],
+    "GOYA": ["GOYA"],
+    "ITATI": ["ITATI", "ITATÍ"],
+    "ITUZAINGO": ["ITUZAINGO", "ITUZAINGÓ"],
+    "BELLA VISTA": ["BELLA VISTA"],
+    "ISLA DEL CERRITO": ["ISLA DEL CERRITO"]
+  };
+
+  const lineas = texto.split('\n');
+  let actualizadas = 0;
+
+  lineas.forEach(linea => {
+    const lUpper = linea.toUpperCase();
+    if (!lUpper.includes('|') && !/\d/.test(lUpper)) return;
+
+    (estacionesHidro || []).forEach(h => {
+      const nombreH = h.estacion.toUpperCase();
+      let match = false;
+
+      // Comprobación directa
+      if (lUpper.includes(nombreH)) match = true;
+      
+      // Comprobación por alias
+      if (!match) {
+        for (const [clave, aliases] of Object.entries(diccAliases)) {
+          if (aliases.some(a => nombreH.includes(a)) && aliases.some(a => lUpper.includes(a))) {
+            match = true;
+            break;
+          }
+        }
+      }
+
+      if (match) {
+        const tokens = linea.split('|').map(t => t.trim()).filter(Boolean);
+        // En reportes PNA: Puerto | Río | Ult. Reg | Variación | Periodo | Fecha | Estado | Reg. Ant | Alerta | Evacuación
+        for (let i = 0; i < tokens.length; i++) {
+          const num = parseFloat(tokens[i].replace(',', '.'));
+          if (!isNaN(num) && num > -3 && num < 35 && tokens[i].includes('.')) {
+            h.actual = num;
+            h.ts = Date.now();
+            h.fuente = "PNA Oficial (PDF)";
+
+            // Detectar tendencia
+            if (lUpper.includes('CRECE')) h.tendencia = '▲';
+            else if (lUpper.includes('BAJA')) h.tendencia = '▼';
+            else if (lUpper.includes('ESTAC')) h.tendencia = '═';
+
+            // Umbrales si vienen al final de la línea
+            const ultimosNums = tokens.slice(-3).map(x => parseFloat(x.replace(',', '.'))).filter(n => !isNaN(n) && n > 0 && n < 35);
+            if (ultimosNums.length >= 2) {
+              h.alerta = ultimosNums[ultimosNums.length - 2];
+              h.evacuacion = ultimosNums[ultimosNums.length - 1];
+            }
+
+            actualizadas++;
+            logEvento(`Ingesta PNA: ${h.estacion} -> ${h.actual} m`);
+            ejecutarAccionAuditada("Hidrometria", "UPDATE", { ID: h.id, Actual_m: h.actual, Tendencia: h.tendencia, Timestamp: h.ts }, `Ingesta PNA: ${h.actual}m`);
+            break;
+          }
+        }
+      }
+    });
+  });
+
+  if (actualizadas > 0) {
+    poblarSelectorNivel();
+    if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
+    if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
+    if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
+    alert(`✅ Operación exitosa: Se actualizaron ${actualizadas} estaciones en el sistema y mapa táctico.`);
+  } else {
+    alert("⚠ No se identificaron estaciones coincidentes en el texto pegado. Asegúrese de incluir las filas con los nombres de puerto (ej: BARRANQUERAS, CORRIENTES, etc.).");
+  }
+}
+
 async function refrescarDatosServer() {
   if (!sesionActiva.autenticado || sincronizando) return;
   sincronizando = true;
@@ -521,7 +618,7 @@ async function cargarNivelManual(ev) {
 }
 
 async function forzarSyncRios(btn) {
-  if (sesionActiva.rol.toLowerCase() === 'operador') return alert("Solo Planificadores o Administradores pueden forzar la sincronización satelital.");
+  if (sesionActiva.rol.toLowerCase() === 'operador') return alert("Solo Planificadores o Administradores pueden forzar la sincronización.");
   
   const textoOriginal = btn.innerText;
   btn.innerText = "⏳ Extrayendo datos oficiales...";
@@ -588,7 +685,7 @@ async function guardarMisionVuelo(e) {
     const et = (inp, p) => `${limpiarNombre(inp.value)} @${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
     
     const datosMision = {
-      ID_Mision: `MIS-${Math.floor(Date.now()/1000)}`,
+      ID_Mision: `MIS-${Math.floor(Date.now() / 1000)}`,
       Fecha_Hora: $('mis-fecha').value.replace('T', ' '),
       Tipo_Mision: $('mis-tipo').value.trim(),
       Medio_Asignado: $('mis-medio').value,
@@ -834,6 +931,7 @@ function renderizarHidrometria() {
     }
   });
 }
+
 function poblarSelectorNivel() {
   const s = document.getElementById('nivel-est'); if(!s) return; s.innerHTML = '';
   estacionesHidro.forEach((h, i) => s.add(new Option(`${h.estacion} (${h.rio})`, i))); 
@@ -1497,7 +1595,6 @@ window.addEventListener('DOMContentLoaded', () => {
   let busy = false;
   sincronizando = true; // neutraliza el bucle viejo
 
-  // Conversor universal: soporta "6,15", 6.15, "7.19384" o enteros sin punto como -27485
   const aNumero = v => {
     if (v === null || v === undefined || v === '') return NaN;
     if (typeof v === 'number') return v;
@@ -1505,14 +1602,12 @@ window.addEventListener('DOMContentLoaded', () => {
     return parseFloat(limpio);
   };
 
-  // Ajusta escalas si Google Sheets comió el punto decimal (ej: -27485 -> -27.485 o 724 -> 7.24)
   const escalar = (v, maxAbs) => {
     let n = aNumero(v), pasos = 0;
     while (isFinite(n) && Math.abs(n) > maxAbs && pasos++ < 8) n /= 10;
     return n;
   };
 
-  // Coordenadas oficiales fijas de respaldo para las 6 estaciones de la cuenca
   const COORDS_FIJAS = {
     H1: { lat: -27.485, lon: -58.932, nombre: 'Barranqueras', rio: 'Paraná' },
     H2: { lat: -27.462, lon: -58.838, nombre: 'Corrientes Capital', rio: 'Paraná' },
@@ -1522,7 +1617,6 @@ window.addEventListener('DOMContentLoaded', () => {
     H6: { lat: -29.145, lon: -59.265, nombre: 'Goya', rio: 'Paraná' }
   };
 
-  // Sobrescribimos textoQ para priorizar el caudal oficial del INA (Q_m3s)
   window.textoQ = function (s) {
     if (s && isFinite(s.qIna) && s.qIna > 0) {
       return `🛡️ ${Math.round(s.qIna).toLocaleString('es-AR')} m³/s (INA)`;
@@ -1534,7 +1628,6 @@ window.addEventListener('DOMContentLoaded', () => {
     return 's/d';
   };
 
-  // Sobrescribimos renderizarHidrometria para asegurar que capaHidrometria exista y dibuje las 6 estaciones
   window.renderizarHidrometria = function () {
     if (!mapTactico) inicializarMapas();
     if (!capaHidrometria) return;
@@ -1564,7 +1657,7 @@ window.addEventListener('DOMContentLoaded', () => {
           <b>Altura Oficial:</b> ${altTxt} m ${esc(h.tendencia || '═')}<br>
           <b>Caudal:</b> ${textoQ(h)}<br>
           <b>Alerta:</b> ${aleTxt} m | <b>Evac.:</b> ${evaTxt} m<br>
-          <small style="color:#64748b">Fuente: ${esc(h.fuente || 'INA/PNA')} · ${edadTxt(h.ts)}</small>
+          <small style="color:#64748b">Fuente: ${esc(h.fuente || 'PNA/INA')} · ${edadTxt(h.ts)}</small>
         </div>
       `);
     });
@@ -1576,7 +1669,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!sesionActiva.autenticado || busy) return;
     busy = true;
 
-    // Garantizamos que los mapas estén creados ANTES de intentar pintar los datos
     if (!mapTactico) inicializarMapas();
     if (!mapRadar) inicializarMapaRadar();
 
@@ -1616,7 +1708,6 @@ window.addEventListener('DOMContentLoaded', () => {
           let lat = escalar(h.Lat, 90);
           let lon = escalar(h.Lon, 180);
           
-          // Si la coordenada de la hoja está fuera del rango del NEA o dañada, usa la coordenada fija oficial
           if (!isFinite(lat) || lat > -24 || lat < -32 || !isFinite(lon) || lon > -55 || lon < -62) {
             if (fijas) { lat = fijas.lat; lon = fijas.lon; }
           }
@@ -1633,7 +1724,7 @@ window.addEventListener('DOMContentLoaded', () => {
             lat: lat,
             lon: lon,
             qIna: aNumero(h.Q_m3s),
-            fuente: String(h.Fuente || 'INA-SIyAH').trim()
+            fuente: String(h.Fuente || 'PNA/INA').trim()
           };
         }).filter(h => isFinite(h.lat) && isFinite(h.lon));
 
