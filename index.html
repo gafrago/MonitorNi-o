@@ -776,31 +776,39 @@ function estadoHidro(h) {
 }
 
 function renderizarHidrometria() {
-  if(!capaHidrometria) return;
+  if (!capaHidrometria) return;
   capaHidrometria.clearLayers();
-  if (!document.getElementById('chk-hidro').checked) return;
+  const chk = document.getElementById('chk-hidro');
+  if (chk && !chk.checked) return;
   
   estacionesHidro.forEach(h => {
     const e = estadoHidro(h);
+    // Forzamos la división por 10000 si las coordenadas se guardaron sin punto decimal en la DB
+    let lat = Number(h.lat);
+    let lon = Number(h.lon);
+    if (Math.abs(lat) > 180) lat = lat / 1000;
+    if (Math.abs(lon) > 180) lon = lon / 1000;
+
     const icono = L.divIcon({ 
       className: 'custom-div-icon', 
-      html: `<div class="hidro-badge" style="background:${e.color};${h.ejemplo ? 'border-style:dashed' : ''}">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m${e.tag}</div>`, 
+      html: `<div class="hidro-badge" style="background:${e.color};">🌊 ${esc(h.estacion)}: ${Number(h.actual).toFixed(2)}m</div>`, 
       iconSize: [140, 24], 
       iconAnchor: [70, 12] 
     });
     
-    L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`
-      <div style="font-size:12px;min-width:200px">
-        <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br>
-        <b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
-        <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia || '')}<br>
-        <b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
-        <small style="color:#64748b">${h.ejemplo ? '⚠ Valor de ejemplo' : 'Cargado: ' + edadTxt(h.ts)}</small>
-      </div>
-    `);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      L.marker([lat, lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`
+        <div style="font-size:12px;min-width:200px">
+          <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br>
+          <b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
+          <b>Altura:</b> ${Number(h.actual).toFixed(2)} m ${esc(h.tendencia || '')}<br>
+          <b>Alerta:</b> ${Number(h.alerta).toFixed(2)} m | <b>Evac.:</b> ${Number(h.evacuacion).toFixed(2)} m<br>
+          <small style="color:#64748b">Cargado: ${edadTxt(h.ts)}</small>
+        </div>
+      `);
+    }
   });
 }
-
 function poblarSelectorNivel() {
   const s = document.getElementById('nivel-est'); if(!s) return; s.innerHTML = '';
   estacionesHidro.forEach((h, i) => s.add(new Option(`${h.estacion} (${h.rio})`, i))); 
