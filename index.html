@@ -1460,21 +1460,72 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-  <script>
-// Respaldo de emergencia para forzar los puntos de los ríos si la DB tarda en responder
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    if (typeof estacionesHidro !== 'undefined' && estacionesHidro.length === 0) {
-      console.log("Inyectando estaciones de emergencia predeterminadas...");
-      estacionesHidro = [
-        { id: "H1", estacion: "Barranqueras", rio: "Paraná", actual: 5.40, alerta: 6.00, evacuacion: 6.50, lat: -27.485, lon: -58.932, ts: Date.now() },
-        { id: "H2", estacion: "Corrientes", rio: "Paraná", actual: 5.80, alerta: 6.50, evacuacion: 7.00, lat: -27.462, lon: -58.838, ts: Date.now() },
-        { id: "H3", estacion: "Goya", rio: "Paraná", actual: 4.50, alerta: 5.20, evacuacion: 5.80, lat: -29.145, lon: -59.265, ts: Date.now() }
-      ];
-      if (typeof renderizarHidrometria === 'function') renderizarHidrometria();
-    }
-  }, 2000);
+ 
 });
 </script>
+  <!-- ===== INICIO FIX RIOS: pegar antes de </body>, DESPUES de todos los demas bloques ===== -->
+<script>
+(function () {
+  'use strict';
+  let busy = false;
+  sincronizando = true;   // deja inerte la sincronizacion vieja (la del setInterval); la nueva usa su propio control
+
+  /* numeros que vienen de la hoja: "6,15" (texto con coma), 6.15, o 615 / -27485 (sin punto decimal) */
+  const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v));
+  const bajarA = (v, max) => { let n = num(v), g = 0; while (isFinite(n) && Math.abs(n) > max && g++ < 8) n /= 10; return n; };
+  const FALLBACK = { H1: [-27.485, -58.932], H2: [-27.462, -58.838], H3: [-27.310, -58.580], H4: [-26.928, -58.502], H5: [-27.950, -58.810], H6: [-29.145, -59.265] };
+  const pedir = async tab => (await fetch(`${COP_API_URL}?action=getData&tab=${tab}`)).json();
+
+  window.refrescarDatosServer = async function () {
+    if (!sesionActiva.autenticado || busy) return;
+    busy = true;
+    const st = document.getElementById('sync-status'); st.innerText = '🟡 Sincronizando...';
+    const fallos = [];
+    const paso = async (nombre, fn) => { try { await fn(); } catch (e) { console.error('Fallo en ' + nombre, e); fallos.push(nombre); } };
+
+    await Promise.all([
+      paso('Unidades', async () => {
+        const j = await pedir('Recursos_Terreno'); if (j.status !== 'success') throw new Error(j.message || j.status);
+        recursos = j.data.map(r => ({ id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, lat: bajarA(r.Lat, 90), lon: bajarA(r.Lon, 180),
+          sector: r.Sector, operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp) }))
+          .filter(r => isFinite(r.lat) && isFinite(r.lon));   // una fila sin coordenadas ya no frena todo
+        renderizarRecursos();
+      }),
+      paso('Ríos', async () => {
+        const j = await pedir('Hidrometria'); if (j.status !== 'success') throw new Error(j.message || j.status);
+        estacionesHidro = j.data.map(h => {
+          const fb = FALLBACK[h.ID] || [];
+          let lat = bajarA(h.Lat, 90), lon = bajarA(h.Lon, 180);
+          if (!isFinite(lat) || !isFinite(lon)) { lat = fb[0]; lon = fb[1]; }
+          return { id: h.ID, estacion: h.Estacion, rio: h.Rio, actual: bajarA(h.Actual_m, 20), alerta: bajarA(h.Alerta_m, 20), evacuacion: bajarA(h.Evacuacion_m, 20),
+            tendencia: h.Tendencia, ts: Number(h.Timestamp), lat, lon };
+        }).filter(h => isFinite(h.lat) && isFinite(h.lon));
+        const lista = document.getElementById('lista-rios');
+        if (!estacionesHidro.length && lista) lista.innerHTML = '<span style="color:#fbbf24">La hoja Hidrometria no devolvió estaciones con coordenadas.</span>';
+        poblarSelectorNivel(); renderizarHidrometria();
+        if (!window.glofasIniciado) { window.glofasIniciado = true; cargarCaudalesGloFAS(); } else dibujarRiosEstrategico();
+      }),
+      paso('Misiones', async () => {
+        const j = await pedir('Misiones'); if (j.status !== 'success') throw new Error(j.message || j.status);
+        procesarMisiones(j.data);
+      })
+    ]);
+
+    st.innerText = fallos.length ? '🔴 Fallo: ' + fallos.join(', ') : '🟢 Conectado';
+    st.style.color = fallos.length ? '#f87171' : '#4ade80';
+    busy = false;
+  };
+  setInterval(() => window.refrescarDatosServer(), 30000);
+
+  /* aviso si todavia queda el bloque que inventaba estaciones con valores falsos */
+  window.addEventListener('load', () => {
+    if (document.documentElement.innerHTML.includes('Respaldo de ' + 'emergencia para forzar')) {
+      document.getElementById('top-banner').insertAdjacentHTML('afterend', '<div style="background:#b91c1c;color:#fff;padding:5px 12px;font-size:12px">⚠ Borrá el bloque "Respaldo de emergencia": inventa niveles de río con valores falsos.</div>');
+    }
+  });
+})();
+</script>
+<!-- ===== FIN FIX RIOS ===== -->
+
 </body>
 </html>
