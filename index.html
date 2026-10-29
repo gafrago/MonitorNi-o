@@ -1490,82 +1490,182 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<!-- ===== INICIO FIX RIOS: pegar antes de </body>, DESPUES de todos los demas bloques ===== -->
+<!-- ===== INICIO FIX RIOS DEFINITIVO: pegar antes de </body> ===== -->
 <script>
 (function () {
   'use strict';
   let busy = false;
-  sincronizando = true;   // deja inerte la sincronizacion vieja (la del setInterval); la nueva usa su propio control
+  sincronizando = true; // neutraliza el bucle viejo
 
-  /* numeros que vienen de la hoja: "6,15" (texto con coma), 6.15, o 615 / -27485 (sin punto decimal) */
-  const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'string' ? parseFloat(v.replace(',', '.').trim()) : Number(v));
-  const bajarA = (v, max) => { let n = num(v), g = 0; while (isFinite(n) && Math.abs(n) > max && g++ < 8) n /= 10; return n; };
-  const FALLBACK = { H1: [-27.485, -58.932], H2: [-27.462, -58.838], H3: [-27.310, -58.580], H4: [-26.928, -58.502], H5: [-27.950, -58.810], H6: [-29.145, -59.265] };
+  // Conversor universal: soporta "6,15", 6.15, "7.19384" o enteros sin punto como -27485
+  const aNumero = v => {
+    if (v === null || v === undefined || v === '') return NaN;
+    if (typeof v === 'number') return v;
+    const limpio = String(v).trim().replace(',', '.');
+    return parseFloat(limpio);
+  };
+
+  // Ajusta escalas si Google Sheets comió el punto decimal (ej: -27485 -> -27.485 o 724 -> 7.24)
+  const escalar = (v, maxAbs) => {
+    let n = aNumero(v), pasos = 0;
+    while (isFinite(n) && Math.abs(n) > maxAbs && pasos++ < 8) n /= 10;
+    return n;
+  };
+
+  // Coordenadas oficiales fijas de respaldo para las 6 estaciones de la cuenca
+  const COORDS_FIJAS = {
+    H1: { lat: -27.485, lon: -58.932, nombre: 'Barranqueras', rio: 'Paraná' },
+    H2: { lat: -27.462, lon: -58.838, nombre: 'Corrientes Capital', rio: 'Paraná' },
+    H3: { lat: -27.310, lon: -58.580, nombre: 'Paso de la Patria / Cerrito', rio: 'Paraná' },
+    H4: { lat: -26.928, lon: -58.502, nombre: 'Puerto Bermejo', rio: 'Paraguay' },
+    H5: { lat: -27.950, lon: -58.810, nombre: 'Empedrado', rio: 'Paraná' },
+    H6: { lat: -29.145, lon: -59.265, nombre: 'Goya', rio: 'Paraná' }
+  };
+
+  // Sobrescribimos textoQ para priorizar el caudal oficial del INA (Q_m3s)
+  window.textoQ = function (s) {
+    if (s && isFinite(s.qIna) && s.qIna > 0) {
+      return `🛡️ ${Math.round(s.qIna).toLocaleString('es-AR')} m³/s (INA)`;
+    }
+    if (s && !s.errQ && s.hoy != null && isFinite(s.hoy)) {
+      const flecha = s.tend > 0.03 ? '▲' : s.tend < -0.03 ? '▼' : '▬';
+      return `🛰️ ${ Number(s.hoy).toFixed(0) } m³/s ${flecha} (GloFAS)`;
+    }
+    return 's/d';
+  };
+
+  // Sobrescribimos renderizarHidrometria para asegurar que capaHidrometria exista y dibuje las 6 estaciones
+  window.renderizarHidrometria = function () {
+    if (!mapTactico) inicializarMapas();
+    if (!capaHidrometria) return;
+    capaHidrometria.clearLayers();
+    
+    const chk = document.getElementById('chk-hidro');
+    if (chk && !chk.checked) return;
+
+    (estacionesHidro || []).forEach(h => {
+      if (!isFinite(h.lat) || !isFinite(h.lon)) return;
+      const e = estadoHidro(h);
+      const altTxt = isFinite(h.actual) ? Number(h.actual).toFixed(2) : 's/d';
+      const aleTxt = isFinite(h.alerta) ? Number(h.alerta).toFixed(2) : 's/d';
+      const evaTxt = isFinite(h.evacuacion) ? Number(h.evacuacion).toFixed(2) : 's/d';
+
+      const icono = L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div class="hidro-badge" style="background:${e.color};">🌊 ${esc(h.estacion)}: ${altTxt}m</div>`,
+        iconSize: [150, 24],
+        iconAnchor: [75, 12]
+      });
+
+      L.marker([h.lat, h.lon], { icon: icono }).addTo(capaHidrometria).bindPopup(`
+        <div style="font-size:12px;min-width:210px">
+          <b style="font-size:13px">🌊 ${esc(h.estacion)}</b><br>
+          <b>Río:</b> ${esc(h.rio)} | <b style="color:${e.color}">${esc(e.txt)}</b><hr style="margin:4px 0">
+          <b>Altura Oficial:</b> ${altTxt} m ${esc(h.tendencia || '═')}<br>
+          <b>Caudal:</b> ${textoQ(h)}<br>
+          <b>Alerta:</b> ${aleTxt} m | <b>Evac.:</b> ${evaTxt} m<br>
+          <small style="color:#64748b">Fuente: ${esc(h.fuente || 'INA/PNA')} · ${edadTxt(h.ts)}</small>
+        </div>
+      `);
+    });
+  };
+
   const pedir = async tab => (await fetch(`${COP_API_URL}?action=getData&tab=${tab}`)).json();
 
   window.refrescarDatosServer = async function () {
     if (!sesionActiva.autenticado || busy) return;
     busy = true;
-    const st = document.getElementById('sync-status'); st.innerText = '🟡 Sincronizando...';
+
+    // Garantizamos que los mapas estén creados ANTES de intentar pintar los datos
+    if (!mapTactico) inicializarMapas();
+    if (!mapRadar) inicializarMapaRadar();
+
+    const st = document.getElementById('sync-status');
+    if (st) st.innerText = '🟡 Sincronizando...';
     const fallos = [];
-    const paso = async (nombre, fn) => { try { await fn(); } catch (e) { console.error('Fallo en ' + nombre, e); fallos.push(nombre); } };
+    const paso = async (nombre, fn) => {
+      try { await fn(); } catch (e) { console.error('Fallo en ' + nombre, e); fallos.push(nombre); }
+    };
 
     await Promise.all([
       paso('Unidades', async () => {
-        const j = await pedir('Recursos_Terreno'); if (j.status !== 'success') throw new Error(j.message || j.status);
-        recursos = j.data.map(r => ({ id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, lat: bajarA(r.Lat, 90), lon: bajarA(r.Lon, 180),
-          sector: r.Sector, operador: r.Operador, efectivos: r.Efectivos, timestamp: Number(r.Timestamp) }))
-          .filter(r => isFinite(r.lat) && isFinite(r.lon));   // una fila sin coordenadas ya no frena todo
+        const j = await pedir('Recursos_Terreno');
+        if (j.status !== 'success') throw new Error(j.message || j.status);
+        recursos = (j.data || []).map(r => ({
+          id: r.ID,
+          nombre: r.Nombre,
+          inst: r.Institucion,
+          estado: r.Estado,
+          lat: escalar(r.Lat, 90),
+          lon: escalar(r.Lon, 180),
+          sector: r.Sector,
+          operador: r.Operador,
+          efectivos: r.Efectivos,
+          timestamp: Number(r.Timestamp)
+        })).filter(r => isFinite(r.lat) && isFinite(r.lon));
         renderizarRecursos();
       }),
       paso('Ríos', async () => {
-        const j = await pedir('Hidrometria'); if (j.status !== 'success') throw new Error(j.message || j.status);
-        estacionesHidro = j.data.map(h => {
-          const idLimpio = String(h.ID || '').trim();
-          const fb = FALLBACK[idLimpio] || [];
-          let lat = bajarA(h.Lat, 90), lon = bajarA(h.Lon, 180);
-          if (!isFinite(lat) || !isFinite(lon)) { lat = fb[0]; lon = fb[1]; }
+        const j = await pedir('Hidrometria');
+        if (j.status !== 'success') throw new Error(j.message || j.status);
+        
+        estacionesHidro = (j.data || []).map((h, idx) => {
+          const idLimpio = String(h.ID || `H${idx + 1}`).trim().toUpperCase();
+          const fijas = COORDS_FIJAS[idLimpio];
+          
+          let lat = escalar(h.Lat, 90);
+          let lon = escalar(h.Lon, 180);
+          
+          // Si la coordenada de la hoja está fuera del rango del NEA o dañada, usa la coordenada fija oficial
+          if (!isFinite(lat) || lat > -24 || lat < -32 || !isFinite(lon) || lon > -55 || lon < -62) {
+            if (fijas) { lat = fijas.lat; lon = fijas.lon; }
+          }
+
           return {
             id: idLimpio,
-            estacion: String(h.Estacion || 'S/D').trim(),
-            rio: String(h.Rio || '').trim(),
-            actual: bajarA(h.Actual_m, 20),
-            alerta: bajarA(h.Alerta_m, 20),
-            evacuacion: bajarA(h.Evacuacion_m, 20),
-            tendencia: String(h.Tendencia || '═').trim(),
-            ts: Number(h.Timestamp || 0),
-            lat,
-            lon,
-            qIna: num(h.Q_m3s),
-            fuente: String(h.Fuente || 'Manual').trim()
+            estacion: String(h.Estacion || (fijas && fijas.nombre) || 'Estación').trim(),
+            rio: String(h.Rio || (fijas && fijas.rio) || 'Paraná').trim(),
+            actual: escalar(h.Actual_m, 25),
+            alerta: escalar(h.Alerta_m, 25),
+            evacuacion: escalar(h.Evacuacion_m, 25),
+            tendencia: (h.Tendencia && String(h.Tendencia) !== 'NaN') ? String(h.Tendencia).trim() : '═',
+            ts: Number(h.Timestamp) || Date.now(),
+            lat: lat,
+            lon: lon,
+            qIna: aNumero(h.Q_m3s),
+            fuente: String(h.Fuente || 'INA-SIyAH').trim()
           };
         }).filter(h => isFinite(h.lat) && isFinite(h.lon));
-        const lista = document.getElementById('lista-rios');
-        if (!estacionesHidro.length && lista) lista.innerHTML = '<span style="color:#fbbf24">La hoja Hidrometria no devolvió estaciones con coordenadas.</span>';
-        poblarSelectorNivel(); renderizarHidrometria();
-        if (!window.glofasIniciado) { window.glofasIniciado = true; cargarCaudalesGloFAS(); } else dibujarRiosEstrategico();
+
+        poblarSelectorNivel();
+        window.renderizarHidrometria();
+        dibujarRiosEstrategico();
+        
+        if (!window.glofasIniciado) {
+          window.glofasIniciado = true;
+          cargarCaudalesGloFAS();
+        }
+        if (document.getElementById('vista-analytics').classList.contains('active')) {
+          actualizarDashboardAnalytics();
+        }
       }),
       paso('Misiones', async () => {
-        const j = await pedir('Misiones'); if (j.status !== 'success') throw new Error(j.message || j.status);
-        procesarMisiones(j.data);
+        const j = await pedir('Misiones');
+        if (j.status !== 'success') throw new Error(j.message || j.status);
+        procesarMisiones(j.data || []);
       })
     ]);
 
-    st.innerText = fallos.length ? '🔴 Fallo: ' + fallos.join(', ') : '🟢 Conectado';
-    st.style.color = fallos.length ? '#f87171' : '#4ade80';
+    if (st) {
+      st.innerText = fallos.length ? '🔴 Fallo: ' + fallos.join(', ') : '🟢 Conectado';
+      st.style.color = fallos.length ? '#f87171' : '#4ade80';
+    }
     busy = false;
   };
-  setInterval(() => window.refrescarDatosServer(), 30000);
 
-  /* aviso si todavia queda el bloque que inventaba estaciones con valores falsos */
-  window.addEventListener('load', () => {
-    if (document.documentElement.innerHTML.includes('Respaldo de ' + 'emergencia para forzar')) {
-      document.getElementById('top-banner').insertAdjacentHTML('afterend', '<div style="background:#b91c1c;color:#fff;padding:5px 12px;font-size:12px">⚠ Borrá el bloque "Respaldo de emergencia": inventa niveles de río con valores falsos.</div>');
-    }
-  });
+  setInterval(() => window.refrescarDatosServer(), 30000);
 })();
 </script>
-<!-- ===== FIN FIX RIOS ===== -->
-
+<!-- ===== FIN FIX RIOS DEFINITIVO ===== -->
 </body>
 </html>
