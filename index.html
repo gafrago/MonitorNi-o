@@ -423,10 +423,19 @@ const parseNumSeguro = (val) => {
   return parseFloat(String(val).replace(',', '.').trim());
 };
 
-async function refrescarDatosServer() {
-  if (typeof window.refrescarDatosServer === 'function' && window.refrescarDatosServer !== refrescarDatosServer) {
-    return window.refrescarDatosServer();
-  }
+// Función protegida para pedir tablas sensibles al backend
+async function pedirTablaProtegida(nombreTabla) {
+  if (!sesionActiva.autenticado) return { status: "error" };
+  const res = await fetch(COP_API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "GET_SECURE_DATA",
+      tab: nombreTabla,
+      email: sesionActiva.email,
+      pin: sesionActiva.pin
+    })
+  });
+  return res.json();
 }
 
 // ==========================================
