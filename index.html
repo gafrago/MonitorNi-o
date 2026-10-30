@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>COP Hídrico NEA - Sistema de Comando Interfuerzas</title>
+<title>A.R.E.S. C4I | Sistema de Comando Operativo Interfuerzas (NEA)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
@@ -11,25 +11,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 body{margin:0;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#e2e8f0}
-#top-banner{background:#1a252f;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000}
-.badge-proto{background:#e67e22;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold;margin-right:10px;font-size:11px}
-.tab-bar{background:#2c3e50;padding:0 16px;display:flex;gap:5px;border-bottom:3px solid #e67e22}
-.tab-btn{background:#34495e;color:#fff;border:none;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;border-radius:5px 5px 0 0;opacity:.75}
-.tab-btn:hover{opacity:1}.tab-btn.active{background:#e67e22;opacity:1}
+#top-banner{background:#0f172a;color:#fff;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;z-index:1000;border-bottom:2px solid #b91c1c}
+.badge-proto{background:#b91c1c;color:#fff;padding:3px 8px;border-radius:3px;font-weight:bold;margin-right:10px;font-size:11px;letter-spacing:1px}
+.tab-bar{background:#1e293b;padding:0 16px;display:flex;gap:5px;border-bottom:3px solid #b91c1c}
+.tab-btn{background:#334155;color:#fff;border:none;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;border-radius:5px 5px 0 0;opacity:.75}
+.tab-btn:hover{opacity:1}.tab-btn.active{background:#b91c1c;opacity:1}
 .view-container{display:none;flex:1;overflow:hidden;width:100%;position:relative}.view-container.active{display:flex}
 #sidebar{width:420px;background:#f8fafc;border-right:2px solid #bdc3c7;display:flex;flex-direction:column;padding:10px;overflow-y:auto;box-sizing:border-box;z-index:500}
 .kpi-box{display:flex;gap:6px;margin-bottom:8px}
-.kpi-card{flex:1;background:#2c3e50;color:#fff;padding:6px;border-radius:4px;text-align:center;font-size:11px}
+.kpi-card{flex:1;background:#1e293b;color:#fff;padding:6px;border-radius:4px;text-align:center;font-size:11px}
 .kpi-card b{display:block;font-size:15px;color:#f39c12}
-details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #2980b9;border-radius:4px;margin-bottom:8px;padding:7px}
+details.form-panel{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #b91c1c;border-radius:4px;margin-bottom:8px;padding:7px}
 details.form-panel summary{font-weight:bold;font-size:12.5px;color:#1e293b;cursor:pointer;outline:none}
 .form-grid{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px}
 .form-grid input,.form-grid select,.form-grid textarea{padding:5px 6px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}
 .coords-row{display:flex;gap:5px}.coords-row input{flex:1;width:100%;box-sizing:border-box}
 .btn-submit,.btn-ruta,.btn-clear,.btn-pdf{color:#fff;border:none;padding:7px;border-radius:4px;font-weight:bold;cursor:pointer}
-.btn-submit{background:#27ae60}.btn-ruta{background:#8e44ad;flex:1}.btn-clear{background:#7f8c8d}.btn-pdf{background:#c0392b;padding:6px 12px;font-size:12px}
-.btn-pick{background:#2980b9;color:#fff;border:none;padding:5px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
-.btn-pick.picking{background:#e74c3c;animation:pulse 1s infinite}
+.btn-submit{background:#16a34a}.btn-ruta{background:#8e44ad;flex:1}.btn-clear{background:#7f8c8d}.btn-pdf{background:#b91c1c;padding:6px 12px;font-size:12px}
+.btn-pick{background:#2563eb;color:#fff;border:none;padding:5px 8px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
+.btn-pick.picking{background:#dc2626;animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.6}}
 .select-zona{background:#f1f5f9;border:1px solid #94a3b8;font-weight:bold;color:#1e293b}
 #map-tactico{flex:1;cursor:crosshair}
@@ -38,20 +38,20 @@ details.form-panel summary{font-weight:bold;font-size:12.5px;color:#1e293b;curso
 #vista-analytics.active{display:flex}
 .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
 .analytics-card{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:15px}
-.analytics-card h4{margin-top:0;color:#1e293b;border-bottom:2px solid #e67e22;padding-bottom:6px;font-size:14px}
+.analytics-card h4{margin-top:0;color:#1e293b;border-bottom:2px solid #b91c1c;padding-bottom:6px;font-size:14px}
 table.analytics-table{width:100%;border-collapse:collapse;font-size:12px}
 table.analytics-table th,table.analytics-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
-table.analytics-table th{background:#2c3e50;color:#fff}
+table.analytics-table th{background:#1e293b;color:#fff}
 .layer-control-bar{position:absolute;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.95);padding:8px 12px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;display:flex;gap:12px;border:1px solid #cbd5e1}
 .layer-control-bar label{display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:600;color:#1e293b}
 .custom-div-icon{background:transparent;border:none}
 .pin-tactico{position:relative;width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 6px rgba(0,0,0,.45);border:2px solid #fff}
 .pin-tactico span.sigla{transform:rotate(45deg);color:#fff;font-weight:800;font-size:9.5px}
 .pin-tactico .estado-dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff}
-.corte-ruta-badge{background:#c0392b;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.corte-ruta-badge{background:#dc2626;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px}
 .hidro-badge{color:#fff;border:2px solid #fff;border-radius:6px;padding:2px 5px;font-size:10px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,.4);white-space:nowrap;text-align:center}
 .infra-badge{background:#fff;border:2px dashed #1e293b;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px}
-.recurso-card{background:#fff;border-left:5px solid #2980b9;padding:7px 8px;margin-bottom:6px;font-size:11.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center;border-radius:0 4px 4px 0}
+.recurso-card{background:#fff;border-left:5px solid #2563eb;padding:7px 8px;margin-bottom:6px;font-size:11.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center;border-radius:0 4px 4px 0}
 .btn-del-mini{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:3px;padding:2px 6px;font-size:11px;font-weight:bold;cursor:pointer}
 .radar-legend,#panel-rios{position:absolute;bottom:30px;z-index:1000;background:rgba(0,0,0,.85);color:#fff;padding:12px;border-radius:8px;font-size:12px;line-height:1.5;box-shadow:0 4px 10px rgba(0,0,0,.4)}
 .radar-legend{right:30px;max-width:300px}.radar-legend a{color:#7fb3ff}
@@ -69,8 +69,8 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 <!-- MODAL DE ACCESO OPERACIONAL -->
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-    <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">COP HÍDRICO NEA</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Ingrese sus credenciales de servicio</p>
+    <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I (NEA)</h2>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -92,12 +92,12 @@ table.analytics-table th{background:#2c3e50;color:#fff}
 
 <div id="top-banner">
   <div>
-    <span class="badge-proto">OPERADOR: <span id="op-name">Iniciando...</span></span>
-    <button onclick="cerrarSesionCOP()" style="background:#e74c3c; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
-    <strong>MONITOR OPERATIVO HÍDRICO NEA (COP v4.7 Carga PDF Directa)</strong>
+    <span class="badge-proto">A.R.E.S. · GAFRAGO</span>
+    <button onclick="cerrarSesionCOP()" style="background:#dc2626; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
+    <strong>CENTRO DE OPERACIONES E INTELIGENCIA HÍDRICA (A.R.E.S. C4I NEA)</strong>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
-    <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Conectado</span>
+    <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Enlace Seguro</span>
     <span id="reloj-operativo" style="font-family:monospace"></span>
     <button onclick="generarSITREP()" class="btn-pdf">📄 Exportar SITREP (PDF)</button>
   </div>
@@ -107,7 +107,6 @@ table.analytics-table th{background:#2c3e50;color:#fff}
   <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
   <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia Híbrida (Oficial + Satelital)</button>
 </div>
-
 <!-- VISTA 1: TÁCTICA -->
 <div id="vista-tactica" class="view-container active">
   <div class="layer-control-bar">
