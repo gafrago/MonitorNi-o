@@ -200,23 +200,42 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </form>
     </details>
 
-    <details class="form-panel" id="panel-alta">
-      <summary>➕ Desplegar Unidad Manual a DB</summary>
+   <details class="form-panel" id="panel-alta">
+      <summary>➕ Desplegar Unidad y Medios a DB</summary>
       <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
-        <input type="text" id="nuevo-nombre" placeholder="Detalle del recurso o incidente" required />
+        <input type="text" id="nuevo-nombre" placeholder="Nombre de la Unidad (Ej: ECOM 1, Destacamento)" required />
         <div style="display:flex;gap:5px">
           <select id="nueva-institucion" style="flex:1" required>
-            <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option><option value="FAA">✈️ FAA - Fuerza Aérea</option><option value="EA">🪖 EA - Ejército</option>
-            <option value="PNA">⚓ PNA - Prefectura</option><option value="GN">🛡️ GN - Gendarmería</option><option value="DC">🚒 DC - Defensa Civil</option>
+            <option value="VIALIDAD">🚧 CORTE DE RUTA / ALERTA</option>
+            <option value="FAA">✈️ FAA - Fuerza Aérea</option>
+            <option value="EA">🪖 EA - Ejército</option>
+            <option value="PNA">⚓ PNA - Prefectura</option>
+            <option value="GN">🛡️ GN - Gendarmería</option>
+            <option value="DC">🚒 DC - Defensa Civil</option>
           </select>
-          <select id="nuevo-estado" style="width:110px" required><option value="ASIGNADO">🟢 Operativo</option><option value="DISPONIBLE">🟡 Reserva</option><option value="NO_DISPONIBLE">🔴 Crítico</option></select>
+          <select id="nuevo-estado" style="width:110px" required>
+            <option value="ASIGNADO">🟢 Operativo</option>
+            <option value="DISPONIBLE">🟡 Reserva</option>
+            <option value="NO_DISPONIBLE">🔴 Crítico</option>
+          </select>
         </div>
-        <div class="coords-row"><input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required /><input type="number" step="any" id="nueva-lon" placeholder="Lon (clic en mapa)" required /></div>
-        <div style="display:flex;gap:5px"><input type="text" id="nuevo-sector" placeholder="Localidad/Sector" style="flex:1" required /></div>
+        
+        <!-- NUEVOS CAMPOS DE DOTACIÓN Y MEDIOS -->
+        <div class="coords-row">
+          <input type="number" min="0" id="nuevo-efectivos" placeholder="Cant. Personal" title="Cantidad de efectivos" required />
+          <input type="number" min="0" id="nuevo-vehiculos" placeholder="Cant. Vehículos" title="Vehículos utilizados" required />
+        </div>
+        <input type="text" id="nuevo-equipos" placeholder="Equipamiento / Material (Ej: 2 botes, 1 handy VHF)" />
+
+        <div class="coords-row">
+          <input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required />
+          <input type="number" step="any" id="nueva-lon" placeholder="Lon (clic en mapa)" required />
+        </div>
+        <input type="text" id="nuevo-sector" placeholder="Localidad / Sector / Ruta" required />
+        
         <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
       </form>
     </details>
-
     <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px;font-size:12px">
       <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option><option value="VIALIDAD">🚧 Solo Cortes / Alertas</option><option value="FAA">✈️ FAA</option>
       <option value="EA">🪖 EA</option><option value="PNA">⚓ PNA</option><option value="GN">🛡️ GN</option><option value="DC">🚒 DC</option>
