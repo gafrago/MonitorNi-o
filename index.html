@@ -335,7 +335,53 @@ function cerrarSesionCOP() {
   alert("Sesión finalizada por seguridad.");
 }
 
-async function iniciarSesionCOP() {
+async function iniciarSesionCOP()  
+// ==========================================
+// MODO INVITADO / SOLO LECTURA
+// ==========================================
+function ingresarComoInvitado() {
+  sesionActiva = {
+    autenticado: true,
+    invitado: true,
+    email: "invitado@cop.nea",
+    nombre: "Usuario Consulta",
+    rol: "Invitado",
+    pin: ""
+  };
+
+  // Actualizar banner superior
+  document.getElementById("op-name").innerText = "Consulta (Solo Lectura)";
+  document.getElementById("modal-login").style.display = "none";
+  reiniciarExpiracion();
+
+  // 1. Ocultar paneles de carga de datos sensibles
+  const panelesOperativos = [
+    'panel-alta',                  // Despliegue manual de unidades
+    'panel-misiones',              // Planificación aérea
+    'panel-auto-inundaciones'      // Ingesta de vialidad
+  ];
+  panelesOperativos.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  // 2. Ocultar botón de guardado manual de cotas de ríos
+  const formNivel = document.querySelector('form[onsubmit="cargarNivelManual(event)"]');
+  if (formNivel) {
+    const btnGuardar = formNivel.querySelector('button[type="submit"]');
+    if (btnGuardar) btnGuardar.style.display = 'none';
+  }
+
+  // 3. Inicializar visor en modo espectador
+  if (!mapTactico) inicializarMapas();
+  poblarSelectorNivel();
+  if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
+  if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
+  if (typeof renderizarRecursos === 'function') renderizarRecursos();
+
+  // Descarga capas de ríos públicas sin consultar tablas clasificadas
+  if (typeof window.refrescarDatosServer === 'function') window.refrescarDatosServer();
+}{
   const emailInput = document.getElementById("login-email").value.trim();
   const pinInput = document.getElementById("login-pin").value.trim();
   const errDiv = document.getElementById("login-error");
