@@ -646,68 +646,149 @@ function procesarTextoLineasPNA(fullText, nombreArchivo) {
   }
 }
 
+// ==========================================
+// GESTIÓN DE RECURSOS, PERSONAL Y MEDIOS
+// ==========================================
 async function agregarRecursoEnVivo(e) {
   e.preventDefault(); 
   const inst = document.getElementById('nueva-institucion').value;
   const nombreInput = document.getElementById('nuevo-nombre').value;
   const estadoInput = document.getElementById('nuevo-estado').value;
+  const efectivosInput = parseInt(document.getElementById('nuevo-efectivos').value) || 0;
+  const vehiculosInput = parseInt(document.getElementById('nuevo-vehiculos').value) || 0;
+  const equiposInput = document.getElementById('nuevo-equipos').value.trim();
   const latInput = parseFloat(document.getElementById('nueva-lat').value);
   const lonInput = parseFloat(document.getElementById('nueva-lon').value);
   const sectorInput = document.getElementById('nuevo-sector').value;
   const opName = sesionActiva.nombre || "Operador de Guardia";
 
   if (isNaN(latInput) || isNaN(lonInput)) {
-    alert("⚠ Debe seleccionar o ingresar coordenadas válidas (Lat y Lon) haciendo clic en el mapa.");
+    alert("⚠ Debe seleccionar coordenadas válidas haciendo clic en el mapa.");
     return;
   }
 
-  // 1. Crear el objeto con la estructura exacta que espera Google Sheets
+  // Objeto estructurado para Google Sheets y Memoria Local
   const nuevoRecurso = {
     ID: `REC-${Date.now()}`,
     Nombre: nombreInput,
     Institucion: inst,
     Estado: estadoInput,
+    Efectivos: efectivosInput,
+    Vehiculos: vehiculosInput,
+    Equipos: equiposInput,
     Lat: latInput,
     Lon: lonInput,
     Sector: sectorInput,
     Operador: opName,
-    Efectivos: inst === 'VIALIDAD' ? 0 : 4,
     Timestamp: Date.now()
   };
 
-  // 2. ACTUALIZACIÓN INSTANTÁNEA LOCAL (Aparece en el mapa y en la lista al instante)
+  // 1. Inserción instantánea local (Reflejo inmediato en el mapa)
   recursos.push({
     id: nuevoRecurso.ID,
     nombre: nuevoRecurso.Nombre,
     inst: nuevoRecurso.Institucion,
     estado: nuevoRecurso.Estado,
+    efectivos: nuevoRecurso.Efectivos,
+    vehiculos: nuevoRecurso.Vehiculos,
+    equipos: nuevoRecurso.Equipos,
     lat: nuevoRecurso.Lat,
     lon: nuevoRecurso.Lon,
     sector: nuevoRecurso.Sector,
     operador: nuevoRecurso.Operador,
-    efectivos: nuevoRecurso.Efectivos,
     timestamp: nuevoRecurso.Timestamp
   });
 
-  // Redibujar mapa y lista inmediatamente
   renderizarRecursos();
   if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
 
-  // Registrar en bitácora local
-  const mensajeLog = `Desplegó unidad: ${nuevoRecurso.Nombre} (${nuevoRecurso.Sector})`;
+  const mensajeLog = `Desplegó unidad: ${nuevoRecurso.Nombre} (${nuevoRecurso.Sector}) - Pers: ${efectivosInput}, Veh: ${vehiculosInput}`;
   logEvento(mensajeLog);
-
-  // Limpiar el formulario para permitir otra carga rápida
   document.getElementById('form-recurso').reset();
 
-  // 3. ENVIAR A LA NUBE (Google Sheets / Apps Script) en segundo plano
+  // 2. Sincronización en segundo plano con Google Sheets
   try {
     await ejecutarAccionAuditada("Recursos_Terreno", "INSERT", nuevoRecurso, mensajeLog);
   } catch (err) {
-    console.warn("El recurso se cargó localmente, pero hubo un inconveniente al sincronizar con la nube:", err);
+    console.warn("Cargado localmente, error al sincronizar con la nube:", err);
   }
 }
-// ==========================================
+
+function renderizarRecursos() {
+  if (!capaRecursos) return;
+  capaRecursos.clearLayers();
+  const fInst = document.getElementById('filtro-institucion').value;
+  const verCortes = document.getElementById('chk-cortes').checked;
+  const verUni = document.getElementById('chk-unidades').checked;
+  const lista = document.getElementById('lista-recursos'); 
+  if (!lista) return; 
+  lista.innerHTML = '';
+  
+  let u = 0, c = 0, e = 0;
+  const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
+  
+  recursosActivos.forEach(r => {
+    const esCorte = r.inst === 'VIALIDAD';
+    if ((esCorte && !verCortes) || (!esCorte && !verUni) || !(fInst === 'TODAS' || r.inst === fInst)) return;
+    if (esCorte) c++; else u++; 
+    e += Number(r.efectivos) || 0;
+    const viejo = r.timestamp && (Date.now() - r.timestamp) > 3600000;
+    
+    // Botón de borrado activo (para operadores con permisos o administradores)
+    const botonBorrar = `<button onclick="eliminarRecurso('${esc(r.id)}', '${esc(r.nombre)}')" style="margin-top:6px;width:100%;background:#dc2626;color:#fff;border:none;padding:5px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar Recurso</button>`;
+      
+    // Renderizado en el mapa con detalle ampliado de personal y equipos
+    L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos).bindPopup(`
+      <div style="font-size:12px;min-width:200px">
+        <b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br>
+        <b>📍 Sector:</b> ${esc(r.sector)}<br>
+        <b>👤 Personal:</b> ${Number(r.efectivos || 0)} efectivos<br>
+        <b>🚗 Vehículos:</b> ${Number(r.vehículos || r.Vehiculos || 0)} unidades<br>
+        <b>🛠️ Equipos:</b> ${esc(r.equipos || r.Equipos || 'S/D')}<br>
+        <b>🚦 Estado:</b> ${esc(r.estado)}<br>
+        <b>⏱️</b> ${edadTxt(r.timestamp)}${viejo ? ' <b style="color:#c2410c">(desactualizado)</b>' : ''}<br>
+        ${botonBorrar}
+      </div>
+    `);
+
+    // Tarjeta en la lista lateral
+    const tj = document.createElement('div'); 
+    tj.className = 'recurso-card'; 
+    tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
+    tj.innerHTML = `
+      <div style="flex:1">
+        <b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br>
+        <span style="color:#475569">📍 ${esc(r.sector)} | 👤 ${Number(r.efectivos || 0)} pers. | 🚗 ${Number(r.vehículos || r.Vehiculos || 0)} veh.</span>
+      </div>
+      <button class="btn-del-mini" onclick="eliminarRecurso('${esc(r.id)}', '${esc(r.nombre)}')">🗑️</button>
+    `;
+    lista.appendChild(tj);
+  });
+  
+  document.getElementById('kpi-unidades').innerText = u; 
+  document.getElementById('kpi-cortes').innerText = c; 
+  document.getElementById('kpi-efectivos').innerText = e;
+}
+
+async function eliminarRecurso(id, nombre) {
+  if (!confirm(`¿Eliminar la unidad o recurso "${nombre}" del sistema central?`)) return;
+  
+  // 1. Eliminación instantánea local (Desaparece del mapa y paneles)
+  recursos = recursos.filter(r => String(r.id) !== String(id));
+  renderizarRecursos();
+  if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
+
+  const mensajeLog = `Dio de baja unidad: ${nombre}`;
+  logEvento(mensajeLog);
+  toast(`🗑️ Recurso "${nombre}" eliminado`);
+
+  // 2. Sincronizar baja con Google Sheets en segundo plano
+  try {
+    await ejecutarAccionAuditada("Recursos_Terreno", "UPDATE", { ID: id, Estado: "BAJA" }, mensajeLog);
+  } catch (err) {
+    console.warn("Eliminado localmente, error al sincronizar la baja en la nube:", err);
+  }
+}// ==========================================
 // --- MÓDULO DE MISIONES AÉREAS ---
 // ==========================================
 async function cargarAeronavesMision() {
