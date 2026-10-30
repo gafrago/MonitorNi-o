@@ -2651,6 +2651,278 @@ window.addEventListener('DOMContentLoaded', () => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })();
 </script>
+<!-- ============ A.R.E.S.: VUELO EN LINEA RECTA + SIMULADOR DE AERONAVE ============
+     Pegar justo antes de </body>, DESPUES de bloque-cliente-seguro.html y bloque-invitado-escudo.html -->
+<style>
+  .sv-panel{background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:9px 11px;width:300px;font:12px/1.45 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45)}
+  .sv-panel b.sv-t{color:#7dd3fc;font-size:12.5px}
+  .sv-grid{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:5px 0}
+  .sv-grid span:nth-child(odd){color:#94a3b8}
+  .sv-bar{height:7px;background:#1e293b;border-radius:4px;overflow:hidden;margin:5px 0 3px}
+  .sv-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#22c55e,#38bdf8)}
+  .sv-row{display:flex;gap:5px;align-items:center;margin-top:5px}
+  .sv-row button,.sv-row select{background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:3px 8px;font-size:12px;cursor:pointer}
+  .sv-row button.on{background:#0e7490;border-color:#22d3ee}
+  .sv-panel input[type=range]{width:100%;margin:6px 0 0}
+  .sv-est{font-weight:700}
+  .sv-plane{filter:drop-shadow(0 0 4px rgba(0,0,0,.7));transition:none}
+  .sv-x{float:right;cursor:pointer;color:#94a3b8;background:none;border:none;font-size:14px}
+</style>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var RE_AT = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\s*$/;
+  var M = {};            // misiones por ID (se llena al cargar la tabla)
+  var AER = null;        // aeronaves: matricula -> {tipo, vkt}
+  var geoCache = {};
+
+  /* ---------- Utilidades ---------- */
+  function parseP(raw) { var s = String(raw == null ? '' : raw).trim(), m = RE_AT.exec(s); return { raw: s, nombre: s.replace(RE_AT, '').trim() || 'N/A', lat: m ? +m[1] : null, lon: m ? +m[2] : null }; }
+  function partir(v) { var s = String(v == null ? '' : v), p = s.indexOf('|') >= 0 ? s.split('|') : s.split(' - '); return [parseP(p[0]), parseP(p.slice(1).join(' - '))]; }
+  function rad(x) { return x * Math.PI / 180; }
+  function kmEntre(a, b) { var R = 6371, dL = rad(b.lat - a.lat), dO = rad(b.lon - a.lon), h = Math.sin(dL / 2) * Math.sin(dL / 2) + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dO / 2) * Math.sin(dO / 2); return 2 * R * Math.asin(Math.sqrt(h)); }
+  function rumbo(a, b) { var y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat)), x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon)); return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360; }
+  function parseFecha(s) {
+    if (!s) return NaN; s = String(s).trim();
+    var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();   // hora local, como se carga el formulario
+    var t = new Date(s).getTime(); return t;
+  }
+  function hhmm(t) { var d = new Date(t); return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+  function hhmmss(t) { return new Date(t).toLocaleTimeString('es-AR', { hour12: false }); }
+  function fechaHora(t) { var d = new Date(t); return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm(t); }
+  function dur(ms) { var m = Math.max(0, Math.round(ms / 60000)); return (m >= 60 ? Math.floor(m / 60) + ' h ' : '') + (m % 60) + ' min'; }
+
+  /* ---------- Perfil de velocidad por tipo de aeronave (crucero aproximado, nudos) ----------
+     Si la hoja Aeronaves tiene una columna Velocidad_kt, se usa ese valor. Ajustar esta tabla a la flota real. */
+  var PERFILES = [
+    [/pampa|ia[- ]?63/i, 250, 'ala'], [/hercules|c[- ]?130|kc[- ]?130/i, 290, 'ala'], [/king ?air|b200|b-?350|sa[- ]?226|merlin|fairchild/i, 260, 'ala'],
+    [/learjet|lj[- ]?35|citation|falcon|f[- ]?28|fokker/i, 400, 'ala'], [/twin ?otter|dhc[- ]?6|pc[- ]?12|cessna|c[- ]?182|c[- ]?208|piper|tecnam|t[- ]?6/i, 140, 'ala'],
+    [/black ?hawk|uh[- ]?60|s[- ]?70/i, 145, 'heli'], [/chinook|ch[- ]?47/i, 150, 'heli'], [/mi[- ]?17|mi[- ]?8/i, 125, 'heli'],
+    [/bell|uh[- ]?1|huey|412|heli|helic|ec[- ]?1|h1[0-9]{2}|aw1/i, 110, 'heli']
+  ];
+  function perfil(tipo, velHoja) {
+    var v = parseFloat(String(velHoja == null ? '' : velHoja).replace(',', '.')), p = null, t = String(tipo || '');
+    for (var i = 0; i < PERFILES.length; i++) if (PERFILES[i][0].test(t)) { p = PERFILES[i]; break; }
+    var kind = p ? p[2] : 'ala';
+    return { vkt: v > 20 ? v : (p ? p[1] : 180), kind: kind, estimado: !(v > 20), reconocido: !!p };
+  }
+
+  /* ---------- Aeronaves (para saber tipo y velocidad) ---------- */
+  async function cargarAeronaves() {
+    if (AER) return AER;
+    AER = {};
+    try {
+      if (typeof sesionActiva === 'undefined' || !sesionActiva.autenticado || sesionActiva.invitado) { AER = null; return {}; }
+      var r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_SECURE_DATA', tab: 'Aeronaves', email: sesionActiva.email, pin: sesionActiva.pin }) });
+      var j = await r.json();
+      (j.data || []).forEach(function (a) { AER[String(a.Matricula).trim()] = { tipo: a.Tipo, vel: a.Velocidad_kt }; });
+    } catch (e) { AER = null; }
+    return AER || {};
+  }
+
+  /* ---------- Plan de vuelo (horario + posicion a lo largo de la recta) ---------- */
+  async function resolver(p) {
+    if (p.lat != null) return { lat: p.lat, lon: p.lon };
+    var k = p.nombre; if (geoCache[k]) return geoCache[k];
+    var g = typeof window.geocodificar === 'function' ? await window.geocodificar(p.raw) : null;
+    if (g) geoCache[k] = { lat: g.lat, lon: g.lon };
+    return g ? geoCache[k] : null;
+  }
+  function armarPlan(m, a, b, o, d) {
+    var ae = (AER && AER[String(m.Medio_Asignado).trim()]) || {}, pf = perfil(ae.tipo || m.Medio_Asignado, ae.vel);
+    var km = kmEntre(a, b), tiempoVueloMs = km / (pf.vkt * 1.852) * 3600000;
+    var extra = (pf.kind === 'heli' ? 4 : 8) * 60000;               // ascenso, descenso y aproximacion
+    var etd = parseFecha(m.Fecha_Hora); if (isNaN(etd)) etd = Date.now();
+    return { id: m.ID_Mision, medio: m.Medio_Asignado, tipo: ae.tipo || '', estado: m.Estado, o: { lat: a.lat, lon: a.lon, nombre: o.nombre }, d: { lat: b.lat, lon: b.lon, nombre: d.nombre },
+      km: km, rumbo: rumbo(a, b), vkt: pf.vkt, kind: pf.kind, estimado: pf.estimado, ete: tiempoVueloMs + extra, etd: etd, eta: etd + tiempoVueloMs + extra };
+  }
+  // Perfil de velocidad: acelera 10 % inicial, crucero, desacelera 10 % final (trapecio) -> avance mas real que lineal
+  function frac(u) { var r = 0.1; u = Math.max(0, Math.min(1, u)); var n = 1 - r;
+    if (u < r) return (u * u / (2 * r)) / n; if (u > 1 - r) return 1 - (((1 - u) * (1 - u)) / (2 * r)) / n; return (r / 2 + (u - r)) / n; }
+  function estadoEn(pl, t) { var u = (t - pl.etd) / pl.ete, p = frac(u);
+    return { u: Math.max(0, Math.min(1, u)), p: p, lat: pl.o.lat + (pl.d.lat - pl.o.lat) * p, lon: pl.o.lon + (pl.d.lon - pl.o.lon) * p,
+      fase: t < pl.etd ? 'EN PLATAFORMA' : (u >= 1 ? 'ARRIBÓ' : 'EN VUELO') }; }
+
+  /* ---------- Capas del mapa ---------- */
+  var capa = null, capaVivos = null, avion = null, traza = null, linea = null, SIM = null, panel = null, timer = null;
+  function asegurarCapas() {
+    if (typeof mapTactico === 'undefined' || !mapTactico) return false;
+    if (!capa) { capa = L.layerGroup().addTo(mapTactico); capaVivos = L.layerGroup().addTo(mapTactico); }
+    return true;
+  }
+  function icono(kind, rumboDeg) {
+    var html = kind === 'heli'
+      ? '<div class="sv-plane" style="font-size:26px;line-height:30px;text-align:center">🚁</div>'
+      : '<svg class="sv-plane" width="34" height="34" viewBox="0 0 24 24" style="transform:rotate(' + Math.round(rumboDeg) + 'deg)"><path d="M12 1.5L14 9l8.5 5v2.2L14 13.6l-.5 5.4 2.7 2v1.2L12 21.2 7.8 22.2V21l2.7-2-.5-5.4L1.5 16.2V14L10 9z" fill="#f8fafc" stroke="#0f172a" stroke-width=".9"/></svg>';
+    return L.divIcon({ className: '', html: html, iconSize: [34, 34], iconAnchor: [17, 17] });
+  }
+
+  /* ---------- Trazado en linea recta (reemplaza la ruta por calles en misiones aereas) ---------- */
+  function dibujarRecta(pl) {
+    asegurarCapas(); capa.clearLayers(); avion = null; traza = null;
+    if (typeof capaRutaActiva !== 'undefined' && capaRutaActiva) capaRutaActiva.clearLayers();
+    L.marker([pl.o.lat, pl.o.lon]).addTo(capa).bindPopup('📍 Partida: ' + esc(pl.o.nombre));
+    L.marker([pl.d.lat, pl.d.lon]).addTo(capa).bindPopup('🏁 Destino: ' + esc(pl.d.nombre));
+    linea = L.polyline([[pl.o.lat, pl.o.lon], [pl.d.lat, pl.d.lon]], { color: '#8e44ad', weight: 3, opacity: .9, dashArray: '10 7' }).addTo(capa);
+    mapTactico.fitBounds(linea.getBounds(), { padding: [70, 70] });
+  }
+  function textoPlan(pl) {
+    return '<b>✈ Vuelo directo (línea recta)</b>: ' + pl.km.toFixed(1) + ' km (' + (pl.km / 1.852).toFixed(1) + ' NM) · rumbo ' + Math.round(pl.rumbo) + '°<br>'
+      + 'Velocidad ' + Math.round(pl.vkt) + ' kt' + (pl.estimado ? ' <small>(estimada por tipo' + (pl.tipo ? ': ' + esc(pl.tipo) : '') + ')</small>' : '') + ' · en el aire + ascenso/descenso: ' + dur(pl.ete) + '<br>'
+      + 'Salida (ETD) <b>' + fechaHora(pl.etd) + '</b> · Llegada (ETA) <b>' + fechaHora(pl.eta) + '</b><br>'
+      + '<button type="button" class="btn-pick" data-sim="' + esc(pl.id) + '" style="background:#0e7490;margin-top:5px">▶ Simular este vuelo</button>';
+  }
+
+  var _calc = window.calcularRutaTactica, ctxVuelo = null;
+  window.calcularRutaTactica = async function () {
+    if (!ctxVuelo) return _calc.apply(this, arguments);
+    var res = $('resultado-ruta'), io = $('ruta-origen'), id = $('ruta-destino');
+    res.style.display = 'block'; res.innerHTML = '⏳ Trazando vuelo...';
+    var det = res.closest('details'); if (det) det.open = true;
+    try {
+      var o = parseP(io.dataset.lat ? (io.value + ' @' + io.dataset.lat + ',' + io.dataset.lon) : io.value);
+      var d = parseP(id.dataset.lat ? (id.value + ' @' + id.dataset.lat + ',' + id.dataset.lon) : id.value);
+      var a = await resolver(o), b = await resolver(d);
+      if (!a || !b) { res.innerHTML = '❌ No se pudo ubicar ' + (!a ? 'el origen' : 'el destino') + '.'; return; }
+      await cargarAeronaves();
+      var m = ctxVuelo.m || { ID_Mision: 'RUTA', Medio_Asignado: '', Fecha_Hora: '', Estado: '' };
+      var pl = armarPlan(m, a, b, o, d);
+      dibujarRecta(pl); res.innerHTML = textoPlan(pl); ctxVuelo.plan = pl; SIM_PLAN = pl;
+    } catch (e) { res.innerHTML = '❌ Error al trazar el vuelo.'; }
+  };
+  var SIM_PLAN = null;
+
+  var _dib = window.dibujarRutaYMet;
+  window.dibujarRutaYMet = async function () {
+    ctxVuelo = { m: window.__vuelo || null };
+    try { return await _dib.apply(this, arguments); } finally { ctxVuelo = null; window.__vuelo = null; }
+  };
+
+  /* ---------- Panel del simulador ---------- */
+  function crearPanel() {
+    if (panel) return panel;
+    var C = L.Control.extend({ options: { position: 'bottomleft' }, onAdd: function () {
+      var d = L.DomUtil.create('div', 'sv-panel'); d.style.display = 'none';
+      d.innerHTML = '<button class="sv-x" title="Cerrar" data-sv="x">✕</button><b class="sv-t" id="sv-tit"></b>'
+        + '<div class="sv-grid"><span>Ruta</span><span id="sv-ruta"></span><span>ETD / ETA</span><span id="sv-hor"></span><span>Distancia</span><span id="sv-dist"></span><span>Hora simulada</span><span id="sv-reloj" style="font-family:monospace"></span><span>Estado</span><span class="sv-est" id="sv-est"></span><span>Restan</span><span id="sv-rest"></span></div>'
+        + '<div class="sv-bar"><i id="sv-prog"></i></div>'
+        + '<div class="sv-row"><button data-sv="play" id="sv-play">▶ Iniciar</button><button data-sv="stop" title="Volver a la salida">⏹</button>'
+        + '<select id="sv-vel" title="Velocidad de simulación"><option value="1">×1 (tiempo real)</option><option value="10">×10</option><option value="60" selected>×60</option><option value="300">×300</option></select>'
+        + '<button data-sv="vivo" id="sv-vivo" title="Seguir la hora real del reloj">En vivo</button></div>'
+        + '<input type="range" id="sv-slider" min="0" max="1000" value="0" title="Mover en el tiempo">';
+      L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+      d.addEventListener('click', function (ev) { var b = ev.target.closest('[data-sv]'); if (!b) return; accion(b.dataset.sv); });
+      d.querySelector('#sv-slider').addEventListener('input', function (ev) { if (!SIM) return; SIM.live = false; pausa(); SIM.t = SIM.ini + (SIM.fin - SIM.ini) * (ev.target.value / 1000); dibujar(); });
+      d.querySelector('#sv-vel').addEventListener('change', function (ev) { if (SIM) SIM.speed = +ev.target.value; });
+      return d; } });
+    panel = new C().addTo(mapTactico); return panel;
+  }
+  function accion(a) {
+    if (!SIM) return;
+    if (a === 'x') { detener(true); return; }
+    if (a === 'play') { SIM.playing ? pausa() : reproducir(); }
+    if (a === 'stop') { pausa(); SIM.live = false; SIM.t = SIM.plan.etd; dibujar(); }
+    if (a === 'vivo') { SIM.live = !SIM.live; if (SIM.live) { SIM.t = Date.now(); reproducir(); } else pausa(); }
+  }
+  function reproducir() {
+    if (SIM.t >= SIM.plan.eta && !SIM.live) SIM.t = SIM.plan.etd;
+    SIM.playing = true; clearInterval(timer);
+    timer = setInterval(function () {
+      if (!SIM) return;
+      SIM.t = SIM.live ? Date.now() : SIM.t + 100 * SIM.speed;
+      if (!SIM.live && SIM.t >= SIM.plan.eta + 60000) { SIM.t = SIM.plan.eta; pausa(); }
+      dibujar();
+    }, 100); dibujar();
+  }
+  function pausa() { if (SIM) SIM.playing = false; clearInterval(timer); dibujar(); }
+
+  function dibujar() {
+    if (!SIM || !asegurarCapas()) return;
+    var pl = SIM.plan, e = estadoEn(pl, SIM.t), ll = [e.lat, e.lon];
+    if (!avion) avion = L.marker(ll, { icon: icono(pl.kind, pl.rumbo), zIndexOffset: 1000, interactive: true }).addTo(capa).bindTooltip(esc(pl.medio), { permanent: true, direction: 'right', offset: [14, 0] });
+    avion.setLatLng(ll);
+    if (!traza) traza = L.polyline([], { color: '#22c55e', weight: 4 }).addTo(capa);
+    traza.setLatLngs([[pl.o.lat, pl.o.lon], ll]);
+    $('sv-tit').innerHTML = '✈ ' + esc(pl.id) + ' · ' + esc(pl.medio) + (pl.tipo ? ' <small>(' + esc(pl.tipo) + ')</small>' : '');
+    $('sv-ruta').textContent = pl.o.nombre + ' → ' + pl.d.nombre;
+    $('sv-hor').textContent = fechaHora(pl.etd) + ' / ' + fechaHora(pl.eta);
+    $('sv-dist').textContent = pl.km.toFixed(0) + ' km · ' + Math.round(pl.vkt) + ' kt' + (pl.estimado ? ' (est.)' : '');
+    $('sv-reloj').textContent = fechaHora(SIM.t).slice(0, 6) + ' ' + hhmmss(SIM.t) + (SIM.live ? ' (real)' : '');
+    var est = $('sv-est'); est.textContent = e.fase; est.style.color = e.fase === 'EN VUELO' ? '#4ade80' : e.fase === 'ARRIBÓ' ? '#38bdf8' : '#fbbf24';
+    $('sv-rest').textContent = e.fase === 'ARRIBÓ' ? '—' : Math.round(pl.km * (1 - e.p)) + ' km · ' + (e.fase === 'EN PLATAFORMA' ? 'sale en ' + dur(pl.etd - SIM.t) : dur(pl.eta - SIM.t));
+    $('sv-prog').style.width = Math.round(e.p * 100) + '%';
+    $('sv-slider').value = Math.round((SIM.t - SIM.ini) / (SIM.fin - SIM.ini) * 1000);
+    $('sv-play').textContent = SIM.playing ? '⏸ Pausa' : '▶ Iniciar'; $('sv-vivo').classList.toggle('on', !!SIM.live);
+  }
+  function detener(cerrar) {
+    clearInterval(timer); SIM = null;
+    if (capa) capa.clearLayers(); avion = null; traza = null;
+    if (cerrar && panel) panel.getContainer().style.display = 'none';
+  }
+
+  async function iniciarSimulacion(id, conLive) {
+    var m = M[id]; if (!m && SIM_PLAN && SIM_PLAN.id === id) m = null;
+    var pl = null;
+    if (m) {
+      var od = partir(m.Origen_Destino), a = await resolver(od[0]), b = await resolver(od[1]);
+      if (!a || !b) { alert('No se pudieron ubicar origen y destino de la misión ' + id); return; }
+      await cargarAeronaves(); pl = armarPlan(m, a, b, od[0], od[1]);
+    } else if (SIM_PLAN) pl = SIM_PLAN;
+    if (!pl) return;
+    if (typeof cambiarPestana === 'function') cambiarPestana('tactica');
+    if (!asegurarCapas()) return;
+    if (vivos[id]) { capaVivos.removeLayer(vivos[id].mk); capaVivos.removeLayer(vivos[id].ln); delete vivos[id]; }
+    detener(false); dibujarRecta(pl); crearPanel().getContainer().style.display = 'block';
+    SIM = { plan: pl, t: pl.etd, ini: pl.etd - 10 * 60000, fin: pl.eta + 10 * 60000, speed: +($('sv-vel') ? $('sv-vel').value : 60), playing: false, live: false };
+    reproducir();
+  }
+
+  /* ---------- Misiones "En Curso": aeronave en vivo con el reloj real ---------- */
+  var vivos = {};
+  async function actualizarVivos() {
+    if (!asegurarCapas() || typeof sesionActiva === 'undefined' || !sesionActiva.autenticado || sesionActiva.invitado) return;
+    var ids = Object.keys(M).filter(function (k) { return /CURSO/i.test(String(M[k].Estado)); });
+    Object.keys(vivos).forEach(function (k) { if (ids.indexOf(k) < 0) { capaVivos.removeLayer(vivos[k].mk); capaVivos.removeLayer(vivos[k].ln); delete vivos[k]; } });
+    if (ids.length) await cargarAeronaves();
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], m = M[id];
+      if (SIM && SIM.plan.id === id) { if (vivos[id]) { capaVivos.removeLayer(vivos[id].mk); capaVivos.removeLayer(vivos[id].ln); delete vivos[id]; } continue; }   // la simulacion manual tiene prioridad
+      if (!vivos[id]) {
+        var od = partir(m.Origen_Destino), a = await resolver(od[0]), b = await resolver(od[1]); if (!a || !b) continue;
+        var pl = armarPlan(m, a, b, od[0], od[1]);
+        vivos[id] = { plan: pl, ln: L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#8e44ad', weight: 2, dashArray: '6 6', opacity: .8 }).addTo(capaVivos), mk: L.marker([a.lat, a.lon], { icon: icono(pl.kind, pl.rumbo), zIndexOffset: 900 }).addTo(capaVivos) };
+      }
+      var v = vivos[id], e = estadoEn(v.plan, Date.now());
+      v.mk.setLatLng([e.lat, e.lon]);
+      v.mk.bindTooltip(esc(v.plan.medio) + ' · ' + e.fase + ' · ETA ' + hhmm(v.plan.eta), { direction: 'right', offset: [14, 0] });
+    }
+  }
+  setInterval(function () { try { actualizarVivos(); } catch (e) {} }, 5000);
+
+  /* ---------- Enganche con la tabla de misiones ---------- */
+  var _proc = window.procesarMisiones;
+  window.procesarMisiones = function (data) {
+    (data || []).forEach(function (m) { if (m && m.ID_Mision) M[m.ID_Mision] = m; });
+    var r = _proc.apply(this, arguments);
+    document.querySelectorAll('#tabla-misiones [data-acc="trazar"]').forEach(function (b) {
+      if (b.parentNode.querySelector('[data-sim]')) return;
+      b.insertAdjacentHTML('afterend', ' <button type="button" class="btn-pick" style="background:#0e7490;margin-top:4px" data-sim="' + esc(b.dataset.id) + '" title="Simular el vuelo sobre la línea recta">▶ Simular</button>');
+    });
+    try { actualizarVivos(); } catch (e) {}
+    return r;
+  };
+  var tabla = $('tabla-misiones');
+  if (tabla) tabla.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-acc="trazar"]'); if (t) window.__vuelo = M[t.dataset.id] || null;
+    var s = ev.target.closest('[data-sim]'); if (s) { ev.stopPropagation(); iniciarSimulacion(s.dataset.sim); }
+  }, true);
+  var res = $('resultado-ruta');
+  if (res) res.addEventListener('click', function (ev) { var s = ev.target.closest('[data-sim]'); if (s) iniciarSimulacion(s.dataset.sim); });
+})();
+</script>
 
   
 </body>
