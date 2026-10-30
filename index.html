@@ -342,65 +342,51 @@ async function iniciarSesionCOP() {
   }
 
   errDiv.style.display = "none";
-  btn.innerText = "VERIFICANDO CREDENCIALES...";
+  btn.innerText = "VERIFICANDO EN SERVIDOR...";
   btn.disabled = true;
 
   try {
-    let listaUsuarios = USUARIOS_RESPALDO;
-    try {
-      const ctrl = new AbortController();
-      const idTimeout = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(`${COP_API_URL}?action=getData&tab=Usuarios`, { signal: ctrl.signal });
-      clearTimeout(idTimeout);
-      const json = await res.json();
-      if (json && json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
-        listaUsuarios = json.data;
-      }
-    } catch (netErr) {
-      console.warn("Usando validación operativa de respaldo por demora en red:", netErr);
-    }
+    // Solicitud POST: Las credenciales viajan en el cuerpo cifrado por HTTPS
+    const res = await fetch(COP_API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "LOGIN",
+        email: emailInput,
+        pin: pinInput
+      })
+    });
+    
+    const respuesta = await res.json();
 
-    const usuarioValido = listaUsuarios.find(u => 
-      String(u.Email || '').trim().toLowerCase() === emailInput.toLowerCase() && 
-      String(u.PIN || '').trim() === pinInput &&
-      String(u.Activo || '').trim().toUpperCase() === "SI"
-    );
-
-    if (usuarioValido) {
+    if (respuesta.status === "success" && respuesta.usuario) {
+      const u = respuesta.usuario;
       sesionActiva = {
         autenticado: true,
-        email: usuarioValido.Email,
-        nombre: usuarioValido.Nombre_Rango,
-        rol: usuarioValido.Rol,
-        pin: pinInput
+        email: u.email,
+        nombre: u.nombre,
+        rol: u.rol,
+        pin: pinInput // Se conserva en memoria volátil para firmar peticiones operativas
       };
       
-      document.getElementById("op-name").innerText = `${usuarioValido.Nombre_Rango} (${usuarioValido.Rol})`;
+      document.getElementById("op-name").innerText = `${u.nombre} (${u.rol})`;
       document.getElementById("modal-login").style.display = "none";
       reiniciarExpiracion();
       
       if (!mapTactico) inicializarMapas();
-      poblarSelectorNivel();
-      window.renderizarHidrometria();
-      dibujarRiosEstrategico();
-
-      ejecutarAccionAuditada("Usuarios", "UPDATE", { ID: usuarioValido.ID }, "Inicio de sesión de operador");
       cargarAeronavesMision();
-      if (typeof window.refrescarDatosServer === 'function') window.refrescarDatosServer();
+      refrescarDatosServer();
     } else {
-      errDiv.innerText = "Usuario no habilitado o PIN incorrecto";
+      errDiv.innerText = respuesta.message || "Credenciales inválidas o no autorizado.";
       errDiv.style.display = "block";
     }
   } catch (err) {
-    errDiv.innerText = "Error al verificar: " + err.message;
+    errDiv.innerText = "Error de enlace con el servidor de comando.";
     errDiv.style.display = "block";
   } finally {
     btn.innerText = "INGRESAR AL SISTEMA";
     btn.disabled = false;
   }
-}
-
-async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
+}async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
   if (!sesionActiva.autenticado) return;
   const payload = {
     email: sesionActiva.email,
