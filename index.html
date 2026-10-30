@@ -73,14 +73,15 @@ table.analytics-table th{background:#2c3e50;color:#fff}
     <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Ingrese sus credenciales de servicio</p>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
-    <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+    <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">PIN operacional:</label>
-    <input type="password" id="login-pin" maxlength="6" placeholder="****" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
+    <input type="password" id="login-pin" maxlength="12" placeholder="****" onkeydown="if(event.key==='Enter') iniciarSesionCOP();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
     
-    <button onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
+    <button type="button" onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
     <div id="login-error" style="color: #ef4444; font-size: 0.8rem; margin-top: 0.75rem; text-align: center; display: none;">Credenciales inválidas</div>
-  <!-- BOTÓN DE ACCESO CONSULTA / INVITADO -->
+
+    <!-- BOTÓN DE ACCESO CONSULTA / INVITADO -->
     <div style="border-top: 1px solid #334155; margin-top: 1.25rem; padding-top: 1rem;">
       <button type="button" onclick="ingresarComoInvitado()" style="width: 100%; padding: 0.55rem; background: #334155; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff';this.style.background='#475569'" onmouseout="this.style.color='#94a3b8';this.style.background='#334155'">
         👁️ Acceso Consulta (Solo Lectura)
