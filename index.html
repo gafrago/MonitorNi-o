@@ -2939,6 +2939,50 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 
-  
+  <!-- ============ A.R.E.S.: PARCHE DE SEGURIDAD DEL CLIENTE ============
+     Pegar justo antes de </body>, como ULTIMO bloque (despues de los demas) -->
+<script>
+(function () {
+  'use strict';
+  /* 1) XSS almacenado: un nombre de unidad como  x');codigo//  se ejecutaba al dibujar el boton 🗑️ (onclick inline).
+        Se neutralizan comillas, barras y signos < > en los campos que se usan dentro de esos botones. */
+  function seguro(v) {
+    return String(v == null ? '' : v).replace(/'/g, '’').replace(/"/g, '”').replace(/`/g, '´').replace(/\\/g, '/').replace(/[<>]/g, '').replace(/\$\{/g, '$ {');
+  }
+  var _render = window.renderizarRecursos;
+  if (typeof _render === 'function') {
+    window.renderizarRecursos = function () {
+      try {
+        (recursos || []).forEach(function (r) {
+          ['id', 'nombre', 'inst', 'sector', 'estado', 'equipos', 'novedades'].forEach(function (k) { if (typeof r[k] === 'string') r[k] = seguro(r[k]); });
+        });
+      } catch (e) {}
+      return _render.apply(this, arguments);
+    };
+  }
+
+  /* 2) No dejar datos de personal/unidades ni la bitacora guardados en el disco del navegador */
+  var NO_GUARDAR = ['cop_recursos_local_v1', 'cop_bitacora_v1'];
+  var _set = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) { if (NO_GUARDAR.indexOf(k) >= 0) return; return _set.apply(this, arguments); };
+  try { NO_GUARDAR.forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+
+  /* 3) Sin pistas en el login (el formato de correo institucional no se publica) */
+  var em = document.getElementById('login-email'); if (em) { em.placeholder = 'correo institucional'; em.autocomplete = 'off'; }
+  var pin = document.getElementById('login-pin'); if (pin) pin.autocomplete = 'off';
+
+  /* 4) Politica de contenido: solo se permite conectar con los servicios que la app usa realmente */
+  try {
+    if (!document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
+      var m = document.createElement('meta'); m.httpEquiv = 'Content-Security-Policy';
+      m.content = "object-src 'none'; base-uri 'none'; form-action 'none'; "
+        + "connect-src 'self' https://script.google.com https://script.googleusercontent.com https://api.open-meteo.com https://flood-api.open-meteo.com https://router.project-osrm.org "
+        + "https://photon.komoot.io https://apis.datos.gob.ar https://overpass-api.de https://api.rainviewer.com https://tilecache.rainviewer.com https://gibs.earthdata.nasa.gov https://*.tile.openstreetmap.org;";
+      document.head.appendChild(m);
+    }
+  } catch (e) {}
+})();
+</script>
+
 </body>
 </html>
