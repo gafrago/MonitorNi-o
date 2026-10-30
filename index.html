@@ -2570,7 +2570,22 @@ window.addEventListener('DOMContentLoaded', () => {
       var el = document.getElementById(id); if (el) el.classList.add('solo-autenticado');
     });
     document.querySelectorAll('.btn-pdf').forEach(function(b){ b.classList.add('solo-autenticado'); });
+    // Carga de archivos (PDF de Prefectura, texto pegado, geojson/csv): panel completo oculto
+    var pdf = document.getElementById('input-pdf-pna'), det = pdf && pdf.closest('details');
+    if (det) det.classList.add('solo-autenticado');
+    document.querySelectorAll('input[type="file"]').forEach(function(i){
+      var c = i.closest('details') || i.closest('label') || i; c.classList.add('solo-autenticado');
+    });
   }
+
+  // Aunque alguien las llame desde la consola, el invitado no puede cargar archivos ni texto oficial
+  ['cargarPDFOficialPNA','procesarTextoOficialPNA','cargarArchivoInundacionOCortes'].forEach(function(n){
+    var f = window[n]; if (typeof f !== 'function') return;
+    window[n] = function(){
+      if (esInvitado()) { try { if (arguments[0] && arguments[0].target) arguments[0].target.value = ''; } catch(e){} if (window.toast) toast('Carga de archivos no disponible en modo consulta.'); return; }
+      return f.apply(this, arguments);
+    };
+  });
 
   // ---- Invitado: sin unidades/cortes en el mapa y sin descargas ----
   function esInvitado(){ try { return typeof sesionActiva !== 'undefined' && !!sesionActiva.invitado; } catch(e){ return false; } }
