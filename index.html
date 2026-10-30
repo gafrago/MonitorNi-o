@@ -2501,6 +2501,102 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 <!-- ===== FIN BLOQUE CLIENTE SEGURO ===== -->
 
+<!-- ============ A.R.E.S.: PANTALLA DE ACCESO OPACA + MODO INVITADO RESTRINGIDO + ESCUDO ============
+     Pegar justo antes de </body>, DESPUES de bloque-cliente-seguro.html -->
+<style>
+  /* 1) Acceso: fondo totalmente opaco y la app oculta hasta autenticarse */
+  #modal-login{background:radial-gradient(ellipse at 50% 30%,#13243d 0%,#070d18 70%)!important;z-index:2147483000!important}
+  body.sin-sesion #top-banner,
+  body.sin-sesion .tab-bar,
+  body.sin-sesion .view-container{visibility:hidden!important}
+  /* 2) Invitado: tarjetas de Inteligencia que no debe ver */
+  body.es-invitado .solo-autenticado{display:none!important}
+  /* 3) Escudo */
+  .ares-escudo-login{display:block;margin:0 auto .4rem;width:84px;height:84px;filter:drop-shadow(0 0 10px rgba(56,189,248,.35))}
+  .ares-escudo-banner{width:26px;height:26px;vertical-align:middle;margin-right:6px}
+  @keyframes ares-barrido{to{transform:rotate(360deg)}}
+  .ares-barrido{transform-origin:32px 31px;animation:ares-barrido 6s linear infinite}
+</style>
+<script>
+(function(){
+  'use strict';
+  // ---- Escudo A.R.E.S. (diseno propio: radar + "A" + ondas de crecida) ----
+  var SVG = '<svg viewBox="0 0 64 66" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Escudo A.R.E.S.">'
+   + '<defs><clipPath id="ares-clip"><path d="M32 3 L57 11 V33 C57 48 46 58 32 63 C18 58 7 48 7 33 V11 Z"/></clipPath></defs>'
+   + '<path d="M32 3 L57 11 V33 C57 48 46 58 32 63 C18 58 7 48 7 33 V11 Z" fill="#0b1220" stroke="#38bdf8" stroke-width="2"/>'
+   + '<g clip-path="url(#ares-clip)">'
+   +   '<circle cx="32" cy="31" r="20" fill="none" stroke="#38bdf8" stroke-opacity=".35"/>'
+   +   '<circle cx="32" cy="31" r="12" fill="none" stroke="#38bdf8" stroke-opacity=".35"/>'
+   +   '<g class="ares-barrido"><path d="M32 31 L32 11 A20 20 0 0 1 46 17 Z" fill="#38bdf8" fill-opacity=".22"/></g>'
+   +   '<path d="M4 47 q7 -6 14 0 t14 0 t14 0 t14 0 V70 H4 Z" fill="#0e4f7a" fill-opacity=".85"/>'
+   +   '<path d="M4 53 q7 -5 14 0 t14 0 t14 0 t14 0" fill="none" stroke="#38bdf8" stroke-opacity=".7"/>'
+   + '</g>'
+   + '<path d="M20 43 L32 15 L44 43" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
+   + '<path d="M26 34 H38" stroke="#f8fafc" stroke-width="3.2" stroke-linecap="round"/>'
+   + '<path d="M32 3 L57 11 V33 C57 48 46 58 32 63 C18 58 7 48 7 33 V11 Z" fill="none" stroke="#38bdf8" stroke-width="2"/>'
+   + '</svg>';
+
+  function ponerEscudos(){
+    var card = document.querySelector('#modal-login > div');
+    if (card && !card.querySelector('.ares-escudo-login')) {
+      var d = document.createElement('div'); d.className = 'ares-escudo-login'; d.innerHTML = SVG;
+      card.insertBefore(d, card.firstChild);
+    }
+    var badge = document.querySelector('#top-banner .badge-proto');
+    if (badge && !document.querySelector('.ares-escudo-banner')) {
+      var s = document.createElement('span'); s.className = 'ares-escudo-banner'; s.innerHTML = SVG;
+      s.firstChild.setAttribute('width','26'); s.firstChild.setAttribute('height','26');
+      badge.parentNode.insertBefore(s, badge);
+    }
+  }
+
+  // ---- Tarjetas de Inteligencia reservadas a usuarios autenticados ----
+  function marcarTarjetas(){
+    ['tabla-misiones','analitica-fuerzas','bitacora'].forEach(function(id){
+      var el = document.getElementById(id);
+      var card = el && el.closest('.analytics-card');
+      if (card) card.classList.add('solo-autenticado');
+    });
+  }
+
+  // ---- Estado visual segun el modal de acceso ----
+  function sincronizar(){
+    var m = document.getElementById('modal-login');
+    var visible = !!m && getComputedStyle(m).display !== 'none';
+    document.body.classList.toggle('sin-sesion', visible);
+    var inv = false;
+    try { inv = !visible && typeof sesionActiva !== 'undefined' && !!sesionActiva.invitado; } catch(e){}
+    document.body.classList.toggle('es-invitado', inv);
+    if (!visible) {
+      // La app deja de estar oculta: Leaflet necesita recalcular su tamano
+      setTimeout(function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} }, 150);
+    }
+  }
+
+  function iniciar(){
+    marcarTarjetas(); ponerEscudos();
+    document.body.classList.add('sin-sesion');   // arranca oculto
+    var m = document.getElementById('modal-login');
+    if (m) new MutationObserver(sincronizar).observe(m, {attributes:true, attributeFilter:['style','class']});
+    sincronizar();
+    // Respaldo: el invitado se define justo antes de ocultar el modal; se revisa de nuevo
+    setInterval(sincronizar, 1000);
+  }
+
+  // Defensa extra: el invitado no recibe bitacora aunque otra funcion la rellene
+  var _ingInv = window.ingresarComoInvitado;
+  if (typeof _ingInv === 'function') {
+    window.ingresarComoInvitado = function(){
+      var r = _ingInv.apply(this, arguments);
+      sincronizar();
+      var b = document.getElementById('bitacora'); if (b) b.innerHTML = '';
+      return r;
+    };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
+</script>
   
 </body>
 </html>
