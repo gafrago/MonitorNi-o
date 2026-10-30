@@ -200,7 +200,7 @@ table.analytics-table th{background:#2c3e50;color:#fff}
       </form>
     </details>
 
-   <details class="form-panel" id="panel-alta">
+  <details class="form-panel" id="panel-alta">
       <summary>➕ Desplegar Unidad y Medios a DB</summary>
       <form id="form-recurso" class="form-grid" onsubmit="agregarRecursoEnVivo(event)">
         <input type="text" id="nuevo-nombre" placeholder="Nombre de la Unidad (Ej: ECOM 1, Destacamento)" required />
@@ -216,16 +216,17 @@ table.analytics-table th{background:#2c3e50;color:#fff}
           <select id="nuevo-estado" style="width:110px" required>
             <option value="ASIGNADO">🟢 Operativo</option>
             <option value="DISPONIBLE">🟡 Reserva</option>
+            <option value="REPLEGADO">🔵 Replegado (Misión Cumplida)</option>
             <option value="NO_DISPONIBLE">🔴 Crítico</option>
           </select>
         </div>
         
-        <!-- NUEVOS CAMPOS DE DOTACIÓN Y MEDIOS -->
         <div class="coords-row">
-          <input type="number" min="0" id="nuevo-efectivos" placeholder="Cant. Personal" title="Cantidad de efectivos" required />
-          <input type="number" min="0" id="nuevo-vehiculos" placeholder="Cant. Vehículos" title="Vehículos utilizados" required />
+          <input type="number" min="0" id="nuevo-efectivos" placeholder="Cant. Personal" required />
+          <input type="number" min="0" id="nuevo-vehiculos" placeholder="Cant. Vehículos" required />
         </div>
-        <input type="text" id="nuevo-equipos" placeholder="Equipamiento / Material (Ej: 2 botes, 1 handy VHF)" />
+        <input type="text" id="nuevo-equipos" placeholder="Equipamiento (Ej: 2 botes, VHF)" />
+        <textarea id="nuevo-novedades" rows="2" placeholder="Novedades iniciales / Observaciones de misión..."></textarea>
 
         <div class="coords-row">
           <input type="number" step="any" id="nueva-lat" placeholder="Lat (clic en mapa)" required />
@@ -233,10 +234,9 @@ table.analytics-table th{background:#2c3e50;color:#fff}
         </div>
         <input type="text" id="nuevo-sector" placeholder="Localidad / Sector / Ruta" required />
         
-        <button type="submit" class="btn-submit">📍 Cargar al Mapa Operativo</button>
+        <button type="submit" class="btn-submit">📍 Cargar al Mapa Táctico</button>
       </form>
-    </details>
-    <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px;font-size:12px">
+    </details>    <select id="filtro-institucion" onchange="renderizarRecursos()" style="margin-bottom:8px;padding:5px;border-radius:4px;font-size:12px">
       <option value="TODAS">Mostrar Todo (Unidades y Cortes)</option><option value="VIALIDAD">🚧 Solo Cortes / Alertas</option><option value="FAA">✈️ FAA</option>
       <option value="EA">🪖 EA</option><option value="PNA">⚓ PNA</option><option value="GN">🛡️ GN</option><option value="DC">🚒 DC</option>
     </select>
