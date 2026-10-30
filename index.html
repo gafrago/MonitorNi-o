@@ -329,11 +329,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 const COP_API_URL = "https://script.google.com/macros/s/AKfycbzOikb68DU1qRvmUJ2GlpLbUJu3IPCazcRV-PCtxOegvkNB_oJynL0k-o2Y3WbYgi2Trg/exec";
 
-// Respaldo operativo en caso de demora de red de Google Apps Script
-const USUARIOS_RESPALDO = [
-  { ID: 1, Email: "gfgonzalez@faa.mil.ar", Nombre_Rango: "Cap. González", Rol: "Administrador", PIN: "4481", Activo: "SI" },
-  { ID: 2, Email: "operaciones@faa.mil.ar", Nombre_Rango: "Tte. Operador", Rol: "Planificador", PIN: "1024", Activo: "SI" },
-  { ID: 3, Email: "logistica@faa.mil.ar", Nombre_Rango: "Subof. Logística", Rol: "Operador", PIN: "5562", Activo: "SI" }
+
 ];
 
 let sesionActiva = { autenticado: false, email: "", nombre: "", rol: "", pin: "" };
