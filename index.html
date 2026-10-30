@@ -628,62 +628,66 @@ function procesarTextoLineasPNA(fullText, nombreArchivo) {
 }
 
 async function agregarRecursoEnVivo(e) {
-  e.preventDefault(); const inst = document.getElementById('nueva-institucion').value;
-  const opName = sesionActiva.nombre;
-  const r = { 
-    ID: `REC-${Date.now()}`, Nombre: document.getElementById('nuevo-nombre').value, 
-    Institucion: inst, Estado: document.getElementById('nuevo-estado').value,
-    Lat: parseFloat(document.getElementById('nueva-lat').value), 
-    Lon: parseFloat(document.getElementById('nueva-lon').value),
-    Sector: document.getElementById('nuevo-sector').value, 
-    Operador: opName, Efectivos: inst === 'VIALIDAD' ? 0 : 4, Timestamp: Date.now() 
-  };
-  
-  const mensajeLog = `Desplegó unidad: ${r.Nombre} (${r.Sector})`;
-  logEvento(mensajeLog);
-  await ejecutarAccionAuditada("Recursos_Terreno", "INSERT", r, mensajeLog);
-  document.getElementById('form-recurso').reset(); 
-  refrescarDatosServer();
-}
+  e.preventDefault(); 
+  const inst = document.getElementById('nueva-institucion').value;
+  const nombreInput = document.getElementById('nuevo-nombre').value;
+  const estadoInput = document.getElementById('nuevo-estado').value;
+  const latInput = parseFloat(document.getElementById('nueva-lat').value);
+  const lonInput = parseFloat(document.getElementById('nueva-lon').value);
+  const sectorInput = document.getElementById('nuevo-sector').value;
+  const opName = sesionActiva.nombre || "Operador de Guardia";
 
-async function cargarNivelManual(ev) {
-  ev.preventDefault();
-  const idEst = estacionesHidro[+document.getElementById('nivel-est').value].id;
-  const h = estacionesHidro.find(x => x.id === idEst);
-  const alt = parseFloat(document.getElementById('nivel-alt').value);
-  const ale = parseFloat(document.getElementById('nivel-ale').value);
-  const eva = parseFloat(document.getElementById('nivel-eva').value);
-  
-  const dif = alt - h.actual;
-  const dataUpdate = {
-    ID: h.id, Actual_m: alt, Timestamp: Date.now(),
-    Tendencia: dif > 0.02 ? '▲' : dif < -0.02 ? '▼' : '═'
-  };
-  if (!isNaN(ale)) { dataUpdate.Alerta_m = ale; h.alerta = ale; }
-  if (!isNaN(eva)) { dataUpdate.Evacuacion_m = eva; h.evacuacion = eva; }
-  h.actual = alt;
-  h.tendencia = dataUpdate.Tendencia;
-  h.ts = dataUpdate.Timestamp;
-  
-  const mensajeLog = `Nivel cargado: ${h.estacion} ${alt.toFixed(2)} m`;
-  logEvento(mensajeLog);
-  window.renderizarHidrometria();
-  dibujarRiosEstrategico();
-  await ejecutarAccionAuditada("Hidrometria", "UPDATE", dataUpdate, mensajeLog); 
-  refrescarDatosServer();
-}
-
-function eliminarRecurso(id, nombre) {
-  if (sesionActiva.rol.toLowerCase() === 'operador') {
-    return alert("Permisos insuficientes. Contacte al Planificador o Administrador.");
+  if (isNaN(latInput) || isNaN(lonInput)) {
+    alert("⚠ Debe seleccionar o ingresar coordenadas válidas (Lat y Lon) haciendo clic en el mapa.");
+    return;
   }
-  if (!confirm(`¿Eliminar la unidad "${nombre}" del sistema central?`)) return;
-  
-  logEvento(`Baja solicitada: ${nombre}`); 
-  ejecutarAccionAuditada("Recursos_Terreno", "UPDATE", { ID: id, Estado: "BAJA" }, `Dio de baja unidad: ${nombre}`);
-  setTimeout(refrescarDatosServer, 1000);
-}
 
+  // 1. Crear el objeto con la estructura exacta que espera Google Sheets
+  const nuevoRecurso = {
+    ID: `REC-${Date.now()}`,
+    Nombre: nombreInput,
+    Institucion: inst,
+    Estado: estadoInput,
+    Lat: latInput,
+    Lon: lonInput,
+    Sector: sectorInput,
+    Operador: opName,
+    Efectivos: inst === 'VIALIDAD' ? 0 : 4,
+    Timestamp: Date.now()
+  };
+
+  // 2. ACTUALIZACIÓN INSTANTÁNEA LOCAL (Aparece en el mapa y en la lista al instante)
+  recursos.push({
+    id: nuevoRecurso.ID,
+    nombre: nuevoRecurso.Nombre,
+    inst: nuevoRecurso.Institucion,
+    estado: nuevoRecurso.Estado,
+    lat: nuevoRecurso.Lat,
+    lon: nuevoRecurso.Lon,
+    sector: nuevoRecurso.Sector,
+    operador: nuevoRecurso.Operador,
+    efectivos: nuevoRecurso.Efectivos,
+    timestamp: nuevoRecurso.Timestamp
+  });
+
+  // Redibujar mapa y lista inmediatamente
+  renderizarRecursos();
+  if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics();
+
+  // Registrar en bitácora local
+  const mensajeLog = `Desplegó unidad: ${nuevoRecurso.Nombre} (${nuevoRecurso.Sector})`;
+  logEvento(mensajeLog);
+
+  // Limpiar el formulario para permitir otra carga rápida
+  document.getElementById('form-recurso').reset();
+
+  // 3. ENVIAR A LA NUBE (Google Sheets / Apps Script) en segundo plano
+  try {
+    await ejecutarAccionAuditada("Recursos_Terreno", "INSERT", nuevoRecurso, mensajeLog);
+  } catch (err) {
+    console.warn("El recurso se cargó localmente, pero hubo un inconveniente al sincronizar con la nube:", err);
+  }
+}
 // ==========================================
 // --- MÓDULO DE MISIONES AÉREAS ---
 // ==========================================
