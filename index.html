@@ -438,8 +438,10 @@ function ingresarComoInvitado() {
     btn.innerText = "INGRESAR AL SISTEMA";
     btn.disabled = false;
   }
-}async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
-  if (!sesionActiva.autenticado) return;
+} async function ejecutarAccionAuditada(tabDestino, tipoAccion, datosRegistro, motivoAuditoria) {
+  // Si no está autenticado o es invitado, aborta sin tocar la base de datos
+  if (!sesionActiva.autenticado || sesionActiva.invitado) return;
+
   const payload = {
     email: sesionActiva.email,
     pin: sesionActiva.pin,
