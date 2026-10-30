@@ -403,7 +403,7 @@ async function iniciarSesionCOP() {
 
     const respuesta = await res.json();
 
-    if (respuesta.status === "success" && respuesta.usuario) {
+   if (respuesta.status === "success" && respuesta.usuario) {
       const u = respuesta.usuario;
       sesionActiva = {
         autenticado: true,
@@ -411,7 +411,7 @@ async function iniciarSesionCOP() {
         email: u.email,
         nombre: u.nombre,
         rol: u.rol,
-        pin: pinInput
+        pin: respuesta.token || pinInput // <--- CORREGIDO: Guarda el token firmado del servidor
       };
 
       ['panel-alta', 'panel-misiones', 'panel-auto-inundaciones'].forEach(id => {
