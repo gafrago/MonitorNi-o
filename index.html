@@ -3097,6 +3097,39 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('orientationchange', function () { setTimeout(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }, 300); });
 })();
 </script>
+<!-- ============ A.R.E.S.: CONFIRMAR QUE LO CARGADO SE GUARDO EN EL SERVIDOR ============
+     Pegar antes de </body>, DESPUES de los demas bloques.
+     Antes la app mostraba "operacion completada" aunque el servidor rechazara o no guardara el dato. -->
+<script>
+(function () {
+  'use strict';
+  var avisoTimer = null, pend = 0, ok = 0, mal = [];
+  function aviso(txt, color) {
+    var t = document.getElementById('gs-toast');
+    if (!t) { t = document.createElement('div'); t.id = 'gs-toast'; t.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:#fff;padding:8px 14px;border-radius:6px;font-size:12.5px;z-index:2147483100;box-shadow:0 4px 12px rgba(0,0,0,.35);max-width:90vw;text-align:center'; document.body.appendChild(t); }
+    t.style.background = color; t.textContent = txt; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = 'none'; }, 6000);
+  }
+  function resumen() {
+    if (pend > 0) return;
+    if (mal.length) aviso('❌ El servidor NO guardó ' + mal.length + ' dato(s): ' + mal[0], '#b91c1c');
+    else if (ok) aviso('✅ ' + ok + ' dato(s) guardados en el servidor. Los demás equipos lo verán en unos segundos.', '#15803d');
+    ok = 0; mal = [];
+  }
+  var orig = window.ejecutarAccionAuditada;
+  if (typeof orig !== 'function') return;
+  window.ejecutarAccionAuditada = async function (tab, accion, datos, motivo) {
+    if (typeof sesionActiva === 'undefined' || !sesionActiva.autenticado || sesionActiva.invitado) return;
+    pend++;
+    try {
+      var r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ email: sesionActiva.email, pin: sesionActiva.pin, action: accion, tab: tab, data: datos, detalle: motivo }) });
+      var j = await r.json();
+      if (j.status === 'success') ok++; else mal.push(j.message || 'rechazado');
+      if (j.status !== 'success' && /SESIÓN/.test(j.message || '') && typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP();
+    } catch (e) { mal.push('sin conexión con el servidor'); }
+    finally { pend--; clearTimeout(avisoTimer); avisoTimer = setTimeout(resumen, 700); }
+  };
+})();
+</script>
 
 </body>
 </html>
