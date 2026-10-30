@@ -2557,6 +2557,59 @@ window.addEventListener('DOMContentLoaded', () => {
       var card = el && el.closest('.analytics-card');
       if (card) card.classList.add('solo-autenticado');
     });
+    // Visor Tactico: unidades, cortes, KPI y botones de descarga
+    ['chk-cortes','chk-unidades'].forEach(function(id){
+      var el = document.getElementById(id), l = el && el.closest('label');
+      if (l) l.classList.add('solo-autenticado');
+    });
+    ['kpi-unidades','kpi-cortes','kpi-efectivos'].forEach(function(id){
+      var el = document.getElementById(id), k = el && el.closest('.kpi-card');
+      if (k) k.classList.add('solo-autenticado');
+    });
+    ['filtro-institucion','lista-recursos'].forEach(function(id){
+      var el = document.getElementById(id); if (el) el.classList.add('solo-autenticado');
+    });
+    document.querySelectorAll('.btn-pdf').forEach(function(b){ b.classList.add('solo-autenticado'); });
+  }
+
+  // ---- Invitado: sin unidades/cortes en el mapa y sin descargas ----
+  function esInvitado(){ try { return typeof sesionActiva !== 'undefined' && !!sesionActiva.invitado; } catch(e){ return false; } }
+
+  var _render = window.renderizarRecursos;
+  if (typeof _render === 'function') {
+    window.renderizarRecursos = function(){
+      if (esInvitado()) {
+        try { recursos = []; } catch(e){}
+        try { if (capaRecursos) capaRecursos.clearLayers(); } catch(e){}
+        return;
+      }
+      return _render.apply(this, arguments);
+    };
+  }
+
+  var _sitrep = window.generarSITREP;
+  window.generarSITREP = function(){
+    if (esInvitado()) { if (window.toast) toast('Descargas no disponibles en modo consulta.'); return; }
+    return _sitrep && _sitrep.apply(this, arguments);
+  };
+  window.generarSITREP.__orig = _sitrep;
+
+  // Cualquier doc.save() de jsPDF y cualquier <a download> quedan bloqueados para el invitado
+  function blindarDescargas(){
+    try {
+      var P = window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.prototype;
+      if (P && !P.__aresBloq) {
+        var os = P.save;
+        P.save = function(){ if (esInvitado()) return this; return os.apply(this, arguments); };
+        P.__aresBloq = true;
+      }
+    } catch(e){}
+    var A = HTMLAnchorElement.prototype;
+    if (!A.__aresBloq) {
+      var oc = A.click;
+      A.click = function(){ if (esInvitado() && this.hasAttribute('download')) return; return oc.apply(this, arguments); };
+      A.__aresBloq = true;
+    }
   }
 
   // ---- Estado visual segun el modal de acceso ----
@@ -2567,6 +2620,7 @@ window.addEventListener('DOMContentLoaded', () => {
     var inv = false;
     try { inv = !visible && typeof sesionActiva !== 'undefined' && !!sesionActiva.invitado; } catch(e){}
     document.body.classList.toggle('es-invitado', inv);
+    if (inv) { blindarDescargas(); try { window.renderizarRecursos(); } catch(e){} }
     if (!visible) {
       // La app deja de estar oculta: Leaflet necesita recalcular su tamano
       setTimeout(function(){ try { window.dispatchEvent(new Event('resize')); } catch(e){} }, 150);
@@ -2574,7 +2628,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function iniciar(){
-    marcarTarjetas(); ponerEscudos();
+    marcarTarjetas(); ponerEscudos(); blindarDescargas();
     document.body.classList.add('sin-sesion');   // arranca oculto
     var m = document.getElementById('modal-login');
     if (m) new MutationObserver(sincronizar).observe(m, {attributes:true, attributeFilter:['style','class']});
@@ -2597,6 +2651,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })();
 </script>
+
   
 </body>
 </html>
