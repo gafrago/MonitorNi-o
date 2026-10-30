@@ -1118,7 +1118,7 @@ function seleccionarDeptoMapa() {
 function crearIcono(inst, estado) {
   if (inst === "VIALIDAD") return L.divIcon({ className: 'custom-div-icon', html: `<div class="corte-ruta-badge">🚧</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
   const color = { FAA: "#0284c7", EA: "#4d7c0f", PNA: "#1e3a8a", GN: "#15803d", DC: "#ea580c" }[inst] || "#64748b";
-  const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : "#ef4444";
+  const dot = estado === "ASIGNADO" ? "#22c55e" : estado === "DISPONIBLE" ? "#eab308" : estado === "REPLEGADO" ? "#3b82f6" : "#ef4444";
   return L.divIcon({ className: 'custom-div-icon', html: `<div class="pin-tactico" style="background-color:${color}"><span class="sigla">${esc(inst)}</span><div class="estado-dot" style="background-color:${dot}"></div></div>`, iconSize: [34, 34], iconAnchor: [17, 34] });
 }
 
@@ -1137,18 +1137,39 @@ function renderizarRecursos() {
     if (esCorte) c++; else u++; e += Number(r.efectivos) || 0;
     const viejo = r.timestamp && (Date.now() - r.timestamp) > 3600000;
     
-    const botonBorrar = (sesionActiva.rol.toLowerCase() !== 'operador') 
-      ? `<button data-del="${esc(r.id)}" data-nombre="${esc(r.nombre)}" style="margin-top:6px;width:100%;background:#dc2626;color:#fff;border:none;padding:4px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar</button>` 
-      : '';
+    const botonBorrar = `<button onclick="eliminarRecurso('${esc(r.id)}', '${esc(r.nombre)}')" style="margin-top:8px;width:100%;background:#dc2626;color:#fff;border:none;padding:5px;border-radius:3px;cursor:pointer;font-weight:bold">🗑️ Eliminar Recurso</button>`;
       
-    L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos).bindPopup(`<div style="font-size:12px;min-width:180px"><b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br><b>📍</b> ${esc(r.sector)}<br><b>🚦</b> ${esc(r.estado)}<br><b>👤</b> ${esc(r.operador || 'S/D')}<br><b>⏱️</b> ${edadTxt(r.timestamp)}${viejo ? ' <b style="color:#c2410c">(desactualizado)</b>' : ''}<br>${botonBorrar}</div>`);
-    const tj = document.createElement('div'); tj.className = 'recurso-card'; tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
-    tj.innerHTML = `<div data-center="${r.lat},${r.lon}" style="flex:1"><b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br><span style="color:#475569">📍 ${esc(r.sector)} | 👤 ${esc(r.operador || 'S/D')} | ⏱️ ${edadTxt(r.timestamp)}${viejo ? ' ⚠' : ''}</span></div>`;
+    L.marker([r.lat, r.lon], { icon: crearIcono(r.inst, r.estado) }).addTo(capaRecursos).bindPopup(`
+      <div style="font-size:12px;min-width:210px">
+        <b>[${esc(r.inst)}] ${esc(r.nombre)}</b><br>
+        <b>📍 Sector:</b> ${esc(r.sector)}<br>
+        <b>👤 Personal:</b> ${Number(r.efectivos || 0)} efectivos<br>
+        <b>🚗 Vehículos:</b> ${Number(r.vehículos || r.Vehiculos || 0)} unidades<br>
+        <b>🛠️ Equipos:</b> ${esc(r.equipos || r.Equipos || 'S/D')}<br>
+        <b>📝 Novedades:</b> ${esc(r.novedades || r.Novedades || 'Sin novedades')}<br>
+        <b>🚦 Estado:</b> <b style="color:${r.estado === 'REPLEGADO' ? '#3b82f6' : '#16a34a'}">${esc(r.estado)}</b><br>
+        <b>⏱️</b> ${edadTxt(r.timestamp)}${viejo ? ' <b style="color:#c2410c">(desactualizado)</b>' : ''}<br>
+        ${botonBorrar}
+      </div>
+    `);
+
+    const tj = document.createElement('div'); 
+    tj.className = 'recurso-card'; 
+    tj.style.borderLeftColor = esCorte ? '#dc2626' : '#2980b9';
+    tj.innerHTML = `
+      <div style="flex:1">
+        <b>${esCorte ? '🚧' : '🛡️'} [${esc(r.inst)}] ${esc(r.nombre)}</b><br>
+        <span style="color:#475569">📍 ${esc(r.sector)} | 👤 ${Number(r.efectivos || 0)} pers. | 🚗 ${Number(r.vehículos || r.Vehiculos || 0)} veh.</span>
+      </div>
+      <button class="btn-del-mini" onclick="eliminarRecurso('${esc(r.id)}', '${esc(r.nombre)}')">🗑️</button>
+    `;
     lista.appendChild(tj);
   });
-  document.getElementById('kpi-unidades').innerText = u; document.getElementById('kpi-cortes').innerText = c; document.getElementById('kpi-efectivos').innerText = e;
+  
+  document.getElementById('kpi-unidades').innerText = u; 
+  document.getElementById('kpi-cortes').innerText = c; 
+  document.getElementById('kpi-efectivos').innerText = e;
 }
-
 // INFRAESTRUCTURA
 window.puntosInfraestructura = [
   { icono: '✈️', nombre: 'Aeropuerto Resistencia', detalle: 'Pista / base aérea', lat: -27.4499, lon: -59.0561 },
