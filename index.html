@@ -2384,58 +2384,135 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN MÓDULO AUTOMÁTICO: CORTES VIALES Y ZONAS INUNDADAS ===== --> 
-<!-- ============ A.R.E.S.: LISTA DE AERONAVES PARA PLANIFICAR VUELOS (a prueba de variantes en la hoja) ============
-     Pegar antes de </body>, DESPUES de bloque-cliente-seguro.html (reemplaza su funcion cargarAeronavesMision). -->
+<!-- ===== INICIO BLOQUE CLIENTE SEGURO: pegar antes de </body>, DESPUES de todos los demas bloques ===== -->
 <script>
 (function () {
   'use strict';
-  var $ = function (id) { return document.getElementById(id); };
-  // Normaliza nombres de columna: "Matrícula", "matricula ", "Base_Asiento" -> matricula / baseasiento
-  function k(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); }
-  function campo(fila, nombres) { var ks = Object.keys(fila); for (var i = 0; i < nombres.length; i++) { for (var j = 0; j < ks.length; j++) if (k(ks[j]) === nombres[i]) return { clave: ks[j], valor: fila[ks[j]] }; } return null; }
-  var SI = ['si', 'true', '1', 'yes', 'disponible', 'operativa', 'operativo', 'ok', 'x'];
+  const $ = id => document.getElementById(id);
+  let busy = false;
 
-  async function pedir() {
-    var r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_SECURE_DATA', tab: 'Aeronaves', email: sesionActiva.email, pin: sesionActiva.pin }) });
-    return r.json();
+  /* 1) INGRESO: el encabezado nuevo no tenia el elemento "op-name"; al entrar, el codigo fallaba
+        y mostraba "Error de enlace" aunque el servidor hubiera aceptado las credenciales. */
+  if (!$('op-name')) {
+    const ref = document.querySelector('#top-banner .badge-proto');
+    const s = document.createElement('span'); s.id = 'op-name'; s.style.cssText = 'margin:0 8px;font-weight:bold;color:#fbbf24;font-size:12px';
+    (ref && ref.parentNode ? ref.parentNode : $('top-banner')).insertBefore(s, ref ? ref.nextSibling : null);
   }
-  function mensaje(sel, txt) { sel.innerHTML = ''; var o = new Option(txt, ''); sel.add(o); }
 
-  var cargando = false;
-  window.cargarAeronavesMision = async function () {
-    var sel = $('mis-medio'); if (!sel || typeof sesionActiva === 'undefined' || !sesionActiva.autenticado || sesionActiva.invitado || cargando) return;
-    cargando = true; var previo = sel.value; mensaje(sel, 'Consultando aeronaves…');
-    try {
-      var j = await pedir();
-      if (j.status !== 'success') { mensaje(sel, '⚠ ' + (j.message || 'No se pudo leer la hoja Aeronaves') + ' (tocar para reintentar)'); return; }
-      var filas = (j.data || []).filter(function (f) { return f && Object.keys(f).some(function (c) { return String(f[c]).trim() !== ''; }); });
-      if (!filas.length) { mensaje(sel, '⚠ La hoja Aeronaves no tiene filas cargadas'); return; }
-      var disp = [], no = [], sinMat = 0;
-      filas.forEach(function (f) {
-        var m = campo(f, ['matricula', 'indicativo', 'aeronave', 'matriculaaeronave', 'id', 'nombre', 'codigo']);
-        if (!m || String(m.valor).trim() === '') { sinMat++; return; }
-        var t = campo(f, ['tipo', 'modelo', 'tipoaeronave', 'tipodeaeronave']), b = campo(f, ['baseasiento', 'base', 'asiento', 'unidad', 'baseasignada']), d = campo(f, ['disponible', 'disponibilidad', 'estado', 'situacion', 'operativa']);
-        var mat = String(m.valor).trim(), txt = mat + (t && String(t.valor).trim() ? ' - ' + String(t.valor).trim() : '') + (b && String(b.valor).trim() ? ' (Base: ' + String(b.valor).trim() + ')' : '');
-        var ok = d ? SI.indexOf(k(d.valor)) >= 0 : true;            // sin columna de disponibilidad: todas se consideran disponibles
-        (ok ? disp : no).push({ mat: mat, txt: txt });
-      });
-      sel.innerHTML = '';
-      if (!disp.length && !no.length) { mensaje(sel, '⚠ No encuentro la columna de matrícula en la hoja Aeronaves (revisar encabezados)'); return; }
-      sel.add(new Option(disp.length ? 'Seleccione aeronave disponible… (' + disp.length + ')' : '⚠ Ninguna aeronave figura como disponible', ''));
-      disp.forEach(function (a) { sel.add(new Option(a.txt, a.mat)); });
-      if (no.length) { var g = document.createElement('optgroup'); g.label = 'No disponibles (no se pueden asignar)'; no.forEach(function (a) { var o = new Option(a.txt, a.mat); o.disabled = true; g.appendChild(o); }); sel.appendChild(g); }
-      if (previo) sel.value = previo;
-    } catch (e) { mensaje(sel, '⚠ Sin conexión con el servidor (tocar para reintentar)'); }
-    finally { cargando = false; }
+  /* 2) Aviso en pantalla: eliminarRecurso lo usaba y no existia (la baja no llegaba a la planilla) */
+  window.toast = function (msg, ms) {
+    let t = $('cop-toast');
+    if (!t) { t = document.createElement('div'); t.id = 'cop-toast'; t.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:8px 14px;border-radius:6px;font-size:12.5px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.4)'; document.body.appendChild(t); }
+    t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, ms || 3500);
   };
 
-  // Reintentos automaticos: al abrir el panel de misiones y al tocar la lista si esta vacia o con error
-  var panel = $('panel-misiones'), sel = $('mis-medio');
-  if (panel) panel.addEventListener('toggle', function () { if (panel.open) window.cargarAeronavesMision(); });
-  if (sel) sel.addEventListener('mousedown', function () { if (!sel.value && (sel.options.length <= 1 || /⚠|Consultando/.test(sel.options[0].text))) window.cargarAeronavesMision(); });
-  if (typeof sesionActiva !== 'undefined' && sesionActiva.autenticado && !sesionActiva.invitado) window.cargarAeronavesMision();
+  /* 3) Se descartan los niveles de rio inventados que trae el codigo al arrancar y los datos de unidades guardados en el navegador */
+  estacionesHidro = (estacionesHidro || []).map(h => String(h.fuente || '').includes('PDF') ? h
+    : Object.assign({}, h, { actual: NaN, ts: 0, tendencia: '═', fuente: 'SIN DATO (pendiente de sincronizar)' }));
+  recursos = [];
+  try { localStorage.removeItem('cop_recursos_local_v1'); } catch (_) { /* sin acceso */ }
+
+  /* 4) Lector de PDF: se desactiva la ejecucion de codigo embebido (falla CVE-2024-4367 de pdf.js) */
+  if (window.pdfjsLib && pdfjsLib.getDocument) { const g = pdfjsLib.getDocument.bind(pdfjsLib); pdfjsLib.getDocument = src => g(Object.assign({}, src, { isEvalSupported: false })); }
+
+  /* 5) Lectura de datos: unidades, misiones y aeronaves por POST con token; rios por GET publico */
+  const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'number' ? v : parseFloat(String(v).trim().replace(',', '.')));
+  const escalar = (v, max) => { let n = num(v), g = 0; while (isFinite(n) && Math.abs(n) > max && g++ < 8) n /= 10; return n; };
+  const FIJAS = { H1: [-27.485, -58.932], H2: [-27.462, -58.838], H3: [-27.310, -58.580], H4: [-26.928, -58.502], H5: [-27.950, -58.810], H6: [-29.145, -59.265] };
+  // Cada pedido tiene tope de 25 s: si Google no responde, la sincronizacion falla con aviso en vez de quedar colgada para siempre
+  const conTiempo = (url, opc) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25000); return fetch(url, Object.assign({}, opc, { signal: c.signal })).finally(() => clearTimeout(t)); };
+  async function leerSeguro(tab) {
+    const r = await conTiempo(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_SECURE_DATA', tab, email: sesionActiva.email, pin: sesionActiva.pin }) });
+    const j = await r.json();
+    if (j.status !== 'success' && /SESIÓN/.test(j.message || '')) { window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return j;
+  }
+
+  window.refrescarDatosServer = async function () {
+    if (!sesionActiva.autenticado || busy) return;
+    busy = true;
+    try { await sincronizar(); } catch (e) { console.error('Sincronizacion:', e); const st0 = $('sync-status'); if (st0) { st0.innerText = '🔴 Fallo: ' + (e && e.message || 'error'); st0.style.color = '#f87171'; } }
+    finally { busy = false; }                        // pase lo que pase, la proxima sincronizacion puede correr
+  };
+  async function sincronizar() {
+    const st = $('sync-status'); if (st) { st.innerText = '🟡 Sincronizando...'; st.style.color = '#fbbf24'; }
+    if (!mapTactico) inicializarMapas();
+    const fallos = [], paso = async (n, fn) => { try { await fn(); } catch (e) { if (e.message !== 'sesion') fallos.push(n); } };
+
+    await paso('Ríos', async () => {
+      const j = await (await conTiempo(`${COP_API_URL}?action=getData&tab=Hidrometria`)).json();
+      if (j.status !== 'success') throw new Error(j.message || 'error');
+      const locales = {}; (estacionesHidro || []).forEach(h => { if (String(h.fuente || '').includes('PDF')) locales[h.id] = h; });
+      const remotos = j.data.map((h, i) => {
+        const id = String(h.ID || 'H' + (i + 1)).trim().toUpperCase(), fb = FIJAS[id] || [];
+        let lat = escalar(h.Lat, 90), lon = escalar(h.Lon, 180);
+        if (!isFinite(lat) || !isFinite(lon)) { lat = fb[0]; lon = fb[1]; }
+        return { id, estacion: String(h.Estacion || 'Estación').trim(), rio: String(h.Rio || '').trim(), actual: escalar(h.Actual_m, 25), alerta: escalar(h.Alerta_m, 25), evacuacion: escalar(h.Evacuacion_m, 25),
+          tendencia: (h.Tendencia && String(h.Tendencia) !== 'NaN') ? String(h.Tendencia).trim() : '═', ts: Number(h.Timestamp) || 0, lat, lon, qIna: num(h.Q_m3s), fuente: String(h.Fuente || 'Planilla').trim() };
+      }).filter(h => isFinite(h.lat) && isFinite(h.lon));
+      if (remotos.length) estacionesHidro = remotos.map(r => (locales[r.id] && locales[r.id].ts > r.ts) ? Object.assign({}, r, locales[r.id]) : r);
+    });
+
+    if (!sesionActiva.invitado) {
+      await paso('Unidades', async () => {
+        const j = await leerSeguro('Recursos_Terreno'); if (j.status !== 'success') throw new Error(j.message);
+        recursos = j.data.map(r => ({ id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, lat: escalar(r.Lat, 90), lon: escalar(r.Lon, 180), sector: r.Sector, operador: r.Operador,
+          efectivos: r.Efectivos, vehiculos: r.Vehiculos, equipos: r.Equipos, novedades: r.Novedades, timestamp: Number(r.Timestamp) })).filter(r => isFinite(r.lat) && isFinite(r.lon));
+      });
+      await paso('Misiones', async () => {
+        try { const j = await leerSeguro('Misiones'); if (j.status !== 'success') throw new Error(j.message || 'el servidor no devolvio las misiones'); procesarMisiones(j.data || []); }
+        catch (e) {
+          const tb = document.querySelector('#tabla-misiones tbody');
+          if (tb && e.message !== 'sesion') tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#b91c1c">⚠ No se pudieron cargar las misiones: ' + (e && e.name === 'AbortError' ? 'Google tardó demasiado en responder (reintenta solo en 30 s)' : String(e.message || e).replace(/[<>&]/g, '')) + '</td></tr>';
+          throw e;
+        }
+      });
+    }
+
+    renderizarRecursos(); poblarSelectorNivel(); renderizarHidrometria(); dibujarRiosEstrategico();
+    if (!window.glofasIniciado) { window.glofasIniciado = true; cargarCaudalesGloFAS(); }
+    if ($('vista-analytics') && $('vista-analytics').classList.contains('active')) actualizarDashboardAnalytics();
+    if (st) { st.innerText = fallos.length ? '🔴 Fallo: ' + fallos.join(', ') : '🟢 Enlace Seguro'; st.style.color = fallos.length ? '#f87171' : '#4ade80'; }
+  }
+  setInterval(() => window.refrescarDatosServer(), 30000);
+
+  window.cargarAeronavesMision = async function () {
+    const sel = $('mis-medio'); if (!sel || sesionActiva.invitado) return;
+    sel.innerHTML = '<option value="">Consultando...</option>';
+    try {
+      const j = await leerSeguro('Aeronaves');
+      sel.innerHTML = '<option value="">Seleccione Aeronave Disponible...</option>';
+      (j.data || []).forEach(a => { if (String(a.Disponible).trim().toUpperCase() === 'SI') sel.add(new Option(`${a.Matricula} - ${a.Tipo} (Base: ${a.Base_Asiento})`, a.Matricula)); });
+    } catch (e) { sel.innerHTML = '<option value="">No se pudo cargar la lista</option>'; }
+  };
+
+  /* 6) Alta de unidad: ahora tambien guarda "Novedades" (antes se perdian al limpiar el formulario) */
+  window.agregarRecursoEnVivo = async function (e) {
+    e.preventDefault();
+    const v = id => $(id).value, lat = parseFloat(v('nueva-lat')), lon = parseFloat(v('nueva-lon'));
+    if (isNaN(lat) || isNaN(lon)) return alert('⚠ Seleccione coordenadas válidas haciendo clic en el mapa.');
+    const r = { ID: `REC-${Date.now()}`, Nombre: v('nuevo-nombre'), Institucion: v('nueva-institucion'), Estado: v('nuevo-estado'), Efectivos: parseInt(v('nuevo-efectivos')) || 0,
+      Vehiculos: parseInt(v('nuevo-vehiculos')) || 0, Equipos: v('nuevo-equipos').trim(), Novedades: v('nuevo-novedades').trim(), Lat: lat, Lon: lon, Sector: v('nuevo-sector'),
+      Operador: sesionActiva.nombre || 'Operador', Timestamp: Date.now() };
+    recursos.push({ id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, efectivos: r.Efectivos, vehiculos: r.Vehiculos, equipos: r.Equipos, novedades: r.Novedades, lat, lon, sector: r.Sector, operador: r.Operador, timestamp: r.Timestamp });
+    const msg = `Desplegó unidad: ${r.Nombre} (${r.Sector}) - Pers: ${r.Efectivos}, Veh: ${r.Vehiculos}`;
+    renderizarRecursos(); logEvento(msg); $('form-recurso').reset();
+    await ejecutarAccionAuditada('Recursos_Terreno', 'INSERT', r, msg);
+  };
+
+  /* 7) Cerrar sesion: borra datos del navegador y recarga (antes los datos quedaban detras del login) */
+  window.cerrarSesionCOP = function () {
+    if (!sesionActiva.autenticado) return;
+    try { localStorage.removeItem('cop_recursos_local_v1'); localStorage.removeItem('cop_bitacora_v1'); } catch (_) { /* sin acceso */ }
+    location.reload();
+  };
+
+  /* 8) Los cortes y zonas del modulo automatico son estimaciones propias, no datos oficiales */
+  setTimeout(() => { const s = document.querySelector('#panel-auto-inundaciones summary'); if (s) s.textContent = '🚧🌊 Cortes y zonas inundadas (ESTIMADOS, NO OFICIALES)'; }, 1500);
 })();
 </script>
+<!-- ===== FIN BLOQUE CLIENTE SEGURO ===== -->
+
 <!-- ============ A.R.E.S.: PANTALLA DE ACCESO OPACA + MODO INVITADO RESTRINGIDO + ESCUDO ============
      Pegar justo antes de </body>, DESPUES de bloque-cliente-seguro.html -->
 <style>
