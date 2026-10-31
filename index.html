@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I (NEA)</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-c</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-d</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -2460,7 +2460,9 @@ window.addEventListener('DOMContentLoaded', () => {
         let lat = escalar(h.Lat, 90), lon = escalar(h.Lon, 180);
         if (!isFinite(lat) || !isFinite(lon)) { lat = fb[0]; lon = fb[1]; }
         return { id, estacion: String(h.Estacion || 'Estación').trim(), rio: String(h.Rio || '').trim(), actual: escalar(h.Actual_m, 25), alerta: escalar(h.Alerta_m, 25), evacuacion: escalar(h.Evacuacion_m, 25),
-          tendencia: (h.Tendencia && String(h.Tendencia) !== 'NaN') ? String(h.Tendencia).trim() : '═', ts: Number(h.Timestamp) || 0, lat, lon, qIna: num(h.Q_m3s), fuente: String(h.Fuente || 'Planilla').trim() };
+          tendencia: (h.Tendencia && String(h.Tendencia) !== 'NaN') ? String(h.Tendencia).trim() : '═', ts: Number(h.Timestamp) || 0, lat, lon, qIna: num(h.Q_m3s), fuente: String(h.Fuente || 'Planilla').trim(),
+          variacion: h.Variacion_m === '' || h.Variacion_m == null ? null : num(h.Variacion_m), periodo: String(h.Periodo || '').trim(), fechaHora: String(h.Fecha_Hora || '').trim(), estadoPNA: String(h.Estado_PNA || '').trim(),
+          regAnterior: h.Reg_Anterior_m === '' || h.Reg_Anterior_m == null ? null : num(h.Reg_Anterior_m), fechaAnterior: String(h.Fecha_Anterior || '').trim() };
       }).filter(h => isFinite(h.lat) && isFinite(h.lon));
       if (remotos.length) estacionesHidro = remotos.map(r => (locales[r.id] && locales[r.id].ts > r.ts) ? Object.assign({}, r, locales[r.id]) : r);
     }));
@@ -3206,5 +3208,132 @@ window.addEventListener('DOMContentLoaded', () => {
   if (typeof sesionActiva !== 'undefined' && sesionActiva.autenticado && !sesionActiva.invitado) window.cargarAeronavesMision();
 })();
 </script>
+<!-- ===== INICIO BLOQUE PREFECTURA DATOS: pegar ULTIMO, antes de </body>, despues del bloque de aeronaves ===== -->
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const N = '-?\\d+(?:[.,]\\d+)?';
+  const FECHA = '\\d{1,2}\\s*[\\/-]\\s*(?:[A-Z]{3,4}|\\d{1,2})\\s*[\\/-]\\s*\\d{2,4}(?:\\s*[-,]?\\s*\\d{2}\\s*:?\\s*\\d{2})?';
+  const num = s => { const v = parseFloat(String(s).replace(',', '.').replace('+', '')); return isFinite(v) ? v : NaN; };
+  const bonito = t => { t = String(t || '').trim().toLowerCase(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ''; };
+  const limpiarFecha = f => String(f || '').replace(/\s*([\/-])\s*/g, '$1').replace(/\s*[-,]\s*(\d{2}):?(\d{2})$/, ' $1:$2').replace(/\s+(\d{2}):?(\d{2})$/, ' $1:$2');
+
+  /* Lee UNA fila del reporte de Prefectura. Orden de columnas:
+     Puerto | Rio | Ult. registro | Variacion | Periodo | Fecha Hora | Estado | Registro anterior | Fecha anterior | Alerta | Evacuacion */
+  window.leerFilaPNA = function (frag) {
+    const r = {};
+    const d1 = new RegExp(FECHA).exec(frag);
+    if (!d1) {                                                             // sin fechas: solo numeros en orden
+      const n = (frag.match(new RegExp(N, 'g')) || []).map(num).filter(isFinite);
+      r.actual = n[0]; r.variacion = n[1]; r.periodo = n[2]; r.regAnterior = n[3]; r.alerta = n[4]; r.evacuacion = n[5];
+      return r;
+    }
+    const antes = frag.slice(0, d1.index);
+    const nA = (antes.match(new RegExp(N, 'g')) || []);
+    r.actual = num(nA[0]); r.variacion = nA.length > 1 ? num(nA[1]) : NaN;
+    const resto = antes.replace(new RegExp(N), ' ').replace(new RegExp(N), ' ').trim();           // lo que sobra entre variacion y fecha = periodo
+    r.periodo = resto ? resto.replace(/\s+/g, ' ').slice(0, 20) : '';
+    r.fechaHora = limpiarFecha(d1[0]);
+
+    const despues = frag.slice(d1.index + d1[0].length);
+    const d2 = new RegExp(FECHA).exec(despues);
+    const medio = d2 ? despues.slice(0, d2.index) : despues.slice(0, 60);
+    const estado = (medio.match(/[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ .\/]{2,24}/) || [''])[0].trim();
+    r.estado = bonito(estado);
+    const nm = medio.replace(estado, ' ').match(new RegExp(N, 'g'));
+    if (nm) r.regAnterior = num(nm[nm.length - 1]);
+    if (d2) {
+      r.fechaAnterior = limpiarFecha(d2[0]);
+      const cola = despues.slice(d2.index + d2[0].length);
+      const m = new RegExp('^\\s*(' + N + ')(?:\\s+(' + N + '))?').exec(cola);        // solo numeros pegados a la fecha: no invade la fila siguiente
+      if (m) { r.alerta = num(m[1]); r.evacuacion = m[2] !== undefined ? num(m[2]) : NaN; }
+    } else {
+      const m = new RegExp('^\\s*(' + N + ')?\\s*(' + N + ')?\\s*(' + N + ')?').exec(despues.replace(estado, ' '));
+      if (m) { r.regAnterior = num(m[1]); r.alerta = num(m[2]); r.evacuacion = num(m[3]); }
+    }
+    return r;
+  };
+
+  const ESTACIONES = [
+    { id: 'H1', estacion: 'Barranqueras', rio: 'Paraná', lat: -27.485, lon: -58.932, alertaDef: 6.0, evacDef: 6.5, regex: /\bBARRANQUERAS\s+PARANA\b/i },
+    { id: 'H2', estacion: 'Corrientes Capital', rio: 'Paraná', lat: -27.462, lon: -58.838, alertaDef: 6.5, evacDef: 7.0, regex: /\bCORRIENTES\s+PARANA\b/i },
+    { id: 'H3', estacion: 'Paso de la Patria / Cerrito', rio: 'Paraná', lat: -27.310, lon: -58.580, alertaDef: 6.5, evacDef: 7.0, regex: /\bPASO\s+DE\s+LA\s+PATRIA\s+PARANA\b/i },
+    { id: 'H4', estacion: 'Puerto Bermejo', rio: 'Paraguay', lat: -26.928, lon: -58.502, alertaDef: 6.5, evacDef: 7.0, regex: /\b(?:PUERTO\s+)?BERMEJO\s+PARAGUAY\b/i },
+    { id: 'H5', estacion: 'Empedrado', rio: 'Paraná', lat: -27.950, lon: -58.810, alertaDef: 6.5, evacDef: 7.0, regex: /\bEMPEDRADO\s+PARANA\b/i },
+    { id: 'H6', estacion: 'Goya', rio: 'Paraná', lat: -29.145, lon: -59.265, alertaDef: 5.2, evacDef: 5.7, regex: /\bGOYA\s+PARANA\b/i }
+  ];
+
+  window.procesarTextoLineasPNA = function (fullText, nombreArchivo) {
+    if (!fullText || !fullText.trim()) return;
+    const plano = fullText.replace(/[\r\n|;]+/g, ' ').replace(/\s+/g, ' ').toUpperCase();
+    let actualizadas = 0;
+    ESTACIONES.forEach(cfg => {
+      const m = cfg.regex.exec(plano); if (!m) return;
+      const f = leerFilaPNA(plano.substring(m.index + m[0].length, m.index + m[0].length + 170));
+      if (!isFinite(f.actual) || f.actual < -2 || f.actual > 45) return;
+      let tendencia = '═';
+      if (f.variacion > 0 || /CRECE|SUBE|↑|▲/.test(f.estado ? f.estado.toUpperCase() : '')) tendencia = '▲';
+      else if (f.variacion < 0 || /BAJA|DESCIENDE|↓|▼/.test(f.estado ? f.estado.toUpperCase() : '')) tendencia = '▼';
+      const ok = v => isFinite(v) && v > 0 && v < 45;
+      let h = (estacionesHidro || []).find(x => x.id === cfg.id);
+      if (!h) { h = { id: cfg.id, estacion: cfg.estacion, rio: cfg.rio, lat: cfg.lat, lon: cfg.lon }; estacionesHidro.push(h); }
+      Object.assign(h, {
+        actual: f.actual, alerta: ok(f.alerta) ? f.alerta : cfg.alertaDef, evacuacion: ok(f.evacuacion) ? f.evacuacion : cfg.evacDef, tendencia, ts: Date.now(), fuente: 'PNA Oficial (PDF)',
+        variacion: isFinite(f.variacion) ? f.variacion : null, periodo: f.periodo || '', fechaHora: f.fechaHora || '', estadoPNA: f.estado || '',
+        regAnterior: isFinite(f.regAnterior) ? f.regAnterior : null, fechaAnterior: f.fechaAnterior || ''
+      });
+      actualizadas++;
+      if (typeof logEvento === 'function') logEvento(`Ingesta PDF: ${h.estacion} -> ${f.actual.toFixed(2)} m (${tendencia})`);
+      ejecutarAccionAuditada('Hidrometria', 'UPDATE', {
+        ID: h.id, Actual_m: h.actual, Alerta_m: h.alerta, Evacuacion_m: h.evacuacion, Tendencia: h.tendencia, Timestamp: h.ts, Fuente: h.fuente,
+        Variacion_m: h.variacion === null ? '' : h.variacion, Periodo: h.periodo, Fecha_Hora: h.fechaHora, Estado_PNA: h.estadoPNA,
+        Reg_Anterior_m: h.regAnterior === null ? '' : h.regAnterior, Fecha_Anterior: h.fechaAnterior
+      }, `Ingesta PDF ${h.estacion}: ${f.actual}m`);
+    });
+    if (typeof poblarSelectorNivel === 'function') poblarSelectorNivel();
+    if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
+    if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
+    if (typeof window.actualizarDashboardAnalytics === 'function') window.actualizarDashboardAnalytics();
+    const st = $('pdf-status'), esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    if (actualizadas > 0) {
+      if (st) st.innerHTML = `<b style="color:#16a34a">✅ ${actualizadas} estaciones actualizadas desde ${esc2(nombreArchivo || 'reporte')}</b>`;
+    } else {
+      if (st) st.innerHTML = '<span style="color:#ef4444">⚠ No se identificaron estaciones coincidentes en el archivo.</span>';
+      alert('No se identificaron las estaciones del NEA en el archivo seleccionado.');
+    }
+  };
+
+  /* ---- Cuadro Comparativo Hidrico: ahora con todas las columnas del parte de Prefectura ---- */
+  function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  const m2 = v => (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? '—' : Number(v).toFixed(2);
+  function armarTabla() {
+    const t = $('tabla-analitica-rios'); if (!t) return;
+    if (!t.dataset.pna) {
+      t.dataset.pna = '1';
+      t.querySelector('thead').innerHTML = '<tr><th>Puerto</th><th>Río</th><th>Últ. registro (m)</th><th>Variación</th><th>Período</th><th>Fecha / Hora</th><th>Estado PNA</th>' +
+        '<th>Reg. anterior (m)</th><th>Fecha anterior</th><th>Alerta (m)</th><th>Evacuación (m)</th><th>Estado operativo</th><th>Caudal (INA / GloFAS)</th><th>Tendencia</th></tr>';
+      const caja = t.parentNode; if (caja) caja.style.cssText += ';overflow-x:auto';
+      t.style.minWidth = '1100px';
+    }
+    const tb = t.querySelector('tbody'); tb.innerHTML = '';
+    (estacionesHidro || []).forEach(h => {
+      const e = (typeof estadoHidro === 'function') ? estadoHidro(h) : { color: '#64748b', txt: '' };
+      const v = h.variacion, vtxt = (v === null || v === undefined || !isFinite(Number(v))) ? '—' : (Number(v) > 0 ? '+' : '') + Number(v).toFixed(2);
+      const sinPDF = !String(h.fuente || '').includes('PDF');
+      tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b></td><td>${esc(h.rio)}</td><td><b>${m2(h.actual)}</b></td>` +
+        `<td style="color:${Number(v) > 0 ? '#dc2626' : Number(v) < 0 ? '#16a34a' : 'inherit'}">${vtxt}</td><td>${esc(h.periodo || '—')}</td><td>${esc(h.fechaHora || '—')}</td><td>${esc(h.estadoPNA || '—')}</td>` +
+        `<td>${m2(h.regAnterior)}</td><td>${esc(h.fechaAnterior || '—')}</td><td>${m2(h.alerta)}</td><td>${m2(h.evacuacion)}</td>` +
+        `<td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${typeof textoQ === 'function' ? textoQ(h) : '—'}</td><td>${esc(h.tendencia || '═')}</td></tr>`);
+    });
+    if (!tb.children.length) tb.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#64748b">Sin estaciones cargadas.</td></tr>';
+  }
+  const orig = window.actualizarDashboardAnalytics;
+  window.actualizarDashboardAnalytics = function () { if (typeof orig === 'function') orig.apply(this, arguments); try { armarTabla(); } catch (e) { console.error('tabla PNA', e); } };
+  setTimeout(() => { try { armarTabla(); } catch (_) {} }, 600);
+})();
+</script>
+<!-- ===== FIN BLOQUE PREFECTURA DATOS ===== -->
+
 </body>
 </html>
