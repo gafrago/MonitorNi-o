@@ -70,7 +70,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I (NEA)</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-b</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -2389,7 +2389,7 @@ window.addEventListener('DOMContentLoaded', () => {
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  let busy = false;
+  let busy = false, pendiente = false;
 
   /* 1) INGRESO: el encabezado nuevo no tenia el elemento "op-name"; al entrar, el codigo fallaba
         y mostraba "Error de enlace" aunque el servidor hubiera aceptado las credenciales. */
@@ -2429,17 +2429,22 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   window.refrescarDatosServer = async function () {
-    if (!sesionActiva.autenticado || busy) return;
+    if (!sesionActiva.autenticado) return;
+    if (busy) { pendiente = true; return; }           // si ya hay una sincronizacion en curso, se repite apenas termine (p. ej. recien guardada una mision)
     busy = true;
     try { await sincronizar(); } catch (e) { console.error('Sincronizacion:', e); const st0 = $('sync-status'); if (st0) { st0.innerText = '🔴 Fallo: ' + (e && e.message || 'error'); st0.style.color = '#f87171'; } }
-    finally { busy = false; }                        // pase lo que pase, la proxima sincronizacion puede correr
+    finally { busy = false; if (pendiente) { pendiente = false; setTimeout(() => window.refrescarDatosServer(), 50); } }   // pase lo que pase, la proxima sincronizacion puede correr
   };
   async function sincronizar() {
     const st = $('sync-status'); if (st) { st.innerText = '🟡 Sincronizando...'; st.style.color = '#fbbf24'; }
     if (!mapTactico) inicializarMapas();
     const fallos = [], paso = async (n, fn) => { try { await fn(); } catch (e) { if (e.message !== 'sesion') fallos.push(n); } };
 
-    await paso('Ríos', async () => {
+    const tbM = document.querySelector('#tabla-misiones tbody');
+    if (tbM && /Esperando login/.test(tbM.innerText) && !sesionActiva.invitado) tbM.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">⏳ Cargando misiones…</td></tr>';
+    const tareas = [];                                // las tres lecturas corren a la vez (antes eran una tras otra y sumaban la demora de Google)
+
+    tareas.push(paso('Ríos', async () => {
       const j = await (await conTiempo(`${COP_API_URL}?action=getData&tab=Hidrometria`)).json();
       if (j.status !== 'success') throw new Error(j.message || 'error');
       const locales = {}; (estacionesHidro || []).forEach(h => { if (String(h.fuente || '').includes('PDF')) locales[h.id] = h; });
@@ -2451,23 +2456,24 @@ window.addEventListener('DOMContentLoaded', () => {
           tendencia: (h.Tendencia && String(h.Tendencia) !== 'NaN') ? String(h.Tendencia).trim() : '═', ts: Number(h.Timestamp) || 0, lat, lon, qIna: num(h.Q_m3s), fuente: String(h.Fuente || 'Planilla').trim() };
       }).filter(h => isFinite(h.lat) && isFinite(h.lon));
       if (remotos.length) estacionesHidro = remotos.map(r => (locales[r.id] && locales[r.id].ts > r.ts) ? Object.assign({}, r, locales[r.id]) : r);
-    });
+    }));
 
     if (!sesionActiva.invitado) {
-      await paso('Unidades', async () => {
+      tareas.push(paso('Unidades', async () => {
         const j = await leerSeguro('Recursos_Terreno'); if (j.status !== 'success') throw new Error(j.message);
         recursos = j.data.map(r => ({ id: r.ID, nombre: r.Nombre, inst: r.Institucion, estado: r.Estado, lat: escalar(r.Lat, 90), lon: escalar(r.Lon, 180), sector: r.Sector, operador: r.Operador,
           efectivos: r.Efectivos, vehiculos: r.Vehiculos, equipos: r.Equipos, novedades: r.Novedades, timestamp: Number(r.Timestamp) })).filter(r => isFinite(r.lat) && isFinite(r.lon));
-      });
-      await paso('Misiones', async () => {
+      }));
+      tareas.push(paso('Misiones', async () => {
         try { const j = await leerSeguro('Misiones'); if (j.status !== 'success') throw new Error(j.message || 'el servidor no devolvio las misiones'); procesarMisiones(j.data || []); }
         catch (e) {
           const tb = document.querySelector('#tabla-misiones tbody');
           if (tb && e.message !== 'sesion') tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#b91c1c">⚠ No se pudieron cargar las misiones: ' + (e && e.name === 'AbortError' ? 'Google tardó demasiado en responder (reintenta solo en 30 s)' : String(e.message || e).replace(/[<>&]/g, '')) + '</td></tr>';
           throw e;
         }
-      });
+      }));
     }
+    await Promise.all(tareas);
 
     renderizarRecursos(); poblarSelectorNivel(); renderizarHidrometria(); dibujarRiosEstrategico();
     if (!window.glofasIniciado) { window.glofasIniciado = true; cargarCaudalesGloFAS(); }
@@ -2512,7 +2518,6 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE CLIENTE SEGURO ===== -->
-
 <!-- ============ A.R.E.S.: PANTALLA DE ACCESO OPACA + MODO INVITADO RESTRINGIDO + ESCUDO ============
      Pegar justo antes de </body>, DESPUES de bloque-cliente-seguro.html -->
 <style>
