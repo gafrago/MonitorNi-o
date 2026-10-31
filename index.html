@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>A.R.E.S. C4I | Sistema de Comando Operativo Interfuerzas (NEA)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script>
+/* diagnostico: muestra en pantalla el primer error de JavaScript */
+window.addEventListener('error',function(ev){try{if(window.__errMostrado)return;window.__errMostrado=1;var d=document.createElement('div');d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#7f1d1d;color:#fff;font:12px monospace;padding:6px 10px';d.textContent='Error JS: '+ev.message+' (línea '+ev.lineno+')';document.body.appendChild(d);}catch(_){}});
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <!-- LECTOR NATIVO DE PDFS EN EL NAVEGADOR -->
@@ -70,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I (NEA)</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-b</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-c</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -2407,13 +2411,16 @@ window.addEventListener('DOMContentLoaded', () => {
   };
 
   /* 3) Se descartan los niveles de rio inventados que trae el codigo al arrancar y los datos de unidades guardados en el navegador */
+  try {
   estacionesHidro = (estacionesHidro || []).map(h => String(h.fuente || '').includes('PDF') ? h
     : Object.assign({}, h, { actual: NaN, ts: 0, tendencia: '═', fuente: 'SIN DATO (pendiente de sincronizar)' }));
   recursos = [];
   try { localStorage.removeItem('cop_recursos_local_v1'); } catch (_) { /* sin acceso */ }
 
+  } catch (e) { console.error('init cliente seguro', e); window.__errInit = e.message; }
+
   /* 4) Lector de PDF: se desactiva la ejecucion de codigo embebido (falla CVE-2024-4367 de pdf.js) */
-  if (window.pdfjsLib && pdfjsLib.getDocument) { const g = pdfjsLib.getDocument.bind(pdfjsLib); pdfjsLib.getDocument = src => g(Object.assign({}, src, { isEvalSupported: false })); }
+  try { if (window.pdfjsLib && pdfjsLib.getDocument) { const g = pdfjsLib.getDocument.bind(pdfjsLib); pdfjsLib.getDocument = src => g(Object.assign({}, src, { isEvalSupported: false })); } } catch (e) { console.error('pdfjs', e); }
 
   /* 5) Lectura de datos: unidades, misiones y aeronaves por POST con token; rios por GET publico */
   const num = v => (v === null || v === undefined || v === '') ? NaN : (typeof v === 'number' ? v : parseFloat(String(v).trim().replace(',', '.')));
