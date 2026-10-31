@@ -3130,6 +3130,57 @@ window.addEventListener('DOMContentLoaded', () => {
   };
 })();
 </script>
+<!-- ============ A.R.E.S.: LISTA DE AERONAVES PARA PLANIFICAR VUELOS (a prueba de variantes en la hoja) ============
+     Pegar antes de </body>, DESPUES de bloque-cliente-seguro.html (reemplaza su funcion cargarAeronavesMision). -->
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  // Normaliza nombres de columna: "Matrícula", "matricula ", "Base_Asiento" -> matricula / baseasiento
+  function k(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); }
+  function campo(fila, nombres) { var ks = Object.keys(fila); for (var i = 0; i < nombres.length; i++) { for (var j = 0; j < ks.length; j++) if (k(ks[j]) === nombres[i]) return { clave: ks[j], valor: fila[ks[j]] }; } return null; }
+  var SI = ['si', 'true', '1', 'yes', 'disponible', 'operativa', 'operativo', 'ok', 'x'];
 
+  async function pedir() {
+    var r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_SECURE_DATA', tab: 'Aeronaves', email: sesionActiva.email, pin: sesionActiva.pin }) });
+    return r.json();
+  }
+  function mensaje(sel, txt) { sel.innerHTML = ''; var o = new Option(txt, ''); sel.add(o); }
+
+  var cargando = false;
+  window.cargarAeronavesMision = async function () {
+    var sel = $('mis-medio'); if (!sel || typeof sesionActiva === 'undefined' || !sesionActiva.autenticado || sesionActiva.invitado || cargando) return;
+    cargando = true; var previo = sel.value; mensaje(sel, 'Consultando aeronaves…');
+    try {
+      var j = await pedir();
+      if (j.status !== 'success') { mensaje(sel, '⚠ ' + (j.message || 'No se pudo leer la hoja Aeronaves') + ' (tocar para reintentar)'); return; }
+      var filas = (j.data || []).filter(function (f) { return f && Object.keys(f).some(function (c) { return String(f[c]).trim() !== ''; }); });
+      if (!filas.length) { mensaje(sel, '⚠ La hoja Aeronaves no tiene filas cargadas'); return; }
+      var disp = [], no = [], sinMat = 0;
+      filas.forEach(function (f) {
+        var m = campo(f, ['matricula', 'indicativo', 'aeronave', 'matriculaaeronave', 'id', 'nombre', 'codigo']);
+        if (!m || String(m.valor).trim() === '') { sinMat++; return; }
+        var t = campo(f, ['tipo', 'modelo', 'tipoaeronave', 'tipodeaeronave']), b = campo(f, ['baseasiento', 'base', 'asiento', 'unidad', 'baseasignada']), d = campo(f, ['disponible', 'disponibilidad', 'estado', 'situacion', 'operativa']);
+        var mat = String(m.valor).trim(), txt = mat + (t && String(t.valor).trim() ? ' - ' + String(t.valor).trim() : '') + (b && String(b.valor).trim() ? ' (Base: ' + String(b.valor).trim() + ')' : '');
+        var ok = d ? SI.indexOf(k(d.valor)) >= 0 : true;            // sin columna de disponibilidad: todas se consideran disponibles
+        (ok ? disp : no).push({ mat: mat, txt: txt });
+      });
+      sel.innerHTML = '';
+      if (!disp.length && !no.length) { mensaje(sel, '⚠ No encuentro la columna de matrícula en la hoja Aeronaves (revisar encabezados)'); return; }
+      sel.add(new Option(disp.length ? 'Seleccione aeronave disponible… (' + disp.length + ')' : '⚠ Ninguna aeronave figura como disponible', ''));
+      disp.forEach(function (a) { sel.add(new Option(a.txt, a.mat)); });
+      if (no.length) { var g = document.createElement('optgroup'); g.label = 'No disponibles (no se pueden asignar)'; no.forEach(function (a) { var o = new Option(a.txt, a.mat); o.disabled = true; g.appendChild(o); }); sel.appendChild(g); }
+      if (previo) sel.value = previo;
+    } catch (e) { mensaje(sel, '⚠ Sin conexión con el servidor (tocar para reintentar)'); }
+    finally { cargando = false; }
+  };
+
+  // Reintentos automaticos: al abrir el panel de misiones y al tocar la lista si esta vacia o con error
+  var panel = $('panel-misiones'), sel = $('mis-medio');
+  if (panel) panel.addEventListener('toggle', function () { if (panel.open) window.cargarAeronavesMision(); });
+  if (sel) sel.addEventListener('mousedown', function () { if (!sel.value && (sel.options.length <= 1 || /⚠|Consultando/.test(sel.options[0].text))) window.cargarAeronavesMision(); });
+  if (typeof sesionActiva !== 'undefined' && sesionActiva.autenticado && !sesionActiva.invitado) window.cargarAeronavesMision();
+})();
+</script>
 </body>
 </html>
