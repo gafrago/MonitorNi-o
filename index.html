@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-01-g</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-h</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -3462,7 +3462,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const SEV = { BAJA: '#16a34a', MEDIA: '#d97706', ALTA: '#ea580c', CRITICA: '#b91c1c' };
   const TIPOS = { INCENDIO: '🔥 Incendio', SISMO_DANOS: '🌐 Sismo / daños', INUNDACION: '🌊 Inundación', DERRUMBE: '⛰️ Derrumbe / alud', TORMENTA: '⛈️ Tormenta severa', OTRO: '⚠️ Otro' };
-  let T = null, mods = [], eventos = [], sismos = [], timers = [];
+  let T = null, mods = [], eventos = [], sismos = [], tormentas = [], timers = [];
   const tiene = m => mods.indexOf(m) >= 0;
   const mapas = () => { const a = []; try { if (mapTactico) a.push(mapTactico); } catch (_) {} try { if (mapRadar) a.push(mapRadar); } catch (_) {} return a; };
   const grupos = new Map();                                    // mapa -> {sismos, eventos}
@@ -3489,6 +3489,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) montarEventos();
     if (tiene('SISMOS')) { montarSismos(); cargarSismos(); timers.push(setInterval(cargarSismos, 10 * 60000)); }
     if (tiene('INCENDIOS')) montarIncendios();
+    if (tiene('TORMENTAS')) { montarTormentas(); cargarTormentas(); timers.push(setInterval(cargarTormentas, 30 * 60000)); }
     setTimeout(redibujar, 1200);
   };
 
@@ -3521,6 +3522,51 @@ window.addEventListener('DOMContentLoaded', () => {
       if (tb) { tb.innerHTML = ''; sismos.slice(0, 25).forEach(s => { const tr = tb.insertRow(); [new Date(s.t).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), 'M ' + s.m.toFixed(1), isFinite(s.prof) ? s.prof.toFixed(0) + ' km' : '—', s.lugar, dist(T.lat, T.lon, s.lat, s.lon).toFixed(0) + ' km'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#d97706' : 'inherit'; } }); }); if (!sismos.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 5; td.style.cssText = 'text-align:center;color:#64748b'; td.textContent = 'Sin sismos registrados en la zona y el período.'; } }
       redibujar();
     } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el USGS (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
+    finally { clearTimeout(to); }
+  }
+
+
+  /* ================= 2b) TORMENTAS ELECTRICAS: potencial segun modelo (Open-Meteo, sin clave) =================
+     OJO: es un indice de POTENCIAL (energia convectiva CAPE, indice de ascenso, rafagas), no la deteccion de rayos en tiempo real. */
+  const RIESGO = [[2500, 'EXTREMO', '#b91c1c'], [1000, 'ALTO', '#ea580c'], [300, 'MODERADO', '#eab308'], [-1, 'BAJO', '#16a34a']];
+  const nivelCape = c => RIESGO.find(r => c > r[0]);
+  function montarTormentas() {
+    if ($('card-tormentas')) return;
+    const grid = document.querySelector('#vista-analytics .analytics-grid'); if (!grid) return;
+    const c = el('div', ''); c.className = 'analytics-card'; c.id = 'card-tormentas'; c.style.gridColumn = 'span 2';
+    c.appendChild(el('h4', '', '⛈️ Potencial de tormentas eléctricas (próximas 24 h)'));
+    c.appendChild(el('div', 'font-size:12px;color:#475569;margin-bottom:6px', '')).id = 'torm-info';
+    const caja = el('div', 'max-height:260px;overflow-y:auto'), tb = el('table'); tb.className = 'analytics-table'; tb.id = 'tabla-tormentas';
+    tb.innerHTML = '<thead><tr><th>Punto (lat, lon)</th><th>Potencial</th><th>CAPE máx.</th><th>Hora pico</th><th>Índice de ascenso</th><th>Ráfaga máx.</th><th>Lluvia 24 h</th></tr></thead><tbody></tbody>'; caja.appendChild(tb); c.appendChild(caja);
+    c.appendChild(el('div', 'font-size:11.5px;color:#64748b;margin-top:6px;line-height:1.5', 'Es un cálculo de modelo (Open-Meteo): indica dónde las condiciones favorecen tormentas fuertes, no dónde cayó un rayo. CAPE: ≥300 moderado · ≥1000 alto · ≥2500 extremo (valores de referencia). Para ver descargas eléctricas en tiempo real use un servicio de detección y el radar del Visor Estratégico.'));
+    const a = el('a', 'font-size:12px', 'Mapa público de rayos en vivo (Blitzortung) ↗'); a.href = 'https://www.blitzortung.org/en/live_lightning_maps.php'; a.target = '_blank'; a.rel = 'noopener'; c.appendChild(a);
+    grid.insertBefore(c, grid.firstChild);
+  }
+  async function cargarTormentas() {
+    if (!T || !tiene('TORMENTAS')) return;
+    const info = $('torm-info'), R = Math.min(Math.max(T.radio || 300, 50), 600), paso = R * 0.5, dLat = paso / 111, dLon = paso / (111 * Math.max(.2, Math.cos(T.lat * Math.PI / 180)));
+    const pts = []; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) pts.push([+(T.lat + i * dLat).toFixed(3), +(T.lon + j * dLon).toFixed(3)]);
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(p => p[0]).join(',') + '&longitude=' + pts.map(p => p[1]).join(',') + '&hourly=cape,lifted_index,wind_gusts_10m,precipitation&forecast_days=2&timezone=auto';
+    const c = new AbortController(), to = setTimeout(() => c.abort(), 25000);
+    try {
+      const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status);
+      let j = await r.json(); if (!Array.isArray(j)) j = [j];
+      const ahora = Date.now();
+      tormentas = j.map((d, k) => {
+        const h = d.hourly || {}, tt = (h.time || []).map(x => Date.parse(x)), idx = []; tt.forEach((x, n) => { if (x >= ahora - 3600e3 && x <= ahora + 24 * 3600e3) idx.push(n); });
+        const mx = arr => idx.reduce((m, n) => (isFinite(arr && arr[n]) && arr[n] > m.v ? { v: arr[n], n } : m), { v: -Infinity, n: -1 });
+        const cape = mx(h.cape), gust = mx(h.wind_gusts_10m), li = idx.reduce((m, n) => (isFinite(h.lifted_index && h.lifted_index[n]) ? Math.min(m, h.lifted_index[n]) : m), Infinity);
+        const lluvia = idx.reduce((a, n) => a + (isFinite(h.precipitation && h.precipitation[n]) ? h.precipitation[n] : 0), 0);
+        return { lat: pts[k][0], lon: pts[k][1], cape: isFinite(cape.v) ? cape.v : 0, hora: cape.n >= 0 ? new Date(tt[cape.n]) : null, li: isFinite(li) ? li : null, gust: isFinite(gust.v) ? gust.v : null, lluvia, paso };
+      });
+      const peor = tormentas.reduce((m, p) => p.cape > m.cape ? p : m, { cape: -1 });
+      if (info) { const n = peor.cape >= 0 ? nivelCape(peor.cape) : null; info.textContent = n ? 'Potencial máximo en el teatro: ' + n[1] + ' (CAPE ' + Math.round(peor.cape) + ' J/kg) · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Sin datos del modelo.'; info.style.color = n ? n[2] : '#475569'; info.style.fontWeight = 'bold'; }
+      const tb = document.querySelector('#tabla-tormentas tbody');
+      if (tb) { tb.innerHTML = ''; tormentas.slice().sort((a, b) => b.cape - a.cape).forEach(p => { const n = nivelCape(p.cape), tr = tb.insertRow();
+        [p.lat.toFixed(2) + ', ' + p.lon.toFixed(2), n[1], Math.round(p.cape) + ' J/kg', p.hora ? p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—', p.li === null ? '—' : p.li.toFixed(1), p.gust === null ? '—' : Math.round(p.gust) + ' km/h', p.lluvia.toFixed(1) + ' mm']
+          .forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = n[2]; } }); }); }
+      redibujar();
+    } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el modelo (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
     finally { clearTimeout(to); }
   }
 
@@ -3629,6 +3675,11 @@ window.addEventListener('DOMContentLoaded', () => {
         const gs = g(map, 'sismos'); gs.clearLayers();
         sismos.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4 + s.m * 2, color: '#fff', weight: 1, fillColor: s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#ea580c' : '#eab308', fillOpacity: .8 }).addTo(gs)
           .bindPopup('<b>M ' + s.m.toFixed(1) + '</b><br>' + String(s.lugar).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) + '<br>' + new Date(s.t).toLocaleString('es-AR')));
+      }
+      if (tiene('TORMENTAS')) {
+        const gt = g(map, 'tormentas'); gt.clearLayers();
+        tormentas.forEach(p => { const n = nivelCape(p.cape); L.circle([p.lat, p.lon], { radius: p.paso * 500, color: n[2], weight: 1, fillColor: n[2], fillOpacity: p.cape >= 300 ? .28 : .08 }).addTo(gt)
+          .bindPopup('<b>⛈️ Potencial ' + n[1] + '</b><br>CAPE máx. ' + Math.round(p.cape) + ' J/kg' + (p.hora ? '<br>Pico: ' + p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (p.gust !== null ? '<br>Ráfaga máx. ' + Math.round(p.gust) + ' km/h' : '') + '<br><small>Modelo; no es detección de rayos</small>'); });
       }
       if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) {
         const ge = g(map, 'eventos'); ge.clearLayers();
