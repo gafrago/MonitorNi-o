@@ -73,14 +73,14 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <!-- MODAL DE ACCESO OPERACIONAL -->
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-    <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I (NEA)</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-10-31-d</div>
+    <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-01-g</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
-    <input type="email" id="login-email" placeholder="gfgonzalez@faa.mil.ar" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+    <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">PIN operacional:</label>
-    <input type="password" id="login-pin" maxlength="12" placeholder="****" onkeydown="if(event.key==='Enter') iniciarSesionCOP();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
+    <input type="password" id="login-pin" autocomplete="new-password" maxlength="12" placeholder="****" onkeydown="if(event.key==='Enter') iniciarSesionCOP();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; letter-spacing: 2px;">
     
     <button type="button" onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
     <div id="login-error" style="color: #ef4444; font-size: 0.8rem; margin-top: 0.75rem; text-align: center; display: none;">Credenciales inválidas</div>
@@ -3003,7 +3003,7 @@ window.addEventListener('DOMContentLoaded', () => {
       var m = document.createElement('meta'); m.httpEquiv = 'Content-Security-Policy';
       m.content = "object-src 'none'; base-uri 'none'; form-action 'none'; "
         + "connect-src 'self' https://script.google.com https://script.googleusercontent.com https://api.open-meteo.com https://flood-api.open-meteo.com https://router.project-osrm.org "
-        + "https://photon.komoot.io https://apis.datos.gob.ar https://overpass-api.de https://api.rainviewer.com https://tilecache.rainviewer.com https://gibs.earthdata.nasa.gov https://*.tile.openstreetmap.org;";
+        + "https://photon.komoot.io https://apis.datos.gob.ar https://overpass-api.de https://api.rainviewer.com https://tilecache.rainviewer.com https://gibs.earthdata.nasa.gov https://earthquake.usgs.gov https://*.tile.openstreetmap.org;";
       document.head.appendChild(m);
     }
   } catch (e) {}
@@ -3277,6 +3277,7 @@ window.addEventListener('DOMContentLoaded', () => {
       else if (f.variacion < 0 || /BAJA|DESCIENDE|↓|▼/.test(f.estado ? f.estado.toUpperCase() : '')) tendencia = '▼';
       const ok = v => isFinite(v) && v > 0 && v < 45;
       let h = (estacionesHidro || []).find(x => x.id === cfg.id);
+      if (!h && window.ARES_TEATRO) return;                 // en un teatro solo se actualizan las estaciones que ese teatro tiene cargadas
       if (!h) { h = { id: cfg.id, estacion: cfg.estacion, rio: cfg.rio, lat: cfg.lat, lon: cfg.lon }; estacionesHidro.push(h); }
       Object.assign(h, {
         actual: f.actual, alerta: ok(f.alerta) ? f.alerta : cfg.alertaDef, evacuacion: ok(f.evacuacion) ? f.evacuacion : cfg.evacDef, tendencia, ts: Date.now(), fuente: 'PNA Oficial (PDF)',
@@ -3335,5 +3336,374 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 <!-- ===== FIN BLOQUE PREFECTURA DATOS ===== -->
 
+<!-- ===== INICIO BLOQUE TEATROS: pegar ULTIMO, antes de </body>, despues de todos los demas bloques ===== -->
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined) e.textContent = txt; return e; };
+  window.ARES_TEATRO = null;                                   // teatro activo de esta sesion (null = modo clasico)
+
+  const h2 = document.querySelector('#modal-login h2'); if (h2) h2.textContent = 'A.R.E.S. C4I';
+
+  /* ---- Elegir teatro (solo si el usuario pertenece a mas de uno) ---- */
+  function elegirTeatro(teatros, panel) {
+    return new Promise(resolve => {
+      const fondo = el('div', 'position:fixed;inset:0;z-index:2147483000;background:rgba(2,6,23,.97);display:flex;align-items:center;justify-content:center;font-family:sans-serif');
+      const caja = el('div', 'background:#1e293b;border:1px solid #334155;border-radius:8px;padding:22px;width:min(420px,92vw);color:#f8fafc;max-height:86vh;overflow:auto');
+      caja.appendChild(el('h3', 'margin:0 0 4px;font-size:17px', 'Seleccione el teatro de operaciones'));
+      caja.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:14px', 'Cada teatro es independiente: sus datos y usuarios no se mezclan.'));
+      teatros.forEach(t => {
+        const b = el('button', 'display:block;width:100%;text-align:left;margin:8px 0;padding:11px 12px;border-radius:6px;border:1px solid ' + (t.tipo === 'EJERCICIO' ? '#f59e0b' : '#3b82f6') + ';background:#0f172a;color:#fff;cursor:pointer;font-size:14px');
+        b.type = 'button';
+        b.appendChild(el('b', '', t.nombre));
+        b.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:3px', (t.tipo === 'EJERCICIO' ? '🟠 EJERCICIO / SIMULACIÓN' : '🔴 OPERATIVO REAL') + ' · rol: ' + t.rol));
+        b.onclick = () => { fondo.remove(); resolve(t); };
+        caja.appendChild(b);
+      });
+      if (panel) { const pm = el('button', 'margin-top:12px;width:100%;padding:10px;border-radius:6px;border:1px solid #b91c1c;background:#450a0a;color:#fff;cursor:pointer;font-size:13px;font-weight:bold', '🛰 Panel de mando (todos los teatros)'); pm.type = 'button'; pm.onclick = panel; caja.appendChild(pm); }
+      const cancelar = el('button', 'margin-top:10px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:12px;text-decoration:underline', 'Cancelar');
+      cancelar.type = 'button'; cancelar.onclick = () => { fondo.remove(); resolve(null); };
+      caja.appendChild(cancelar); fondo.appendChild(caja); document.body.appendChild(fondo);
+    });
+  }
+
+  /* ---- Aviso permanente del teatro activo ---- */
+  function marcarTeatro(t) {
+    ['teatro-badge', 'teatro-franja', 'teatro-cambiar', 'teatro-panel'].forEach(i => { const x = $(i); if (x) x.remove(); });
+    const banner = $('top-banner'), op = $('op-name');
+    const badge = el('span', 'margin:0 8px;padding:2px 8px;border-radius:4px;font-size:11.5px;font-weight:bold;background:' + (t.tipo === 'EJERCICIO' ? '#b45309' : '#1d4ed8') + ';color:#fff', '🎯 ' + t.nombre);
+    badge.id = 'teatro-badge';
+    if (op && op.parentNode) op.parentNode.insertBefore(badge, op); else if (banner) banner.appendChild(badge);
+    const cambiar = el('button', 'margin-left:6px;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;font-size:11px;padding:2px 7px;cursor:pointer', 'Cambiar teatro');
+    cambiar.id = 'teatro-cambiar'; cambiar.type = 'button'; cambiar.onclick = () => { if (confirm('Se cerrará la sesión para entrar a otro teatro. ¿Continuar?')) window.cerrarSesionCOP(); };
+    if (window.__nTeatros > 1 && op && op.parentNode) op.parentNode.insertBefore(cambiar, badge.nextSibling);
+    if (window.__super && op && op.parentNode) {
+      const pm = el('button', 'margin-left:6px;background:#450a0a;border:1px solid #b91c1c;color:#fff;border-radius:4px;font-size:11px;padding:2px 7px;cursor:pointer', '🛰 Panel de mando');
+      pm.id = 'teatro-panel'; pm.type = 'button'; pm.onclick = () => window.abrirPanelMando(sesionActiva.email, sesionActiva.pin);
+      (document.getElementById('teatro-panel') || {remove(){}}).remove(); op.parentNode.insertBefore(pm, (cambiar.parentNode ? cambiar : badge).nextSibling);
+    }
+    if (t.tipo === 'EJERCICIO') {
+      const f = el('div', 'position:fixed;top:0;left:0;right:0;height:18px;line-height:18px;z-index:2147482000;background:repeating-linear-gradient(45deg,#b45309,#b45309 12px,#92400e 12px,#92400e 24px);color:#fff;text-align:center;font:bold 11px sans-serif;letter-spacing:.5px', 'EJERCICIO / SIMULACIÓN — DATOS DE PRÁCTICA, NO ES UN OPERATIVO REAL');
+      f.id = 'teatro-franja'; document.body.appendChild(f); document.body.style.paddingTop = '18px';
+    } else { document.body.style.paddingTop = ''; }
+    document.title = 'A.R.E.S. C4I · ' + t.nombre;
+  }
+
+  /* ---- Todo lo que depende del teatro: se limpia lo que traia el codigo por defecto (zona NEA) ---- */
+  function prepararTeatro(t) {
+    window.ARES_TEATRO = t;
+    try { estacionesHidro = []; } catch (_) {}                 // los rios salen de la hoja Hidrometria DE ESTE teatro, no de la lista NEA incluida en el codigo
+    try { recursos = []; } catch (_) {}
+    const tb = document.querySelector('#tabla-misiones tbody'); if (tb) tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b">⏳ Cargando misiones…</td></tr>';
+    marcarTeatro(t);
+    if (typeof window.aplicarModulos === 'function') window.aplicarModulos(t);
+  }
+  function centrarMapas(t) {
+    if (!isFinite(t.lat) || !isFinite(t.lon)) return;
+    try { if (!mapTactico) inicializarMapas(); mapTactico.setView([t.lat, t.lon], t.zoom || 8); } catch (_) {}
+    try { if (mapRadar) mapRadar.setView([t.lat, t.lon], Math.max(4, Math.min(9, (t.zoom || 8) - 1))); } catch (_) {}
+  }
+
+  /* ---- Ingreso (reemplaza a iniciarSesionCOP; mismo comportamiento + seleccion de teatro) ---- */
+  window.iniciarSesionCOP = async function () {
+    const emailInput = $('login-email').value.trim(), pinInput = $('login-pin').value.trim(), errDiv = $('login-error'), btn = $('btn-login');
+    if (!emailInput || !pinInput) { errDiv.innerText = 'Complete ambos campos'; errDiv.style.display = 'block'; return; }
+    errDiv.style.display = 'none'; btn.innerText = 'VERIFICANDO EN SERVIDOR...'; btn.disabled = true;
+    const post = async body => (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(body) })).json();
+    try {
+      let r = await post({ action: 'LOGIN', email: emailInput, pin: pinInput });
+      if (!(r.status === 'success' && r.usuario)) { errDiv.innerText = r.message || 'Credenciales inválidas o no autorizado.'; errDiv.style.display = 'block'; return; }
+      let teatro = r.teatro || null;
+      window.__nTeatros = (r.teatros || []).length; window.__super = !!r.superadmin;
+      const tokenPre = r.token, emailPre = r.usuario.email;
+      if (r.elegir) {
+        teatro = await elegirTeatro(r.teatros, window.__super ? () => window.abrirPanelMando(emailPre, tokenPre) : null);
+        if (!teatro) { $('login-pin').value = ''; return; }
+        r = await post({ action: 'ELEGIR_TEATRO', email: r.usuario.email, pin: r.token, teatro: teatro.id });
+        if (r.status !== 'success') { errDiv.innerText = r.message || 'No se pudo entrar al teatro.'; errDiv.style.display = 'block'; return; }
+        teatro = r.teatro;
+      }
+      const u = r.usuario;
+      sesionActiva = { autenticado: true, invitado: false, email: u.email, nombre: u.nombre, rol: u.rol, pin: r.token || pinInput, teatro: teatro ? teatro.id : '' };
+      if (teatro) prepararTeatro(teatro);
+      ['panel-alta', 'panel-misiones', 'panel-auto-inundaciones'].forEach(id => { const e = $(id); if (e) e.style.display = ''; });
+      const formNivel = document.querySelector('form[onsubmit="cargarNivelManual(event)"]');
+      if (formNivel) { const bg = formNivel.querySelector('button[type="submit"]'); if (bg) bg.style.display = ''; }
+      $('op-name').innerText = `${u.nombre} (${u.rol})`;
+      $('modal-login').style.display = 'none';
+      $('login-pin').value = ''; $('login-email').value = '';
+      reiniciarExpiracion();
+      if (!mapTactico) inicializarMapas();
+      if (teatro) centrarMapas(teatro);
+      poblarSelectorNivel();
+      if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria();
+      if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico();
+      cargarAeronavesMision();
+      if (typeof window.refrescarDatosServer === 'function') window.refrescarDatosServer();
+    } catch (err) {
+      console.error(err); errDiv.innerText = 'Error de enlace con el servidor de comando.'; errDiv.style.display = 'block';
+    } finally { btn.innerText = 'INGRESAR AL SISTEMA'; btn.disabled = false; }
+  };
+})();
+</script>
+<!-- ===== FIN BLOQUE TEATROS ===== -->
+<!-- ===== INICIO BLOQUE MODULOS: pegar ULTIMO (despues del bloque de teatros), antes de </body> ===== -->
+<style id="mod-css">
+  body.mod-no-hidrico #panel-rios, body.mod-no-hidrico #panel-auto-inundaciones, body.mod-no-hidrico .mod-h { display: none !important; }
+  body.mod-no-meteo .mod-m { display: none !important; }
+  body.mod-no-juris .mod-j { display: none !important; }
+  .mod-sev { display:inline-block; padding:1px 7px; border-radius:9px; color:#fff; font-size:11px; font-weight:bold; }
+</style>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const SEV = { BAJA: '#16a34a', MEDIA: '#d97706', ALTA: '#ea580c', CRITICA: '#b91c1c' };
+  const TIPOS = { INCENDIO: '🔥 Incendio', SISMO_DANOS: '🌐 Sismo / daños', INUNDACION: '🌊 Inundación', DERRUMBE: '⛰️ Derrumbe / alud', TORMENTA: '⛈️ Tormenta severa', OTRO: '⚠️ Otro' };
+  let T = null, mods = [], eventos = [], sismos = [], timers = [];
+  const tiene = m => mods.indexOf(m) >= 0;
+  const mapas = () => { const a = []; try { if (mapTactico) a.push(mapTactico); } catch (_) {} try { if (mapRadar) a.push(mapRadar); } catch (_) {} return a; };
+  const grupos = new Map();                                    // mapa -> {sismos, eventos}
+  function g(map, k) { let o = grupos.get(map); if (!o) { o = {}; grupos.set(map, o); } if (!o[k]) o[k] = L.layerGroup().addTo(map); return o[k]; }
+  const tiempo = ms => { const m = Math.round((Date.now() - ms) / 60000); return !ms ? 'sin actividad registrada' : m < 1 ? 'recién' : m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' días'; };
+
+  /* ================= 1) Mostrar solo lo que corresponde al tipo de emergencia ================= */
+  function marcar(sel, cierre, clase) { const e = document.querySelector(sel); const x = e && cierre ? e.closest(cierre) : e; if (x) x.classList.add(clase); }
+  window.aplicarModulos = function (t) {
+    T = t; mods = (t.modulos || []).map(String);
+    const b = document.body;
+    b.classList.toggle('mod-no-hidrico', !tiene('HIDRICO'));
+    b.classList.toggle('mod-no-meteo', !tiene('METEO'));
+    b.classList.toggle('mod-no-juris', !tiene('JURIS_NEA'));
+    marcar('#input-pdf-pna', 'details', 'mod-h'); marcar('#nivel-est', 'details', 'mod-h'); marcar('#chk-hidro', 'label', 'mod-h');
+    marcar('#tabla-analitica-rios', '.analytics-card', 'mod-h'); marcar('#bloque-prob', null, 'mod-h');
+    marcar('#pronostico-container', '.analytics-card', 'mod-m'); marcar('.radar-legend', null, 'mod-m');
+    marcar('#sel-depto', 'details', 'mod-j');
+    if (!tiene('HIDRICO')) { window.cargarCaudalesGloFAS = function () {}; window.glofasIniciado = true; }
+    if (!tiene('METEO')) window.cargarPronostico = function () {};
+    const tit = document.querySelector('#top-banner strong'); if (tit) tit.textContent = 'CENTRO DE OPERACIONES — ' + t.nombre.toUpperCase() + ' (A.R.E.S. C4I)';
+    const h2 = document.querySelector('#vista-analytics h2'); if (h2) h2.textContent = '📊 Panel de Inteligencia — ' + t.nombre;
+    timers.forEach(clearInterval); timers = [];
+    if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) montarEventos();
+    if (tiene('SISMOS')) { montarSismos(); cargarSismos(); timers.push(setInterval(cargarSismos, 10 * 60000)); }
+    if (tiene('INCENDIOS')) montarIncendios();
+    setTimeout(redibujar, 1200);
+  };
+
+  /* ================= 2) SISMOS en vivo (USGS, sin clave) ================= */
+  function montarSismos() {
+    if ($('card-sismos')) return;
+    const grid = document.querySelector('#vista-analytics .analytics-grid'); if (!grid) return;
+    const c = el('div', '', ''); c.className = 'analytics-card'; c.id = 'card-sismos'; c.style.gridColumn = 'span 2';
+    const h = el('h4', '', '🌐 Sismos recientes (USGS · últimos 7 días · M ≥ 2.5)'); c.appendChild(h);
+    c.appendChild(el('div', 'font-size:12px;color:#475569;margin-bottom:6px', '')).id = 'sismos-info';
+    const caja = el('div', 'max-height:260px;overflow-y:auto'); const tb = el('table'); tb.className = 'analytics-table'; tb.id = 'tabla-sismos';
+    tb.innerHTML = '<thead><tr><th>Hora</th><th>Mag.</th><th>Prof.</th><th>Lugar</th><th>Dist.</th></tr></thead><tbody></tbody>'; caja.appendChild(tb); c.appendChild(caja);
+    c.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:6px', 'Fuente: U.S. Geological Survey. Datos automáticos, pueden tardar minutos y corregirse. Para confirmación oficial consultar el INPRES.'));
+    grid.insertBefore(c, grid.firstChild);
+  }
+  const dist = (a, b, c, d) => { const R = 6371, r = x => x * Math.PI / 180, dl = r(c - a), dg = r(d - b), h = Math.sin(dl / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  async function cargarSismos() {
+    if (!T || !tiene('SISMOS')) return;
+    const info = $('sismos-info'); const ini = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=' + encodeURIComponent(T.lat) + '&longitude=' + encodeURIComponent(T.lon) +
+      '&maxradiuskm=' + encodeURIComponent(T.radio || 400) + '&starttime=' + ini + '&minmagnitude=2.5&orderby=time&limit=100';
+    const c = new AbortController(), to = setTimeout(() => c.abort(), 20000);
+    try {
+      const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      sismos = (j.features || []).map(f => ({ m: Number(f.properties.mag), lugar: String(f.properties.place || ''), t: Number(f.properties.time), prof: Number((f.geometry.coordinates || [])[2]), lon: Number(f.geometry.coordinates[0]), lat: Number(f.geometry.coordinates[1]) })).filter(s => isFinite(s.lat) && isFinite(s.lon));
+      const fuerte = sismos.filter(s => s.m >= 4.5).length;
+      if (info) { info.textContent = sismos.length + ' sismos dentro de ' + (T.radio || 400) + ' km del centro del teatro' + (fuerte ? ' · ' + fuerte + ' de magnitud ≥ 4.5' : '') + ' · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); info.style.color = fuerte ? '#b91c1c' : '#475569'; }
+      const tb = document.querySelector('#tabla-sismos tbody');
+      if (tb) { tb.innerHTML = ''; sismos.slice(0, 25).forEach(s => { const tr = tb.insertRow(); [new Date(s.t).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), 'M ' + s.m.toFixed(1), isFinite(s.prof) ? s.prof.toFixed(0) + ' km' : '—', s.lugar, dist(T.lat, T.lon, s.lat, s.lon).toFixed(0) + ' km'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#d97706' : 'inherit'; } }); }); if (!sismos.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 5; td.style.cssText = 'text-align:center;color:#64748b'; td.textContent = 'Sin sismos registrados en la zona y el período.'; } }
+      redibujar();
+    } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el USGS (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
+    finally { clearTimeout(to); }
+  }
+
+  /* ================= 3) INCENDIOS: focos de calor satelitales (NASA GIBS, sin clave) ================= */
+  const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+  const contFuego = { ok: 0, err: 0 }, capasFuego = new Map();
+  function montarIncendios() {
+    if ($('card-incendios')) return;
+    const grid = document.querySelector('#vista-analytics .analytics-grid'); if (!grid) return;
+    const c = el('div', ''); c.className = 'analytics-card'; c.id = 'card-incendios'; c.style.gridColumn = 'span 2';
+    c.appendChild(el('h4', '', '🔥 Focos de calor (satélites NASA · VIIRS / MODIS)'));
+    c.appendChild(el('div', 'font-size:12.5px;color:#334155;line-height:1.5', 'Las capas se activan en el Visor Táctico y en el Visor Estratégico (control de capas arriba a la izquierda del mapa). Cada punto es una detección térmica del satélite: puede ser un incendio, una quema controlada o una fuente industrial, y se actualiza algunas veces por día. No reemplaza la confirmación en terreno.'));
+    c.appendChild(el('div', 'font-size:12px;margin-top:6px;color:#475569', '')).id = 'fuego-estado';
+    const a = el('a', 'font-size:12px', 'Ver mapa de incendios activos de la NASA (FIRMS) ↗'); a.href = 'https://firms.modaps.eosdis.nasa.gov/map/'; a.target = '_blank'; a.rel = 'noopener'; c.appendChild(a);
+    grid.insertBefore(c, grid.firstChild);
+  }
+  function capasFuegoEn(map) {
+    if (capasFuego.has(map)) return;
+    const mk = (capa, nivel, nombre) => { const l = L.tileLayer(GIBS + '/' + capa + '/default/default/GoogleMapsCompatible_Level' + nivel + '/{z}/{y}/{x}.png', { maxNativeZoom: nivel, maxZoom: 18, opacity: .95, attribution: 'NASA GIBS / FIRMS' });
+      l.on('tileload', () => { contFuego.ok++; estadoFuego(); }); l.on('tileerror', () => { contFuego.err++; estadoFuego(); }); return l; };
+    const viirs = mk('VIIRS_SNPP_Thermal_Anomalies_375m_All', 9), modis = mk('MODIS_Terra_Thermal_Anomalies_All', 6);
+    viirs.addTo(map);
+    L.control.layers(null, { '🔥 Focos VIIRS 375 m (NASA)': viirs, '🔥 Focos MODIS 1 km (NASA)': modis }, { collapsed: true, position: 'topleft' }).addTo(map);
+    capasFuego.set(map, [viirs, modis]);
+  }
+  function estadoFuego() { const e = $('fuego-estado'); if (e) e.textContent = 'Capa satelital: ' + contFuego.ok + ' mosaicos cargados' + (contFuego.err ? ', ' + contFuego.err + ' sin respuesta (sin focos o sin conexión con la NASA)' : '') + '.'; }
+
+  /* ================= 4) ZONAS Y EVENTOS cargados por el personal (cualquier tipo de emergencia) ================= */
+  async function leer(tab) {
+    const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_SECURE_DATA', tab, email: sesionActiva.email, pin: sesionActiva.pin }) });
+    return r.json();
+  }
+  async function cargarEventos() {
+    if (!sesionActiva.autenticado || sesionActiva.invitado || !T) return;
+    try {
+      const j = await leer('Eventos'); if (j.status !== 'success') throw new Error(j.message || 'error');
+      eventos = (j.data || []).filter(e => e.ID).map(e => ({ id: String(e.ID), tipo: String(e.Tipo || 'OTRO'), nombre: String(e.Nombre || ''), sev: String(e.Severidad || 'MEDIA').toUpperCase(), estado: String(e.Estado || 'ABIERTO').toUpperCase(), lat: Number(e.Lat), lon: Number(e.Lon), radio: Number(e.Radio_km) || 0, notas: String(e.Notas || ''), operador: String(e.Operador || ''), ts: Number(e.Timestamp) || 0 }));
+      const nt = $('ev-estado'); if (nt) nt.textContent = '';
+    } catch (e) { const nt = $('ev-estado'); if (nt) { nt.textContent = '⚠ No se pudieron cargar los eventos: ' + (e && e.message || 'error'); nt.style.color = '#b91c1c'; } }
+    pintarTablaEventos(); redibujar();
+  }
+  function montarEventos() {
+    if ($('card-eventos')) { cargarEventos(); return; }
+    const grid = document.querySelector('#vista-analytics .analytics-grid');
+    if (grid) {
+      const c = el('div', ''); c.className = 'analytics-card'; c.id = 'card-eventos'; c.style.gridColumn = 'span 2';
+      c.appendChild(el('h4', '', '⚠️ Zonas y eventos del teatro'));
+      c.appendChild(el('div', 'font-size:12px;margin-bottom:6px', '')).id = 'ev-estado';
+      const caja = el('div', 'max-height:300px;overflow-y:auto'); const tb = el('table'); tb.className = 'analytics-table'; tb.id = 'tabla-eventos';
+      tb.innerHTML = '<thead><tr><th>Tipo</th><th>Nombre</th><th>Severidad</th><th>Radio</th><th>Cargó</th><th></th></tr></thead><tbody></tbody>'; caja.appendChild(tb); c.appendChild(caja);
+      grid.insertBefore(c, grid.firstChild);
+    }
+    const side = $('sidebar'), ref = $('panel-misiones');
+    if (side && !$('panel-eventos')) {
+      const d = el('details'); d.className = 'form-panel'; d.id = 'panel-eventos';
+      const sm = el('summary', '', '⚠️ Cargar zona / evento'); d.appendChild(sm);
+      const f = el('form'); f.className = 'form-grid'; f.id = 'form-evento';
+      const sel = el('select'); sel.id = 'ev-tipo'; Object.keys(TIPOS).forEach(k => sel.add(new Option(TIPOS[k], k)));
+      const nom = el('input'); nom.id = 'ev-nombre'; nom.placeholder = 'Nombre / descripción corta'; nom.required = true; nom.maxLength = 80;
+      const sev = el('select'); sev.id = 'ev-sev'; ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'].forEach(k => sev.add(new Option('Severidad ' + k.toLowerCase(), k))); sev.value = 'MEDIA';
+      const fila = el('div', 'display:flex;gap:4px'); const la = el('input', 'flex:1'), lo = el('input', 'flex:1'), ra = el('input', 'width:70px');
+      la.id = 'ev-lat'; la.placeholder = 'Lat'; la.required = true; lo.id = 'ev-lon'; lo.placeholder = 'Lon'; lo.required = true; ra.id = 'ev-radio'; ra.type = 'number'; ra.step = '0.1'; ra.min = '0'; ra.placeholder = 'km';
+      fila.append(la, lo, ra);
+      const pick = el('button', '', '📍 Elegir punto en el mapa'); pick.type = 'button'; pick.className = 'btn-submit'; pick.style.background = '#475569';
+      pick.onclick = () => { if (!mapTactico) return; window.cambiarPestana('tactica'); toast('Haga clic en el mapa táctico para ubicar la zona'); mapTactico.once('click', ev => { la.value = ev.latlng.lat.toFixed(5); lo.value = ev.latlng.lng.toFixed(5); toast('Punto cargado'); }); };
+      const notas = el('textarea'); notas.id = 'ev-notas'; notas.rows = 2; notas.placeholder = 'Notas (opcional)'; notas.maxLength = 300;
+      const ok = el('button', '', '💾 Guardar en la nube'); ok.type = 'submit'; ok.className = 'btn-submit'; ok.style.background = '#b91c1c';
+      f.append(sel, nom, sev, fila, pick, notas, ok);
+      f.onsubmit = guardarEvento; d.appendChild(f);
+      side.insertBefore(d, ref || side.firstChild);
+    }
+    cargarEventos(); timers.push(setInterval(cargarEventos, 30000));
+  }
+  async function guardarEvento(e) {
+    e.preventDefault();
+    const lat = parseFloat($('ev-lat').value.replace(',', '.')), lon = parseFloat($('ev-lon').value.replace(',', '.'));
+    if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return alert('Coordenadas inválidas.');
+    const d = { ID: 'EV-' + Date.now(), Tipo: $('ev-tipo').value, Nombre: $('ev-nombre').value.trim(), Severidad: $('ev-sev').value, Estado: 'ABIERTO', Lat: lat, Lon: lon, Radio_km: parseFloat($('ev-radio').value) || 0, Notas: $('ev-notas').value.trim(), Timestamp: Date.now() };
+    await ejecutarAccionAuditada('Eventos', 'INSERT', d, 'Cargó evento ' + d.Tipo + ': ' + d.Nombre);
+    $('form-evento').reset(); await cargarEventos();
+  }
+  async function cerrarEvento(id) {
+    if (!confirm('¿Marcar este evento como CERRADO?')) return;
+    await ejecutarAccionAuditada('Eventos', 'UPDATE', { ID: id, Estado: 'CERRADO' }, 'Cerró evento ' + id);
+    await cargarEventos();
+  }
+  function pintarTablaEventos() {
+    const tb = document.querySelector('#tabla-eventos tbody'); if (!tb) return; tb.innerHTML = '';
+    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = String(sesionActiva.rol).toLowerCase() !== 'operador';
+    abiertos.forEach(e => {
+      const tr = tb.insertRow();
+      tr.insertCell().textContent = TIPOS[e.tipo] || e.tipo; const n = tr.insertCell(); n.textContent = e.nombre; if (e.notas) n.title = e.notas;
+      const s = tr.insertCell(), sp = el('span', 'background:' + (SEV[e.sev] || '#475569'), e.sev); sp.className = 'mod-sev'; s.appendChild(sp);
+      tr.insertCell().textContent = e.radio ? e.radio + ' km' : '—'; tr.insertCell().textContent = e.operador || '—';
+      const a = tr.insertCell(); if (puedeCerrar) { const b = el('button', 'font-size:11px;cursor:pointer', 'Cerrar'); b.type = 'button'; b.onclick = () => cerrarEvento(e.id); a.appendChild(b); }
+    });
+    if (!abiertos.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 6; td.style.cssText = 'text-align:center;color:#64748b'; td.textContent = 'Sin zonas ni eventos abiertos.'; }
+  }
+
+  /* ================= 5) Dibujo en los mapas ================= */
+  function redibujar() {
+    if (!T) return;
+    mapas().forEach(map => {
+      if (tiene('INCENDIOS')) capasFuegoEn(map);
+      if (tiene('SISMOS')) {
+        const gs = g(map, 'sismos'); gs.clearLayers();
+        sismos.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4 + s.m * 2, color: '#fff', weight: 1, fillColor: s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#ea580c' : '#eab308', fillOpacity: .8 }).addTo(gs)
+          .bindPopup('<b>M ' + s.m.toFixed(1) + '</b><br>' + String(s.lugar).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) + '<br>' + new Date(s.t).toLocaleString('es-AR')));
+      }
+      if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) {
+        const ge = g(map, 'eventos'); ge.clearLayers();
+        eventos.filter(e => e.estado !== 'CERRADO' && isFinite(e.lat) && isFinite(e.lon)).forEach(e => {
+          const col = SEV[e.sev] || '#475569', pop = el('div'); pop.append(el('b', '', (TIPOS[e.tipo] || e.tipo) + ' — ' + e.nombre), el('br'), document.createTextNode('Severidad: ' + e.sev + (e.notas ? ' · ' + e.notas : '')));
+          if (e.radio > 0) L.circle([e.lat, e.lon], { radius: e.radio * 1000, color: col, weight: 2, fillColor: col, fillOpacity: .18 }).addTo(ge).bindPopup(pop.cloneNode(true));
+          L.circleMarker([e.lat, e.lon], { radius: 8, color: '#fff', weight: 2, fillColor: col, fillOpacity: .95 }).addTo(ge).bindPopup(pop);
+        });
+      }
+    });
+  }
+
+  /* ================= 6) PANEL DE MANDO (solo superadministrador): todos los teatros en una pantalla ================= */
+  window.abrirPanelMando = async function (email, token) {
+    if (document.getElementById('panel-mando')) return;
+    const fondo = el('div', 'position:fixed;inset:0;z-index:2147483200;background:#0b1220;color:#e2e8f0;overflow:auto;font-family:sans-serif'); fondo.id = 'panel-mando';
+    const cab = el('div', 'position:sticky;top:0;z-index:2;background:#0f172a;border-bottom:2px solid #b91c1c;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap');
+    cab.appendChild(el('b', 'font-size:15px;flex:1;min-width:200px', '🛰 PANEL DE MANDO — TODOS LOS TEATROS DE OPERACIONES'));
+    const act = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #475569;background:#1e293b;color:#fff;cursor:pointer', '↻ Actualizar'); act.type = 'button';
+    const cer = el('button', 'padding:5px 12px;border-radius:4px;border:none;background:#dc2626;color:#fff;cursor:pointer', 'Cerrar'); cer.type = 'button';
+    cab.append(act, cer); fondo.appendChild(cab);
+    const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
+    let mapa = null;
+    cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
+    async function cargar() {
+      cuerpo.innerHTML = ''; cuerpo.appendChild(el('div', 'color:#94a3b8', '⏳ Consultando todos los teatros…'));
+      try {
+        const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'PANEL_MANDO', email, pin: token }) }); const j = await r.json();
+        if (j.status !== 'success') throw new Error(j.message || 'error');
+        pintar(j.teatros, j.generado);
+      } catch (e) { cuerpo.innerHTML = ''; cuerpo.appendChild(el('div', 'color:#fca5a5', '⚠ ' + (e && e.message || 'No se pudo cargar el panel') + (/vencida|autorizada/i.test(e && e.message || '') ? '' : ''))); }
+    }
+    function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
+    function pintar(ts, gen) {
+      try { if (mapa) mapa.remove(); } catch (_) {} mapa = null; cuerpo.innerHTML = '';
+      const act = ts.filter(t => t.activo), sum = k => act.reduce((a, t) => a + (t[k] || 0), 0);
+      const fila = el('div', 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px');
+      fila.append(kpi('Teatros activos', act.length, '#4ade80'), kpi('Operativos reales', act.filter(t => t.tipo === 'REAL').length, '#f87171'), kpi('Ejercicios', act.filter(t => t.tipo === 'EJERCICIO').length, '#fbbf24'),
+        kpi('Misiones activas', sum('misionesActivas')), kpi('Unidades en terreno', sum('unidades')), kpi('Aeronaves', sum('aeronaves')), kpi('Eventos abiertos', sum('eventosAbiertos'), '#fb923c'));
+      cuerpo.appendChild(fila);
+      const mp = el('div', 'height:280px;border-radius:6px;border:1px solid #1e3a5f;margin-bottom:14px'); cuerpo.appendChild(mp);
+      const rej = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px'); cuerpo.appendChild(rej);
+      try {
+        mapa = L.map(mp, { zoomControl: true }).setView([-38, -64], 4);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 12, attribution: '© OpenStreetMap, © CARTO' }).addTo(mapa);
+        const pts = [];
+        act.forEach(t => { if (!isFinite(t.lat) || !isFinite(t.lon)) return; pts.push([t.lat, t.lon]);
+          const col = t.tipo === 'EJERCICIO' ? '#f59e0b' : '#ef4444', pop = el('div'); pop.append(el('b', '', t.nombre), el('br'), document.createTextNode((t.tipo === 'EJERCICIO' ? 'Ejercicio' : 'Operativo real') + ' · ' + t.misionesActivas + ' misión(es) activa(s)'));
+          L.circleMarker([t.lat, t.lon], { radius: 10, color: '#fff', weight: 2, fillColor: col, fillOpacity: .95 }).addTo(mapa).bindPopup(pop); });
+        if (pts.length) mapa.fitBounds(pts, { padding: [40, 40], maxZoom: 7 });
+        setTimeout(() => { try { mapa.invalidateSize(); } catch (_) {} }, 200);
+      } catch (_) { mp.remove(); }
+      ts.forEach(t => {
+        const c = el('div', 'background:#111c33;border:1px solid ' + (t.activo ? (t.tipo === 'EJERCICIO' ? '#b45309' : '#1e3a5f') : '#334155') + ';border-radius:8px;padding:12px;' + (t.activo ? '' : 'opacity:.55'));
+        const top = el('div', 'display:flex;justify-content:space-between;gap:8px;align-items:flex-start');
+        top.append(el('b', 'font-size:14px', t.nombre), el('span', 'font-size:10.5px;padding:2px 7px;border-radius:9px;color:#fff;background:' + (!t.activo ? '#475569' : t.tipo === 'EJERCICIO' ? '#b45309' : '#b91c1c'), !t.activo ? 'INACTIVO' : t.tipo === 'EJERCICIO' ? 'EJERCICIO' : 'REAL'));
+        c.appendChild(top); c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:2px 0 6px', t.id + ' · actividad: ' + tiempo(t.ultimaActividad)));
+        const ch = el('div', 'display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px'); (t.modulos || []).forEach(m => ch.appendChild(el('span', 'font-size:10px;padding:1px 6px;border-radius:4px;background:#1e3a5f;color:#bfdbfe', m))); c.appendChild(ch);
+        if (t.error) c.appendChild(el('div', 'color:#fca5a5;font-size:12px', '⚠ ' + t.error));
+        const m = el('div', 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-bottom:8px');
+        [['Misiones', t.misionesActivas], ['Unidades', t.unidades], ['Aeronaves', t.aeronaves], ['Eventos', t.eventosAbiertos]].forEach(([k, v]) => { const x = el('div', 'background:#0b1220;border-radius:5px;padding:6px 2px'); x.append(el('div', 'font-weight:bold;font-size:17px', String(v)), el('div', 'font-size:10px;color:#94a3b8', k)); m.appendChild(x); });
+        c.appendChild(m);
+        if ((t.misiones || []).length) { const l = el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px'); l.appendChild(el('div', 'color:#94a3b8;font-size:10.5px', 'Misiones activas')); t.misiones.forEach(x => l.appendChild(el('div', '', '• ' + x.tipo + ' · ' + x.medio + ' · ' + x.estado + (x.fecha ? ' · ' + x.fecha : '')))); c.appendChild(l); }
+        const u = el('div', 'font-size:11px;color:#94a3b8'); u.textContent = '👥 ' + (t.usuarios || []).length + ' usuario(s): ' + (t.usuarios || []).map(x => x.email + ' (' + x.rol + ')').join(', '); c.appendChild(u);
+        rej.appendChild(c);
+      });
+      cuerpo.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:12px', 'Generado ' + new Date(gen).toLocaleString('es-AR') + ' · los datos se guardan 45 s en caché · para entrar a un teatro use "Cambiar teatro".'));
+    }
+    act.onclick = cargar; cargar();
+  };
+
+  const cpOrig = window.cambiarPestana;
+  window.cambiarPestana = function (v) { cpOrig.apply(this, arguments); setTimeout(redibujar, 300); };
+})();
+</script>
+<!-- ===== FIN BLOQUE MODULOS ===== -->
 </body>
 </html>
