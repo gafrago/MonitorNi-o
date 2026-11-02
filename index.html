@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-h</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-i</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyZI7lHk9q46Th6lgMYXEtfesyp2vzdZt16KQ1TmB2seC6jjruaJmOMPOMQp_cQSbpGww/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycby_iUPTKUFKI7dlQBvKja4HlrlkCdo0xXaTkzgfQ0D-91XjGp3UZX8bKVYk6ro8vT3zKg/exec";
 
 
 ;
@@ -3700,18 +3700,88 @@ window.addEventListener('DOMContentLoaded', () => {
     cab.appendChild(el('b', 'font-size:15px;flex:1;min-width:200px', '🛰 PANEL DE MANDO — TODOS LOS TEATROS DE OPERACIONES'));
     const act = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #475569;background:#1e293b;color:#fff;cursor:pointer', '↻ Actualizar'); act.type = 'button';
     const cer = el('button', 'padding:5px 12px;border-radius:4px;border:none;background:#dc2626;color:#fff;cursor:pointer', 'Cerrar'); cer.type = 'button';
-    cab.append(act, cer); fondo.appendChild(cab);
+    const bNT = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #16a34a;background:#14532d;color:#fff;cursor:pointer', '➕ Nuevo teatro'); bNT.type = 'button';
+    const bNU = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #2563eb;background:#1e3a8a;color:#fff;cursor:pointer', '👤 Nuevo usuario'); bNU.type = 'button';
+    cab.append(bNT, bNU, act, cer); fondo.appendChild(cab);
     const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
-    let mapa = null;
+    let mapa = null, usuariosTodos = [];
     cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
     async function cargar() {
       cuerpo.innerHTML = ''; cuerpo.appendChild(el('div', 'color:#94a3b8', '⏳ Consultando todos los teatros…'));
       try {
         const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'PANEL_MANDO', email, pin: token }) }); const j = await r.json();
         if (j.status !== 'success') throw new Error(j.message || 'error');
-        pintar(j.teatros, j.generado);
+        usuariosTodos = j.usuariosTodos || []; pintar(j.teatros, j.generado);
       } catch (e) { cuerpo.innerHTML = ''; cuerpo.appendChild(el('div', 'color:#fca5a5', '⚠ ' + (e && e.message || 'No se pudo cargar el panel') + (/vencida|autorizada/i.test(e && e.message || '') ? '' : ''))); }
     }
+
+    /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
+    const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes']];
+    async function admin(op, datos) {
+      const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
+      return r.json();
+    }
+    function modal(titulo, armar) {
+      const f = el('div', 'position:fixed;inset:0;z-index:2147483400;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:10px');
+      const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:18px;width:min(520px,96vw);max-height:92vh;overflow:auto;color:#f8fafc;font-size:13px');
+      c.appendChild(el('h3', 'margin:0 0 10px;font-size:16px', titulo)); const msg = el('div', 'margin:8px 0;font-size:12.5px;min-height:16px'); 
+      const cerrar = () => f.remove();
+      armar(c, msg, cerrar); c.appendChild(msg); f.appendChild(c); document.body.appendChild(f); return f;
+    }
+    const campo = (c, rot, tipo, ph, val, extra) => { const l = el('label', 'display:block;margin-top:8px;font-size:11.5px;color:#94a3b8', rot); const i = tipo === 'select' ? el('select') : el('input'); if (tipo !== 'select') i.type = tipo;
+      i.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px'; if (ph) i.placeholder = ph; if (val !== undefined && val !== null) i.value = val; if (extra) extra(i); l.appendChild(i); c.appendChild(l); return i; };
+    const botones = (c, textoOk, onOk, cerrar) => { const fila = el('div', 'display:flex;gap:8px;margin-top:12px'); const ok = el('button', 'flex:1;padding:8px;border:none;border-radius:4px;background:#16a34a;color:#fff;cursor:pointer;font-weight:bold', textoOk), no = el('button', 'padding:8px 14px;border:1px solid #475569;border-radius:4px;background:none;color:#cbd5e1;cursor:pointer', 'Cancelar');
+      ok.type = 'button'; no.type = 'button'; no.onclick = cerrar; ok.onclick = async () => { ok.disabled = true; try { await onOk(ok); } finally { ok.disabled = false; } }; fila.append(ok, no); c.appendChild(fila); };
+    const resultado = (msg, j, cerrar) => { if (j.status === 'success') { msg.style.color = '#4ade80'; msg.textContent = '✅ ' + j.message; setTimeout(() => { cerrar(); cargar(); }, 900); } else { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); } };
+
+    function formTeatro(t) {
+      const nuevo = !t; t = t || { tipo: 'EJERCICIO', zoom: 7, radio: 300, modulos: ['ZONAS'], activo: true };
+      modal(nuevo ? '➕ Nuevo teatro de operaciones' : '✏️ Editar teatro ' + t.id, (c, msg, cerrar) => {
+        const id = campo(c, 'Código (sin espacios, ej: INC-PATA)', 'text', 'EJ-CHACO-01', t.id, i => { i.maxLength = 20; i.style.textTransform = 'uppercase'; if (!nuevo) i.disabled = true; });
+        const nom = campo(c, 'Nombre', 'text', 'Incendios Patagonia 2026', t.nombre, i => { i.maxLength = 80; });
+        const tipo = campo(c, 'Tipo', 'select', '', undefined, i => { i.add(new Option('Ejercicio / simulación (muestra franja de práctica)', 'EJERCICIO')); i.add(new Option('Operativo real', 'REAL')); i.value = t.tipo; });
+        let sid = null, crear = null;
+        if (nuevo) {
+          sid = campo(c, 'ID de la planilla de este teatro (planilla de Google VACÍA: copie el texto largo de su URL entre /d/ y /edit)', 'text', 'Pegue aquí el ID', '', i => { i.maxLength = 90; });
+          const l = el('label', 'display:flex;gap:6px;align-items:center;margin-top:6px;font-size:11.5px;color:#94a3b8'); crear = el('input'); crear.type = 'checkbox'; l.append(crear, document.createTextNode('Si no tengo planilla, intentar crearla automáticamente')); c.appendChild(l);
+        }
+        const busq = campo(c, 'Ubicación del teatro: buscar un lugar (opcional)', 'text', 'Ej: Esquel, Chubut');
+        const bb = el('button', 'margin-top:4px;padding:4px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🔍 Buscar y llenar coordenadas'); bb.type = 'button'; c.appendChild(bb);
+        const fila = el('div', 'display:flex;gap:6px'); const mk = (r, v) => { const w = el('div', 'flex:1'); const i = campo(w, r, 'number', '', v, x => { x.step = 'any'; }); fila.appendChild(w); return i; };
+        const lat = mk('Latitud', t.lat), lon = mk('Longitud', t.lon), zoom = mk('Zoom (4-12)', t.zoom), radio = mk('Alcance km', t.radio); c.appendChild(fila);
+        bb.onclick = async () => { try { msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…'; const r = await fetch('https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(busq.value)); const j = await r.json(); const f = (j.features || [])[0]; if (!f) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar.'; return; } lon.value = f.geometry.coordinates[0].toFixed(4); lat.value = f.geometry.coordinates[1].toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Coordenadas cargadas: ' + [f.properties.name, f.properties.state].filter(Boolean).join(', '); } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; } };
+        c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Qué emergencia cubre este teatro (módulos):'));
+        const cks = {}; MODS.forEach(([k, d]) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:4px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = (t.modulos || []).indexOf(k) >= 0; cks[k] = ck; l.append(ck, document.createTextNode(d)); c.appendChild(l); });
+        const opt = (rot, val) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:6px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!val; l.append(ck, document.createTextNode(rot)); c.appendChild(l); return ck; };
+        const act = opt('Teatro activo', t.activo !== false), pub = opt('Los invitados (sin usuario) ven los ríos de este teatro', t.publico), syn = opt('Actualizar los ríos con el INA cada hora', t.sync);
+        botones(c, nuevo ? 'Crear teatro' : 'Guardar cambios', async () => {
+          msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+          const datos = { id: id.value.trim().toUpperCase(), nombre: nom.value.trim(), tipo: tipo.value, lat: parseFloat(lat.value), lon: parseFloat(lon.value), zoom: parseInt(zoom.value, 10) || 8, radio: parseFloat(radio.value) || 300, modulos: MODS.map(m => m[0]).filter(k => cks[k].checked), activo: act.checked, publico: pub.checked, sync: syn.checked };
+          if (nuevo) { datos.sheetId = sid.value.trim(); datos.crear = crear.checked; }
+          resultado(msg, await admin('TEATRO', { t: datos }), cerrar);
+        }, cerrar);
+      });
+    }
+    function formAcceso(t) {
+      modal('👥 Accesos al teatro ' + t.nombre, (c, msg, cerrar) => {
+        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + ')').join(', ') || 'ninguno')));
+        const us = campo(c, 'Usuario', 'select', '', undefined, i => { (usuariosTodos.length ? usuariosTodos : []).forEach(u => i.add(new Option(u.email + (u.nombre ? ' — ' + u.nombre : ''), u.email))); });
+        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r, r))); });
+        const quitar = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const qk = el('input'); qk.type = 'checkbox'; quitar.append(qk, document.createTextNode('Quitarle el acceso a este teatro')); c.appendChild(quitar);
+        botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
+      });
+    }
+    function formUsuario() {
+      modal('👤 Nuevo usuario (o cambiar su PIN)', (c, msg, cerrar) => {
+        const em = campo(c, 'Correo (será su usuario)', 'text', 'nombre@correo', '', i => { i.maxLength = 100; i.autocomplete = 'off'; });
+        const nom = campo(c, 'Nombre y rango', 'text', 'Tte. Apellido', '', i => { i.maxLength = 80; });
+        const pin = campo(c, 'PIN (4 a 12 letras o números)', 'password', '', '', i => { i.maxLength = 12; i.autocomplete = 'new-password'; });
+        c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:8px', 'El PIN se guarda protegido y no se puede volver a ver. Después asigne el usuario a un teatro desde su tarjeta (botón Accesos).'));
+        botones(c, 'Guardar usuario', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('USUARIO', { correo: em.value.trim(), nombre: nom.value.trim(), pinNuevo: pin.value }), cerrar); }, cerrar);
+      });
+    }
+    bNT.onclick = () => formTeatro(null); bNU.onclick = formUsuario;
     function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
     function pintar(ts, gen) {
       try { if (mapa) mapa.remove(); } catch (_) {} mapa = null; cuerpo.innerHTML = '';
@@ -3724,7 +3794,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const rej = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px'); cuerpo.appendChild(rej);
       try {
         mapa = L.map(mp, { zoomControl: true }).setView([-38, -64], 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 12, attribution: '© OpenStreetMap, © CARTO' }).addTo(mapa);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapa);
         const pts = [];
         act.forEach(t => { if (!isFinite(t.lat) || !isFinite(t.lon)) return; pts.push([t.lat, t.lon]);
           const col = t.tipo === 'EJERCICIO' ? '#f59e0b' : '#ef4444', pop = el('div'); pop.append(el('b', '', t.nombre), el('br'), document.createTextNode((t.tipo === 'EJERCICIO' ? 'Ejercicio' : 'Operativo real') + ' · ' + t.misionesActivas + ' misión(es) activa(s)'));
@@ -3744,6 +3814,9 @@ window.addEventListener('DOMContentLoaded', () => {
         c.appendChild(m);
         if ((t.misiones || []).length) { const l = el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px'); l.appendChild(el('div', 'color:#94a3b8;font-size:10.5px', 'Misiones activas')); t.misiones.forEach(x => l.appendChild(el('div', '', '• ' + x.tipo + ' · ' + x.medio + ' · ' + x.estado + (x.fecha ? ' · ' + x.fecha : '')))); c.appendChild(l); }
         const u = el('div', 'font-size:11px;color:#94a3b8'); u.textContent = '👥 ' + (t.usuarios || []).length + ' usuario(s): ' + (t.usuarios || []).map(x => x.email + ' (' + x.rol + ')').join(', '); c.appendChild(u);
+        const bar = el('div', 'display:flex;gap:6px;margin-top:10px');
+        const be = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '✏️ Editar / módulos'), ba = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '👥 Accesos');
+        be.type = 'button'; ba.type = 'button'; be.onclick = () => formTeatro(t); ba.onclick = () => formAcceso(t); bar.append(be, ba); c.appendChild(bar);
         rej.appendChild(c);
       });
       cuerpo.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:12px', 'Generado ' + new Date(gen).toLocaleString('es-AR') + ' · los datos se guardan 45 s en caché · para entrar a un teatro use "Cambiar teatro".'));
