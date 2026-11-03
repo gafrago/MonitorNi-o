@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-k</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-l</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzJaitlA16SRWoR_nRjS4tiHRHTzaYxc9FJGMlJRbZYf57IENt_79B10J2QcYRY8cNkBg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxo9yO7_p2GYIGUeQ24Z9E5LBBcx6EXUmHvXbcY8CjSk1r4CucQQ4iczO3YfRrKz3x6pA/exec";
 
 
 ;
@@ -3956,7 +3956,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------- Ventana de seleccion ---------- */
-  window.abrirInformeMeteo = function () {
+  window.abrirInformeMeteo = function (pre) {
+    pre = (pre && Array.isArray(pre.sectores)) ? pre : null;   // abierto desde un mensaje: zonas ya marcadas
     if (!sesionActiva || !sesionActiva.autenticado || sesionActiva.invitado) return;
     if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.');
     if ($('modal-informe')) return;
@@ -3965,7 +3966,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:18px;width:min(480px,96vw);max-height:92vh;overflow:auto;color:#f8fafc;font-size:13px;font-family:sans-serif');
     c.appendChild(el('h3', 'margin:0 0 4px;font-size:16px', '🌦️ Informe meteorológico')); c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:10px', 'Teatro: ' + c0.nombre + '. Elija qué zonas incluir (pronóstico a 72 h, lluvias, viento, tormentas' + (hayMod('INCENDIOS') ? ', riesgo de incendio' : '') + ').'));
     const lista = [{ k: 'GENERAL', nombre: 'Zona completa del teatro (' + c0.nombre + ')', lat: c0.lat, lon: c0.lon, esGeneral: true }].concat(secs.map((s, i) => Object.assign({ k: 'S' + i }, s)));
-    const cks = {}; lista.forEach((s, i) => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:5px 0'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = i === 0; cks[s.k] = ck; l.append(ck, document.createTextNode(s.esGeneral ? s.nombre : 'Sector: ' + s.nombre)); c.appendChild(l); });
+    const cks = {}; lista.forEach((s, i) => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:5px 0'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = pre ? (s.esGeneral ? !!pre.general : pre.sectores.indexOf(s.nombre) >= 0) : i === 0; cks[s.k] = ck; l.append(ck, document.createTextNode(s.esGeneral ? s.nombre : 'Sector: ' + s.nombre)); c.appendChild(l); });
     if (!secs.length) c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin:6px 0', 'Este teatro no tiene sectores definidos. El administrador puede agregarlos desde el Panel de mando (Editar teatro → Sectores).'));
     const bt = el('div', 'display:flex;gap:8px;margin:8px 0'); const sa = el('button', 'font-size:11.5px;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer', 'Todos'), sn = el('button', 'font-size:11.5px;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer', 'Ninguno'); sa.type = sn.type = 'button';
     sa.onclick = () => Object.values(cks).forEach(k => { k.checked = true; }); sn.onclick = () => Object.values(cks).forEach(k => { k.checked = false; }); bt.append(sa, sn); c.appendChild(bt);
@@ -3985,7 +3986,21 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ No se pudo generar: ' + (e && e.name === 'AbortError' ? 'el servicio meteorológico no respondió' : (e && e.message || 'error')); }
       finally { ok.disabled = false; }
     };
-    fila.append(ok, no); c.appendChild(fila); f.appendChild(c); document.body.appendChild(f);
+    const env = el('button', 'padding:9px 12px;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#d1fae5;cursor:pointer', '✉️ Enviar a usuarios');
+    env.title = 'Envía un resumen con el informe adjunto; cada destinatario lo abre con datos actualizados';
+    env.onclick = async () => {
+      const sel = lista.filter(s => cks[s.k].checked); if (!sel.length) { msg.style.color = '#fca5a5'; msg.textContent = 'Elija al menos una zona.'; return; }
+      env.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Consultando el modelo meteorológico…';
+      try {
+        const datos = await traer(sel), hoy = Date.now();
+        const partes = sel.map((s, i) => { const r = analizar(datos[i], hoy); return (s.esGeneral ? 'Zona completa' : s.nombre) + ': lluvia 24 h ' + f0(r.lluvia24) + ' mm, ráfaga máx. 48 h ' + f0(r.rafaga48) + ' km/h, tormentas ' + r.nivelTorm + (hayMod('INCENDIOS') ? ', incendio ' + r.incendio : ''); });
+        let texto = '🌦️ Informe meteorológico ' + new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) + '. ' + partes.join(' | ');
+        if (texto.length > 500) texto = texto.slice(0, 499) + '…';
+        const adj = { tipo: 'INFORME_METEO', general: sel.some(s => s.esGeneral), sectores: sel.filter(s => !s.esGeneral).map(s => s.nombre) };
+        f.remove(); if (typeof window.abrirMensajes === 'function') window.abrirMensajes({ texto, adjunto: adj, tema: 'METEOROLOGICO' });
+      } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ No se pudo preparar el envío: ' + (e && e.name === 'AbortError' ? 'el servicio meteorológico no respondió' : (e && e.message || 'error')); env.disabled = false; }
+    };
+    fila.append(ok, env, no); c.appendChild(fila); f.appendChild(c); document.body.appendChild(f);
   };
 
   /* ---------- Boton en la barra superior ---------- */
@@ -4008,10 +4023,10 @@ window.addEventListener('DOMContentLoaded', () => {
   'use strict';
   const $ = id => document.getElementById(id);
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined) e.textContent = txt; return e; };
-  const TEMAS = [['METEOROLOGICO', '🌦️ Meteorológico'], ['SANITARIO', '🩺 Sanitario'], ['NOVEDAD', '📰 Novedad'], ['OPERATIVO', '🎯 Operativo'], ['DIRECTIVA', '📌 Directiva'], ['OTRO', 'Otro']];
+  const TEMAS = [['HIDRICO', '🌊 Hídrico'], ['METEOROLOGICO', '🌦️ Meteorológico'], ['SANITARIO', '🩺 Sanitario'], ['NOVEDAD', '📰 Novedad'], ['OPERATIVO', '🎯 Operativo'], ['DIRECTIVA', '📌 Directiva'], ['OTRO', 'Otro']];
   const TXT = Object.fromEntries(TEMAS);
   const POLL_MS = 75000;
-  let estado = { n: 0, u: 0 }, panel = null, datos = null, respondiendo = null, timer = null, ultimoN = 0;
+  let estado = { n: 0, u: 0 }, panel = null, datos = null, respondiendo = null, timer = null, ultimoN = 0, borrador = null;
 
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   async function api(accion, extra) {
@@ -4057,7 +4072,8 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- Panel ---------- */
   const fecha = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
   function cerrar() { if (panel) { panel.remove(); panel = null; } }
-  async function abrir() {
+  async function abrir(opts) {
+    borrador = (opts && opts.adjunto) ? { texto: String(opts.texto || '').slice(0, 500), adjunto: opts.adjunto, tema: opts.tema || 'OTRO' } : null;
     if (!activa()) return; cerrar(); document.querySelectorAll('.msg-toast').forEach(t => t.remove());
     const fondo = el('div', 'position:fixed;inset:0;z-index:2147483000;background:#000a;display:flex;align-items:center;justify-content:center;padding:8px');
     fondo.onclick = ev => { if (ev.target === fondo) cerrar(); };
@@ -4089,7 +4105,7 @@ window.addEventListener('DOMContentLoaded', () => {
     ms.forEach(m => {
       const urg = m.prioridad === 'URGENTE', tarj = el('div', 'border:1px solid ' + (urg ? '#b91c1c' : '#334155') + ';border-left:4px solid ' + (m.tipo === 'AVISO' ? '#f59e0b' : '#2563eb') + ';border-radius:6px;padding:8px 10px;margin-bottom:8px;background:' + (m.propio ? '#111c33' : '#0b1222'));
       const h = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:#94a3b8');
-      h.appendChild(el('b', 'color:#e2e8f0', m.propio ? 'Yo' : m.deNombre || m.de));
+      h.appendChild(el('b', 'color:#e2e8f0', m.propio ? 'Yo' : (m.de === 'sistema@ares' ? '🤖 ' : '') + (m.deNombre || m.de)));
       if (m.tipo === 'AVISO') h.appendChild(el('span', 'background:#92400e;color:#fff;border-radius:3px;padding:0 5px', 'AVISO'));
       if (urg) h.appendChild(el('span', 'background:#b91c1c;color:#fff;border-radius:3px;padding:0 5px', 'URGENTE'));
       h.appendChild(el('span', '', TXT[m.tema] || m.tema));
@@ -4101,7 +4117,11 @@ window.addEventListener('DOMContentLoaded', () => {
       tarj.appendChild(el('div', 'white-space:pre-wrap;word-break:break-word;margin-top:5px;font-size:14px', m.texto));
       const pie = el('div', 'display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11px;color:#64748b');
       pie.appendChild(el('span', '', 'se borra el ' + new Date(m.vence).toLocaleDateString('es-AR')));
-      if (!m.propio) { const rb = el('button', 'margin-left:auto;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 9px;cursor:pointer', '↩ Responder'); rb.type = 'button'; rb.onclick = () => { respondiendo = m; dibujar(caja, filtro); const t = $('msg-texto'); if (t) t.focus(); }; pie.appendChild(rb); }
+      if (m.adjunto && m.adjunto.tipo === 'INFORME_METEO') {
+        const ab = el('button', 'margin-top:6px;background:#0f3d2e;border:1px solid #16a34a;color:#d1fae5;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;display:block', '📎 Informe meteorológico' + (m.adjunto.sectores.length ? ' · ' + m.adjunto.sectores.join(', ') : '') + ' — abrir con datos actuales'); ab.type = 'button';
+        ab.onclick = () => { cerrar(); if (typeof window.abrirInformeMeteo === 'function') window.abrirInformeMeteo({ sectores: m.adjunto.sectores, general: m.adjunto.general }); }; tarj.appendChild(ab);
+      }
+      if (!m.propio && m.de !== 'sistema@ares') { const rb = el('button', 'margin-left:auto;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 9px;cursor:pointer', '↩ Responder'); rb.type = 'button'; rb.onclick = () => { respondiendo = m; dibujar(caja, filtro); const t = $('msg-texto'); if (t) t.focus(); }; pie.appendChild(rb); }
       tarj.appendChild(pie); lista.appendChild(tarj);
     });
     compositor(caja);
@@ -4114,7 +4134,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const sel = (css) => el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;' + (css || ''));
     const fila = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center');
     let tipoSel = null, paraSel = null, alcSel = null, pers = null, temaSel = sel(), priSel = sel();
-    TEMAS.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; temaSel.appendChild(o); }); temaSel.value = 'OTRO';
+    TEMAS.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; temaSel.appendChild(o); }); temaSel.value = (borrador && borrador.tema) || 'OTRO';
     [['NORMAL', 'Prioridad normal'], ['URGENTE', '🔴 Urgente']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; priSel.appendChild(o); });
 
     if (respondiendo) {
@@ -4135,6 +4155,11 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     fila.appendChild(temaSel); fila.appendChild(priSel);
     cj.appendChild(fila);
+    if (borrador && !respondiendo) {
+      const ch = el('div', 'display:flex;align-items:center;gap:8px;background:#0f3d2e;border:1px solid #16a34a;border-radius:4px;padding:4px 8px;font-size:12px');
+      ch.appendChild(el('span', 'flex:1', '📎 Se adjunta el informe meteorológico' + (borrador.adjunto.sectores.length ? ' (' + borrador.adjunto.sectores.join(', ') + ')' : '') + '. Cada persona lo abre con datos actuales.'));
+      const q = el('button', 'background:none;border:none;color:#94a3b8;cursor:pointer', '✕'); q.type = 'button'; q.onclick = () => { borrador = null; dibujar(caja, 'todos'); }; ch.appendChild(q); cj.appendChild(ch);
+    }
     const zona = el('div', 'display:none;max-height:110px;overflow:auto;border:1px solid #334155;border-radius:4px;padding:4px 8px'); cj.appendChild(zona);
     const llenarPersonas = () => {
       zona.innerHTML = ''; zona.dataset.modo = 'personas';
@@ -4156,7 +4181,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (alcSel) alcSel.onchange = ajustar; if (paraSel) paraSel.onchange = ajustar;
 
     const ta = el('textarea', 'width:100%;box-sizing:border-box;min-height:60px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:6px;font:14px sans-serif;resize:vertical');
-    ta.id = 'msg-texto'; ta.maxLength = 500; ta.placeholder = respondiendo ? 'Escriba su respuesta…' : 'Escriba el mensaje (máximo 500 caracteres)…'; cj.appendChild(ta);
+    ta.id = 'msg-texto'; ta.maxLength = 500; if (borrador && !respondiendo) ta.value = borrador.texto; ta.placeholder = respondiendo ? 'Escriba su respuesta…' : 'Escriba el mensaje (máximo 500 caracteres)…'; cj.appendChild(ta);
     const pie = el('div', 'display:flex;align-items:center;gap:8px'), cont = el('span', 'color:#64748b;font-size:11px;flex:1', '0 / 500'), err = el('span', 'color:#fca5a5;font-size:12px');
     ta.oninput = () => { cont.textContent = ta.value.length + ' / 500'; };
     const env = el('button', 'background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:6px 16px;cursor:pointer;font-weight:bold', 'Enviar'); env.type = 'button';
@@ -4168,23 +4193,23 @@ window.addEventListener('DOMContentLoaded', () => {
         accion = 'MSG_BROADCAST'; if (alc === 'TODOS') base.teatros = 'TODOS'; else { base.teatros = [...zona.querySelectorAll('input:checked')].map(c => c.value); if (!base.teatros.length) { err.textContent = 'Elija al menos un teatro.'; return; } }
         if (!confirm('Se enviará un aviso a ' + (alc === 'TODOS' ? 'TODOS los teatros' : base.teatros.length + ' teatro(s)') + '. ¿Confirmar?')) return;
       } else if (respondiendo) base.respuestaA = respondiendo.id;
-      else if (!d.puedeIniciar) base.para = 'SUPERIORES';
+      else if (!d.puedeIniciar) { base.para = 'SUPERIORES'; if (borrador) base.adjunto = borrador.adjunto; }
       else {
         p = paraSel.value; if (p === 'PERSONAS') { p = [...zona.querySelectorAll('input:checked')].map(c => c.value); if (!p.length) { err.textContent = 'Elija al menos una persona.'; return; } }
-        base.para = p; base.tipo = tipoSel ? tipoSel.value : 'MENSAJE';
+        base.para = p; base.tipo = tipoSel ? tipoSel.value : 'MENSAJE'; if (borrador && base.tipo === 'MENSAJE') base.adjunto = borrador.adjunto;
         if (base.tipo === 'AVISO' && !confirm('Se emitirá un AVISO a ' + (typeof p === 'string' ? p : p.length + ' persona(s)') + '. ¿Confirmar?')) return;
       }
       env.disabled = true; env.textContent = 'Enviando…';
       try {
         const r = await api(accion, base);
-        if (r.status === 'success') { respondiendo = null; if (accion === 'MSG_BROADCAST') aviso('✔ Aviso enviado a ' + r.teatros + ' teatro(s)'); const l = await api('MSG_LISTAR'); if (l.status === 'success') { datos = l; dibujar(caja, 'todos'); } }
+        if (r.status === 'success') { respondiendo = null; borrador = null; if (accion === 'MSG_BROADCAST') aviso('✔ Aviso enviado a ' + r.teatros + ' teatro(s)'); const l = await api('MSG_LISTAR'); if (l.status === 'success') { datos = l; dibujar(caja, 'todos'); } }
         else { err.textContent = r.message || 'No se pudo enviar.'; env.disabled = false; env.textContent = 'Enviar'; }
       } catch (e) { err.textContent = 'Error de enlace con el servidor.'; env.disabled = false; env.textContent = 'Enviar'; }
     };
     pie.appendChild(cont); pie.appendChild(err); pie.appendChild(env); cj.appendChild(pie); caja.appendChild(cj);
     ajustar();
   }
-  window.abrirMensajes = abrir;
+  window.abrirMensajes = opts => abrir(opts && opts.adjunto ? opts : null);
 })();
 </script>
 <!-- ===== FIN BLOQUE MENSAJES ===== -->
