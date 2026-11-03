@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-j</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-k</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzMUvE9_5WM4JmC8UNgk7jqNdJTG1e38jXOWiY4fE5icOgR7564TL1dFsRsuwd7_V0MBw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycby_iUPTKUFKI7dlQBvKja4HlrlkCdo0xXaTkzgfQ0D-91XjGp3UZX8bKVYk6ro8vT3zKg/exec";
 
 
 ;
@@ -3415,7 +3415,7 @@ window.addEventListener('DOMContentLoaded', () => {
       let r = await post({ action: 'LOGIN', email: emailInput, pin: pinInput });
       if (!(r.status === 'success' && r.usuario)) { errDiv.innerText = r.message || 'Credenciales inválidas o no autorizado.'; errDiv.style.display = 'block'; return; }
       let teatro = r.teatro || null;
-      window.__nTeatros = (r.teatros || []).length; window.__super = !!r.superadmin;
+      window.__nTeatros = (r.teatros || []).length; window.__super = !!r.superadmin; window.__teatros = (r.teatros || []).map(x => ({ id: x.id, nombre: x.nombre }));
       const tokenPre = r.token, emailPre = r.usuario.email;
       if (r.elegir) {
         teatro = await elegirTeatro(r.teatros, window.__super ? () => window.abrirPanelMando(emailPre, tokenPre) : null);
@@ -3999,5 +3999,194 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE INFORME METEO ===== -->
+<!-- ===== INICIO BLOQUE MENSAJES: pegar ULTIMO, antes de </body>, despues del bloque de informe meteorologico ===== -->
+<script>
+/* A.R.E.S.: mensajes cortos, avisos del administrador y bandeja (solo dentro de la app).
+   - Se consulta el contador cada 75 s y solo con la pestana visible (cuida la cuota de Apps Script).
+   - Todo texto se muestra con textContent: nunca se interpreta como HTML. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined) e.textContent = txt; return e; };
+  const TEMAS = [['METEOROLOGICO', '🌦️ Meteorológico'], ['SANITARIO', '🩺 Sanitario'], ['NOVEDAD', '📰 Novedad'], ['OPERATIVO', '🎯 Operativo'], ['DIRECTIVA', '📌 Directiva'], ['OTRO', 'Otro']];
+  const TXT = Object.fromEntries(TEMAS);
+  const POLL_MS = 75000;
+  let estado = { n: 0, u: 0 }, panel = null, datos = null, respondiendo = null, timer = null, ultimoN = 0;
+
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+
+  /* ---------- Boton con contador ---------- */
+  function pintarBoton() {
+    const b = $('btn-mensajes'); if (!b) return;
+    const c = b.querySelector('span'); c.textContent = estado.n > 99 ? '99+' : String(estado.n); c.style.display = estado.n ? 'inline-block' : 'none';
+    c.style.background = estado.u ? '#dc2626' : '#2563eb';
+    document.title = document.title.replace(/^\(\d+\)\s*/, ''); if (estado.n) document.title = '(' + estado.n + ') ' + document.title;
+  }
+  function boton() {
+    if (!activa()) { const x = $('btn-mensajes'); if (x) x.remove(); return false; }
+    if ($('btn-mensajes')) return true;
+    const ref = $('btn-informe-meteo') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '✉️ Mensajes '); b.id = 'btn-mensajes'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.onclick = abrir;
+    b.appendChild(el('span', 'display:none;min-width:16px;padding:0 5px;border-radius:9px;color:#fff;font-size:11px;font-weight:bold;text-align:center;margin-left:2px'));
+    ref.parentNode.insertBefore(b, ref); pintarBoton(); return true;
+  }
+  function aviso(txt, rojo) {
+    const t = el('div', 'position:fixed;right:14px;bottom:14px;z-index:2147483100;max-width:320px;padding:10px 14px;border-radius:8px;color:#fff;font:13px sans-serif;box-shadow:0 4px 14px #0008;cursor:pointer;background:' + (rojo ? '#b91c1c' : '#1d4ed8'), txt);
+    t.className = 'msg-toast'; t.onclick = () => { t.remove(); abrir(); }; document.body.appendChild(t); setTimeout(() => t.remove(), 7000);
+  }
+  async function consultar() {
+    if (!activa() || document.hidden) return;
+    try {
+      const r = await api('MSG_ESTADO'); if (r.status !== 'success') return;
+      estado = { n: r.n || 0, u: r.u || 0 };
+      if (estado.n > ultimoN && !panel) aviso(estado.u ? '🔴 Tiene un mensaje URGENTE sin leer' : '✉️ Tiene ' + estado.n + ' mensaje' + (estado.n > 1 ? 's' : '') + ' sin leer', !!estado.u);
+      ultimoN = estado.n; pintarBoton();
+    } catch (_) { /* sin conexion: se reintenta */ }
+  }
+  function iniciar() {
+    if (!boton()) return;
+    if (!timer) { timer = setInterval(consultar, POLL_MS); consultar(); document.addEventListener('visibilitychange', () => { if (!document.hidden) consultar(); }); }
+  }
+  setInterval(() => { if (activa()) iniciar(); else if ($('btn-mensajes')) boton(); }, 1500);
+
+  /* ---------- Panel ---------- */
+  const fecha = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  function cerrar() { if (panel) { panel.remove(); panel = null; } }
+  async function abrir() {
+    if (!activa()) return; cerrar(); document.querySelectorAll('.msg-toast').forEach(t => t.remove());
+    const fondo = el('div', 'position:fixed;inset:0;z-index:2147483000;background:#000a;display:flex;align-items:center;justify-content:center;padding:8px');
+    fondo.onclick = ev => { if (ev.target === fondo) cerrar(); };
+    const caja = el('div', 'background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:10px;width:min(760px,100%);max-height:94vh;display:flex;flex-direction:column;font:13px sans-serif');
+    caja.id = 'msg-panel'; fondo.appendChild(caja); document.body.appendChild(fondo); panel = fondo;
+    caja.appendChild(el('div', 'padding:14px', 'Cargando mensajes…'));
+    try {
+      const r = await api('MSG_LISTAR'); if (r.status !== 'success') { caja.innerHTML = ''; caja.appendChild(el('div', 'padding:14px;color:#fca5a5', r.message || 'No se pudieron cargar los mensajes.')); return; }
+      datos = r; estado = { n: r.n || 0, u: r.u || 0 }; ultimoN = estado.n; respondiendo = null; dibujar(caja, 'todos');
+      const sinLeer = r.mensajes.filter(m => !m.leido).map(m => m.id);
+      if (sinLeer.length) { const l = await api('MSG_LEIDO', { ids: sinLeer.slice(0, 50) }); if (l.status === 'success') { estado = { n: l.n || 0, u: l.u || 0 }; ultimoN = estado.n; pintarBoton(); } }
+    } catch (e) { caja.innerHTML = ''; caja.appendChild(el('div', 'padding:14px;color:#fca5a5', 'Error de enlace con el servidor.')); }
+  }
+  function dibujar(caja, filtro) {
+    caja.innerHTML = '';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #334155');
+    cab.appendChild(el('b', 'flex:1;font-size:15px', '✉️ Mensajes · ' + ((window.ARES_TEATRO && window.ARES_TEATRO.nombre) || '')));
+    const rf = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer', '↻'); rf.type = 'button'; rf.onclick = abrir;
+    const x = el('button', 'background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrar;
+    cab.appendChild(rf); cab.appendChild(x); caja.appendChild(cab);
+    const fil = el('div', 'display:flex;gap:6px;padding:8px 14px 0');
+    [['todos', 'Todos'], ['aviso', 'Avisos'], ['recibidos', 'Recibidos'], ['enviados', 'Enviados']].forEach(([k, t]) => {
+      const b = el('button', 'border:1px solid #475569;border-radius:14px;padding:3px 11px;cursor:pointer;color:#e2e8f0;background:' + (k === filtro ? '#1d4ed8' : 'transparent'), t); b.type = 'button'; b.onclick = () => dibujar(caja, k); fil.appendChild(b);
+    });
+    caja.appendChild(fil);
+    const lista = el('div', 'overflow:auto;padding:10px 14px;flex:1;min-height:120px'); caja.appendChild(lista);
+    const ms = datos.mensajes.filter(m => filtro === 'todos' || (filtro === 'aviso' && m.tipo === 'AVISO') || (filtro === 'recibidos' && !m.propio) || (filtro === 'enviados' && m.propio));
+    if (!ms.length) lista.appendChild(el('div', 'color:#94a3b8;padding:18px;text-align:center', 'No hay mensajes.'));
+    ms.forEach(m => {
+      const urg = m.prioridad === 'URGENTE', tarj = el('div', 'border:1px solid ' + (urg ? '#b91c1c' : '#334155') + ';border-left:4px solid ' + (m.tipo === 'AVISO' ? '#f59e0b' : '#2563eb') + ';border-radius:6px;padding:8px 10px;margin-bottom:8px;background:' + (m.propio ? '#111c33' : '#0b1222'));
+      const h = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:#94a3b8');
+      h.appendChild(el('b', 'color:#e2e8f0', m.propio ? 'Yo' : m.deNombre || m.de));
+      if (m.tipo === 'AVISO') h.appendChild(el('span', 'background:#92400e;color:#fff;border-radius:3px;padding:0 5px', 'AVISO'));
+      if (urg) h.appendChild(el('span', 'background:#b91c1c;color:#fff;border-radius:3px;padding:0 5px', 'URGENTE'));
+      h.appendChild(el('span', '', TXT[m.tema] || m.tema));
+      if (!m.leido) h.appendChild(el('span', 'background:#2563eb;color:#fff;border-radius:3px;padding:0 5px', 'NUEVO'));
+      h.appendChild(el('span', 'margin-left:auto', fecha(m.ts)));
+      tarj.appendChild(h);
+      const dst = m.para === 'TODOS' ? 'todo el teatro' : m.para === 'SUPERIORES' ? 'Administrador y Planificador' : /^ROL:/.test(m.para) ? 'todos los ' + m.para.slice(4) + 'es' : (m.paraNombres || m.para);
+      if (m.propio) tarj.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:2px', 'Para: ' + dst + (m.total ? ' · leído por ' + m.lecturas + ' de ' + m.total : '')));
+      tarj.appendChild(el('div', 'white-space:pre-wrap;word-break:break-word;margin-top:5px;font-size:14px', m.texto));
+      const pie = el('div', 'display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11px;color:#64748b');
+      pie.appendChild(el('span', '', 'se borra el ' + new Date(m.vence).toLocaleDateString('es-AR')));
+      if (!m.propio) { const rb = el('button', 'margin-left:auto;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 9px;cursor:pointer', '↩ Responder'); rb.type = 'button'; rb.onclick = () => { respondiendo = m; dibujar(caja, filtro); const t = $('msg-texto'); if (t) t.focus(); }; pie.appendChild(rb); }
+      tarj.appendChild(pie); lista.appendChild(tarj);
+    });
+    compositor(caja);
+    caja.appendChild(el('div', 'padding:6px 14px 10px;font-size:10.5px;color:#64748b', 'El texto se guarda cifrado y se borra a los ' + datos.dias + ' días. Remitente, destinatarios y hora no se cifran. Esta mensajería no reemplaza los medios de comunicación reglamentarios.'));
+  }
+
+  /* ---------- Redactar ---------- */
+  function compositor(caja) {
+    const d = datos, sup = !!window.__super, cj = el('div', 'border-top:1px solid #334155;padding:10px 14px;display:flex;flex-direction:column;gap:6px');
+    const sel = (css) => el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;' + (css || ''));
+    const fila = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center');
+    let tipoSel = null, paraSel = null, alcSel = null, pers = null, temaSel = sel(), priSel = sel();
+    TEMAS.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; temaSel.appendChild(o); }); temaSel.value = 'OTRO';
+    [['NORMAL', 'Prioridad normal'], ['URGENTE', '🔴 Urgente']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; priSel.appendChild(o); });
+
+    if (respondiendo) {
+      const rb = el('div', 'display:flex;align-items:center;gap:8px;background:#1e293b;border-radius:4px;padding:4px 8px;font-size:12px');
+      rb.appendChild(el('span', 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', '↩ Respondiendo a ' + (respondiendo.deNombre || respondiendo.de) + ': ' + respondiendo.texto.slice(0, 60)));
+      const c = el('button', 'background:none;border:none;color:#94a3b8;cursor:pointer', '✕'); c.type = 'button'; c.onclick = () => { respondiendo = null; dibujar(caja, 'todos'); }; rb.appendChild(c); cj.appendChild(rb);
+    } else if (!d.puedeIniciar) {
+      fila.appendChild(el('span', 'color:#94a3b8', 'Informe a Administrador y Planificador:'));
+    } else {
+      if (d.puedeAviso || sup) {
+        tipoSel = sel(); [['MENSAJE', '✉️ Mensaje'], ['AVISO', '📢 Aviso']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; tipoSel.appendChild(o); }); fila.appendChild(tipoSel);
+      }
+      if (sup) {
+        alcSel = sel(); [['ESTE', 'En este teatro'], ['ELEGIDOS', 'Teatros elegidos…'], ['TODOS', 'TODOS los teatros']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; alcSel.appendChild(o); }); fila.appendChild(alcSel);
+      }
+      paraSel = sel(); [['TODOS', 'Para: todo el teatro'], ['SUPERIORES', 'Para: Administrador y Planificador'], ['ROL:operador', 'Para: todos los Operadores'], ['ROL:planificador', 'Para: todos los Planificadores'], ['ROL:administrador', 'Para: todos los Administradores'], ['PERSONAS', 'Para: personas elegidas…']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; paraSel.appendChild(o); });
+      fila.appendChild(paraSel);
+    }
+    fila.appendChild(temaSel); fila.appendChild(priSel);
+    cj.appendChild(fila);
+    const zona = el('div', 'display:none;max-height:110px;overflow:auto;border:1px solid #334155;border-radius:4px;padding:4px 8px'); cj.appendChild(zona);
+    const llenarPersonas = () => {
+      zona.innerHTML = ''; zona.dataset.modo = 'personas';
+      (d.miembros || []).forEach(m => { const l = el('label', 'display:block;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.value = m.email; l.appendChild(c); l.appendChild(document.createTextNode(' ' + m.nombre + ' (' + m.rol + ')')); zona.appendChild(l); });
+      if (!(d.miembros || []).length) zona.textContent = 'No hay otros usuarios en este teatro.';
+    };
+    const llenarTeatros = () => {
+      zona.innerHTML = ''; zona.dataset.modo = 'teatros';
+      (window.__teatros || []).forEach(t => { const l = el('label', 'display:block;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.value = t.id; l.appendChild(c); l.appendChild(document.createTextNode(' ' + t.nombre)); zona.appendChild(l); });
+    };
+    const ajustar = () => {
+      const alc = alcSel ? alcSel.value : 'ESTE', multi = alc !== 'ESTE';
+      if (tipoSel && multi) tipoSel.value = 'AVISO'; if (tipoSel) tipoSel.disabled = multi;
+      if (paraSel) paraSel.style.display = multi ? 'none' : '';
+      if (alc === 'ELEGIDOS') { llenarTeatros(); zona.style.display = ''; }
+      else if (!multi && paraSel && paraSel.value === 'PERSONAS') { llenarPersonas(); zona.style.display = ''; }
+      else zona.style.display = 'none';
+    };
+    if (alcSel) alcSel.onchange = ajustar; if (paraSel) paraSel.onchange = ajustar;
+
+    const ta = el('textarea', 'width:100%;box-sizing:border-box;min-height:60px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:6px;font:14px sans-serif;resize:vertical');
+    ta.id = 'msg-texto'; ta.maxLength = 500; ta.placeholder = respondiendo ? 'Escriba su respuesta…' : 'Escriba el mensaje (máximo 500 caracteres)…'; cj.appendChild(ta);
+    const pie = el('div', 'display:flex;align-items:center;gap:8px'), cont = el('span', 'color:#64748b;font-size:11px;flex:1', '0 / 500'), err = el('span', 'color:#fca5a5;font-size:12px');
+    ta.oninput = () => { cont.textContent = ta.value.length + ' / 500'; };
+    const env = el('button', 'background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:6px 16px;cursor:pointer;font-weight:bold', 'Enviar'); env.type = 'button';
+    env.onclick = async () => {
+      err.textContent = ''; const texto = ta.value.trim(); if (!texto) { err.textContent = 'Escriba el mensaje.'; return; }
+      const base = { texto, tema: temaSel.value, prioridad: priSel.value }; let accion = 'MSG_ENVIAR', p;
+      const alc = alcSel ? alcSel.value : 'ESTE';
+      if (alc !== 'ESTE') {
+        accion = 'MSG_BROADCAST'; if (alc === 'TODOS') base.teatros = 'TODOS'; else { base.teatros = [...zona.querySelectorAll('input:checked')].map(c => c.value); if (!base.teatros.length) { err.textContent = 'Elija al menos un teatro.'; return; } }
+        if (!confirm('Se enviará un aviso a ' + (alc === 'TODOS' ? 'TODOS los teatros' : base.teatros.length + ' teatro(s)') + '. ¿Confirmar?')) return;
+      } else if (respondiendo) base.respuestaA = respondiendo.id;
+      else if (!d.puedeIniciar) base.para = 'SUPERIORES';
+      else {
+        p = paraSel.value; if (p === 'PERSONAS') { p = [...zona.querySelectorAll('input:checked')].map(c => c.value); if (!p.length) { err.textContent = 'Elija al menos una persona.'; return; } }
+        base.para = p; base.tipo = tipoSel ? tipoSel.value : 'MENSAJE';
+        if (base.tipo === 'AVISO' && !confirm('Se emitirá un AVISO a ' + (typeof p === 'string' ? p : p.length + ' persona(s)') + '. ¿Confirmar?')) return;
+      }
+      env.disabled = true; env.textContent = 'Enviando…';
+      try {
+        const r = await api(accion, base);
+        if (r.status === 'success') { respondiendo = null; if (accion === 'MSG_BROADCAST') aviso('✔ Aviso enviado a ' + r.teatros + ' teatro(s)'); const l = await api('MSG_LISTAR'); if (l.status === 'success') { datos = l; dibujar(caja, 'todos'); } }
+        else { err.textContent = r.message || 'No se pudo enviar.'; env.disabled = false; env.textContent = 'Enviar'; }
+      } catch (e) { err.textContent = 'Error de enlace con el servidor.'; env.disabled = false; env.textContent = 'Enviar'; }
+    };
+    pie.appendChild(cont); pie.appendChild(err); pie.appendChild(env); cj.appendChild(pie); caja.appendChild(cj);
+    ajustar();
+  }
+  window.abrirMensajes = abrir;
+})();
+</script>
+<!-- ===== FIN BLOQUE MENSAJES ===== -->
 </body>
 </html>
