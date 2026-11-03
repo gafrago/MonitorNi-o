@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-o</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-p</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxFVw3N-D80aqUtGROoO6hAUpLh_0f24VMWvGAd4m3bfurAT8XikPOTZ9ui6hl55Wb1dQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxAjw11SwDM_DL5oenHbF2nzuQs6NxPs1yzSZPNNilMOGdJE6xtY7KB_D86RoVzQ3GUOw/exec";
 
 
 ;
@@ -862,7 +862,7 @@ function procesarMisiones(misionesData) {
     const o = parts[0] ? parseTexto(parts[0]) : {nombre: 'N/A', raw: 'N/A'};
     const d = parts.length > 1 ? parseTexto(parts[1]) : {nombre: 'N/A', raw: 'N/A'};
     
-    const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
+    const esAdmin = /^(administrador|planificador)$/.test(String(sesionActiva.rol).toLowerCase());
     
     const btnActions = `
       <div style="display:flex;gap:3px;margin-top:5px;flex-wrap:wrap">
@@ -1676,7 +1676,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
       const st = String(m.Estado).toUpperCase(), [o, d] = partirOD(m.Origen_Destino), id = escH(m.ID_Mision);
       const color = st.includes('CURSO') ? '#16a34a' : st.includes('FINALIZADA') ? '#2563eb' : st.includes('SUSPENDIDA') ? '#d97706' : '#3b82f6';
       
-      const esAdmin = sesionActiva.rol.toLowerCase() !== 'operador';
+      const esAdmin = /^(administrador|planificador)$/.test(String(sesionActiva.rol).toLowerCase());
       
       const btn = (acc, bg, ico, tip) => `<button class="btn-pick" style="background:${bg};padding:3px 6px" data-acc="${acc}" data-id="${id}" title="${tip}">${ico}</button>`;
       
@@ -3668,7 +3668,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function pintarTablaEventos() {
     const tb = document.querySelector('#tabla-eventos tbody'); if (!tb) return; tb.innerHTML = '';
-    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = String(sesionActiva.rol).toLowerCase() !== 'operador';
+    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = /^(administrador|planificador)$/.test(String(sesionActiva.rol).toLowerCase());
     abiertos.forEach(e => {
       const tr = tb.insertRow();
       tr.insertCell().textContent = TIPOS[e.tipo] || e.tipo; const n = tr.insertCell(); n.textContent = e.nombre; if (e.notas) n.title = e.notas;
@@ -3790,7 +3790,7 @@ window.addEventListener('DOMContentLoaded', () => {
       modal('👥 Accesos al teatro ' + t.nombre, (c, msg, cerrar) => {
         c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + ')').join(', ') || 'ninguno')));
         const us = campo(c, 'Usuario', 'select', '', undefined, i => { (usuariosTodos.length ? usuariosTodos : []).forEach(u => i.add(new Option(u.email + (u.nombre ? ' — ' + u.nombre : ''), u.email))); });
-        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r, r))); });
+        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Meteorologo', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r === 'Meteorologo' ? 'Meteorólogo' : r, r))); });
         const quitar = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const qk = el('input'); qk.type = 'checkbox'; quitar.append(qk, document.createTextNode('Quitarle el acceso a este teatro')); c.appendChild(quitar);
         botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
       });
@@ -4642,6 +4642,292 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE DESPLIEGUE ===== -->
+
+<!-- ===== INICIO BLOQUE METEOROLOGIA: pegar ULTIMO, antes de </body>, despues de bloque-despliegue.html ===== -->
+<script>
+/* A.R.E.S.: Meteorologia en todos los teatros.
+   - Capas que se pueden ver u ocultar: alertas por sector, METAR, modelo GFS (viento / lluvia / nubes), satelite NASA GOES y Windy incrustado.
+   - Partes meteorologicos por sector: los emite el Meteorologo (o Planificador / Administrador) y llegan por mensajeria cifrada a quienes
+     eligieron ese sector; ademas el sector se marca en el mapa con el color de la severidad.
+   Fuentes abiertas: Open-Meteo (GFS), NASA GIBS (GOES), NOAA aviationweather.gov (METAR, via el servidor), Windy (iframe oficial).
+   Todo texto externo o de usuarios se muestra con textContent (nunca como HTML). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const SEV = { INFO: ['Informativo', '#2563eb'], PRECAUCION: ['Precaución', '#d97706'], ALERTA: ['Alerta', '#ea580c'], CRITICA: ['Crítica', '#b91c1c'] };
+  const SEV_ORDEN = ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'];
+  const FC = { VFR: '#16a34a', MVFR: '#2563eb', IFR: '#dc2626', LIFR: '#a21caf' };
+  const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+  const SAT = {   // el primero que cargue tiles se usa; si ninguno responde, se avisa
+    color: [GIBS + '/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png'],
+    ir: [GIBS + '/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png', GIBS + '/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png']
+  };
+  const ENLACES = [['SMN: radar, satélite y pronósticos', 'https://www.smn.gob.ar/'], ['SMN: servicios aeronáuticos (METAR / AEROMET)', 'https://www.smn.gob.ar/'], ['Meteored Argentina', 'https://www.meteored.com.ar/'], ['OGIMET (METAR y SYNOP)', 'https://www.ogimet.com/'], ['Windy', 'https://www.windy.com/']];
+
+  let partes = null, metar = null, panel = null, grid = null, gridT = 0, capaAlert = null, capaMetar = null, capaGfs = null, capaSat = {}, nTile = {};
+  let pref = { alertas: true, metar: false, todas: false, gfs: 'ninguna', hora: 0, sat: false, ir: false };
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const clavePref = () => 'ares_meteo_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
+  function leerPref() { try { const j = JSON.parse(localStorage.getItem(clavePref()) || 'null'); if (j && typeof j === 'object') pref = Object.assign(pref, j); } catch (_) { /* sin almacenamiento */ } }
+  function guardarPref() { try { localStorage.setItem(clavePref(), JSON.stringify(pref)); } catch (_) { /* sin almacenamiento */ } }
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const teatro = () => window.ARES_TEATRO || null;
+  const sectoresT = () => ((teatro() && teatro().sectores) || []).filter(s => isFinite(s.lat) && isFinite(s.lon));
+  const hhmm = ms => new Date(ms).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const fechaHora = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const quitar = c => { if (c) { try { c.remove(); } catch (_) { /* ya no esta */ } } return null; };
+
+  /* ---------- Partes meteorologicos ---------- */
+  async function cargarPartes() {
+    const r = await api('MET_PARTES'); if (r.status !== 'success') throw new Error(r.message || 'No se pudieron leer los partes');
+    partes = r; dibujarAlertas(); badge(); if (panel) pintarPartes(); return r;
+  }
+  const relevantes = () => (partes ? partes.partes.filter(p => p.sector === 'TODOS' || !partes.miSector || p.sector === partes.miSector) : []);
+  const sevMax = l => l.reduce((m, p) => Math.max(m, SEV_ORDEN.indexOf(p.sev)), -1);
+  function badge() {
+    const b = $('btn-meteo'); if (!b) return; const l = relevantes(), m = sevMax(l);
+    b.textContent = '🌦 Meteo' + (l.length ? ' (' + l.length + ')' : '');
+    b.style.background = m >= 2 ? SEV[SEV_ORDEN[m]][1] : ''; b.style.color = m >= 2 ? '#fff' : '';
+    b.title = l.length ? l.length + ' parte(s) vigente(s) para su sector' : 'Meteorología';
+  }
+  function dibujarAlertas() {
+    capaAlert = quitar(capaAlert); const mp = mapa(); if (!mp || !pref.alertas || !partes) return;
+    capaAlert = L.layerGroup(); const ss = sectoresT(), porSector = {};
+    partes.partes.forEach(p => { if (p.sector === 'TODOS') return; const a = porSector[p.sector]; if (!a || SEV_ORDEN.indexOf(p.sev) > SEV_ORDEN.indexOf(a.sev)) porSector[p.sector] = p; });
+    Object.keys(porSector).forEach(n => {
+      const s = ss.filter(x => x.nombre === n)[0], p = porSector[n]; if (!s) return; const col = SEV[p.sev][1];
+      L.circle([s.lat, s.lon], { radius: 25000, color: col, weight: 2, fillColor: col, fillOpacity: .18, dashArray: p.sev === 'CRITICA' ? '' : '6 4' }).addTo(capaAlert).bindPopup(popupParte(p));
+      L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: '<div style="width:30px;height:30px;border-radius:50%;background:' + col + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 0 8px ' + col + '">🌦</div>' }), title: 'Parte meteorológico: ' + n }).addTo(capaAlert).bindPopup(popupParte(p));
+    });
+    capaAlert.addTo(mp);
+  }
+  function popupParte(p) {
+    const d = el('div', 'font:12px sans-serif;max-width:240px');
+    d.appendChild(el('b', 'color:' + SEV[p.sev][1], SEV[p.sev][0].toUpperCase() + ' · ' + p.sector)); d.appendChild(el('br'));
+    d.appendChild(el('b', '', p.titulo)); d.appendChild(el('div', 'white-space:pre-wrap;margin-top:3px', p.texto)); d.appendChild(el('div', 'color:#64748b;margin-top:3px', p.autor + ' · hasta ' + fechaHora(p.vence)));
+    return d;
+  }
+
+  /* ---------- METAR ---------- */
+  async function cargarMetar(forzar) {
+    if (metar && !forzar && Date.now() - metar.recibido < 10 * 60000) return metar;
+    const r = await api('MET_METAR'); if (r.status !== 'success') throw new Error(r.message || 'METAR no disponible');
+    r.recibido = Date.now(); metar = r; dibujarMetar(); if (panel) pintarMetar(); return r;
+  }
+  const dirTxt = v => v === 'VRB' ? 'variable' : (v === null || v === undefined) ? '—' : String(v).padStart(3, '0') + '°';
+  function detalleMetar(e) {
+    const d = el('div', 'font:12px sans-serif;max-width:260px');
+    d.appendChild(el('b', '', e.id + (e.n ? ' · ' + e.n : ''))); d.appendChild(el('span', 'margin-left:6px;color:#fff;background:' + (FC[e.fc] || '#64748b') + ';border-radius:3px;padding:0 5px;font-size:11px', e.fc));
+    d.appendChild(el('div', 'margin-top:3px', 'Viento ' + dirTxt(e.wd) + ' ' + (e.ws !== null ? e.ws + ' kt' : '—') + (e.wg ? ' ráf. ' + e.wg : '') + ' · Vis. ' + (e.v !== null ? e.v + ' km' : '—') + ' · Techo ' + (e.h !== null ? e.h + ' ft' : 'sin techo') + ' · T ' + (e.t !== null ? e.t + '°C' : '—')));
+    d.appendChild(el('div', 'font-family:monospace;font-size:11px;color:#475569;margin-top:4px;word-break:break-word', e.raw)); d.appendChild(el('div', 'color:#64748b;font-size:11px;margin-top:2px', 'Observado ' + (e.ot ? fechaHora(e.ot * 1000) : '—')));
+    return d;
+  }
+  function dibujarMetar() {
+    capaMetar = quitar(capaMetar); const mp = mapa(); if (!mp || !pref.metar || !metar) return; capaMetar = L.layerGroup();
+    metar.estaciones.filter(e => pref.todas || e.pri).forEach(e => {
+      const col = FC[e.fc] || '#64748b', tam = e.pri ? 30 : 22;
+      L.marker([e.la, e.lo], { title: e.id, icon: L.divIcon({ className: '', iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2], html: '<div style="width:' + tam + 'px;height:' + tam + 'px;border-radius:50%;background:' + col + ';color:#fff;display:flex;align-items:center;justify-content:center;font:bold ' + (e.pri ? 9 : 8) + 'px sans-serif;border:2px solid #fff;box-shadow:0 0 4px #000a">' + e.id.slice(2) + '</div>' }) }).bindPopup(detalleMetar(e)).addTo(capaMetar);
+    });
+    capaMetar.addTo(mp);
+  }
+
+  /* ---------- Modelo GFS (Open-Meteo): viento, lluvia o nubes en una grilla sobre el teatro ---------- */
+  function puntosGrilla() {
+    const t = teatro(), c = t && isFinite(t.lat) ? { lat: t.lat, lon: t.lon } : { lat: -27.4, lon: -58.9 }, R = Math.min(500, Math.max(120, (t && t.radio) || 300)), n = 7, la = [], lo = [];
+    const dLat = R / 111, dLon = R / (111 * Math.max(.3, Math.cos(c.lat * Math.PI / 180)));
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { la.push(+(c.lat - dLat + 2 * dLat * i / (n - 1)).toFixed(3)); lo.push(+(c.lon - dLon + 2 * dLon * j / (n - 1)).toFixed(3)); }
+    return { la, lo };
+  }
+  async function cargarGrilla() {
+    if (grid && Date.now() - gridT < 30 * 60000) return grid;
+    const p = puntosGrilla(), u = 'https://api.open-meteo.com/v1/forecast?latitude=' + p.la.join(',') + '&longitude=' + p.lo.join(',') + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover&models=gfs_seamless&forecast_days=3&timezone=UTC&wind_speed_unit=kmh';
+    const r = await (await fetch(u)).json(); const a = Array.isArray(r) ? r : [r]; if (!a.length || !a[0].hourly) throw new Error('Sin datos del modelo');
+    grid = { puntos: a.map((x, i) => ({ lat: p.la[i], lon: p.lo[i], h: x.hourly })), tiempos: a[0].hourly.time }; gridT = Date.now(); return grid;
+  }
+  function indiceHora() {
+    if (!grid) return 0; const objetivo = Date.now() + pref.hora * 3600000; let mejor = 0, d = 1e18;
+    grid.tiempos.forEach((t, i) => { const x = Math.abs(Date.parse(t + 'Z') - objetivo); if (x < d) { d = x; mejor = i; } }); return mejor;
+  }
+  const colViento = v => v >= 60 ? '#b91c1c' : v >= 40 ? '#ea580c' : v >= 25 ? '#eab308' : '#22c55e';
+  const colLluvia = v => v >= 10 ? '#1e3a8a' : v >= 4 ? '#2563eb' : v >= 1 ? '#38bdf8' : '#bae6fd';
+  function dibujarGfs() {
+    capaGfs = quitar(capaGfs); const mp = mapa(); if (!mp || pref.gfs === 'ninguna' || !grid) return; capaGfs = L.layerGroup(); const i = indiceHora();
+    grid.puntos.forEach(p => {
+      const h = p.h, ll = [p.lat, p.lon];
+      if (pref.gfs === 'viento') {
+        const v = h.wind_speed_10m[i], d = h.wind_direction_10m[i], g = h.wind_gusts_10m[i]; if (v === null || v === undefined) return;
+        L.marker(ll, { interactive: true, icon: L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="transform:rotate(' + Math.round((d + 180) % 360) + 'deg);font-size:22px;line-height:26px;text-align:center;color:' + colViento(v) + ';text-shadow:0 0 3px #000">➤</div>' }) })
+          .bindTooltip(Math.round(v) + ' km/h (ráf. ' + Math.round(g) + ') desde ' + Math.round(d) + '°').addTo(capaGfs);
+      } else if (pref.gfs === 'lluvia') {
+        const v = h.precipitation[i]; if (!v || v < .1) return;
+        L.circleMarker(ll, { radius: Math.min(22, 6 + v * 2), color: colLluvia(v), fillColor: colLluvia(v), fillOpacity: .55, weight: 1 }).bindTooltip(v.toFixed(1) + ' mm/h').addTo(capaGfs);
+      } else if (pref.gfs === 'nubes') {
+        const v = h.cloud_cover[i]; if (v === null || v === undefined) return;
+        L.circleMarker(ll, { radius: 20, stroke: false, fillColor: '#e2e8f0', fillOpacity: Math.max(.05, v / 100 * .7) }).bindTooltip('Nubosidad ' + Math.round(v) + '%').addTo(capaGfs);
+      }
+    });
+    capaGfs.addTo(mp); const e = $('met-gfs-hora'); if (e) e.textContent = 'Pronóstico GFS para ' + fechaHora(Date.parse(grid.tiempos[i] + 'Z')) + ' (hora local del navegador)';
+  }
+  async function aplicarGfs() { if (pref.gfs === 'ninguna') { capaGfs = quitar(capaGfs); const e = $('met-gfs-hora'); if (e) e.textContent = ''; return; } try { await cargarGrilla(); dibujarGfs(); } catch (e) { const x = $('met-gfs-hora'); if (x) x.textContent = '⚠ No se pudo consultar el modelo GFS.'; } }
+
+  /* ---------- Satelite NASA (GOES) ---------- */
+  function aplicarSat(clave, on) {
+    capaSat[clave] = quitar(capaSat[clave]); const mp = mapa(), msg = $('met-sat-msg-' + clave); if (msg) msg.textContent = ''; if (!mp || !on) return;
+    const cand = SAT[clave]; let k = 0; nTile[clave] = { ok: 0, err: 0 };
+    const crear = () => {
+      const l = L.tileLayer(cand[k], { maxNativeZoom: clave === 'color' ? 7 : 6, maxZoom: 9, opacity: clave === 'ir' ? .75 : .8, attribution: 'NASA GIBS / EOSDIS · GOES-East' });
+      l.on('tileload', () => { nTile[clave].ok++; });
+      l.on('tileerror', () => { nTile[clave].err++; if (!nTile[clave].ok && nTile[clave].err >= 6) { try { l.remove(); } catch (_) { /* nada */ } if (k + 1 < cand.length) { k++; nTile[clave].err = 0; capaSat[clave] = crear(); capaSat[clave].addTo(mp); } else if (msg) msg.textContent = '⚠ La capa no respondió. Pruebe más tarde o use Windy.'; } });
+      return l;
+    };
+    capaSat[clave] = crear(); capaSat[clave].addTo(mp);
+  }
+
+  /* ---------- Panel ---------- */
+  function estiloSel(s) { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; }
+  function seccion(titulo, abierta) { const d = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:8px 0'); if (abierta) d.open = true; d.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', titulo)); return d; }
+  function check(txt, on, cb) { const l = el('label', 'display:flex;gap:6px;align-items:center;margin:4px 0;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.checked = !!on; c.onchange = () => cb(c.checked); l.append(c, document.createTextNode(txt)); return l; }
+  let zonaPartes = null, zonaMetar = null;
+  function abrir() {
+    if (panel) { panel.remove(); panel = null; return; }
+    panel = el('div', 'position:fixed;right:10px;top:56px;width:min(400px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'meteo-panel';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🌦 Meteorología · ' + ((teatro() && teatro().nombre) || 'Teatro')));
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = abrir; cab.appendChild(x); panel.appendChild(cab);
+    panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:2px', 'Capas y datos de fuentes abiertas. No reemplazan los productos oficiales del SMN.'));
+    zonaPartes = el('div'); panel.appendChild(zonaPartes);
+
+    const sc = seccion('🗺 Capas del mapa', true);
+    sc.appendChild(check('🌦 Alertas por sector (partes vigentes)', pref.alertas, v => { pref.alertas = v; guardarPref(); dibujarAlertas(); }));
+    sc.appendChild(check('🛰 Satélite GOES (color)', pref.sat, v => { pref.sat = v; guardarPref(); aplicarSat('color', v); })); sc.appendChild(el('div', 'font-size:11px;color:#fbbf24', '')).id = 'met-sat-msg-color';
+    sc.appendChild(check('☁ Satélite GOES infrarrojo (tope de nubes: más frío y más brillante = más alto)', pref.ir, v => { pref.ir = v; guardarPref(); aplicarSat('ir', v); })); sc.appendChild(el('div', 'font-size:11px;color:#fbbf24', '')).id = 'met-sat-msg-ir';
+    const fg = el('div', 'margin:6px 0'); fg.appendChild(el('div', 'font-weight:bold;margin-bottom:3px', 'Modelo GFS (NOAA, vía Open-Meteo)'));
+    const sel = estiloSel(el('select')); [['ninguna', 'Sin capa'], ['viento', '💨 Viento'], ['lluvia', '🌧 Lluvia'], ['nubes', '☁ Nubosidad']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.appendChild(o); }); sel.value = pref.gfs;
+    sel.onchange = () => { pref.gfs = sel.value; guardarPref(); aplicarGfs(); }; fg.appendChild(sel);
+    const hs = el('input', 'width:100%;margin-top:4px'); hs.type = 'range'; hs.min = 0; hs.max = 48; hs.step = 3; hs.value = pref.hora; hs.oninput = () => { pref.hora = +hs.value; hl.textContent = '+' + pref.hora + ' h'; }; hs.onchange = () => { guardarPref(); dibujarGfs(); };
+    const hl = el('div', 'font-size:11px;color:#94a3b8', '+' + pref.hora + ' h'); fg.appendChild(hs); fg.appendChild(hl); const gi = el('div', 'font-size:11px;color:#94a3b8'); gi.id = 'met-gfs-hora'; fg.appendChild(gi); sc.appendChild(fg); panel.appendChild(sc);
+
+    zonaMetar = seccion('✈️ METAR (aeródromos de Argentina)', false); panel.appendChild(zonaMetar); pintarMetar();
+
+    const sw = seccion('🌀 Windy (satélite, viento, nubes)', false); const bw = el('div', 'display:flex;gap:6px;flex-wrap:wrap;margin:6px 0'), marco = el('div');
+    [['wind', '💨 Viento'], ['satellite', '🛰 Satélite'], ['clouds', '☁ Nubes'], ['rain', '🌧 Lluvia']].forEach(([ov, t]) => { const b = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px', t); b.type = 'button'; b.onclick = () => windy(marco, ov); bw.appendChild(b); });
+    sw.append(bw, marco, el('div', 'font-size:11px;color:#94a3b8', 'Mapa incrustado de windy.com (su propio servicio y condiciones). Requiere conexión.')); panel.appendChild(sw);
+
+    const se = seccion('🔗 Enlaces oficiales y otras fuentes', false); ENLACES.forEach(([t, u]) => { const a = el('a', 'display:block;margin:4px 0;color:#7dd3fc', t + ' ↗'); a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; se.appendChild(a); });
+    se.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'El radar y las imágenes del SMN y de Meteored no tienen una vía abierta para integrarse; se abren en su propio sitio.')); panel.appendChild(se);
+    document.body.appendChild(panel);
+    pintarPartes();
+    cargarPartes().catch(() => null);
+    if (pref.metar) cargarMetar().catch(() => null);
+  }
+  function windy(marco, ov) {
+    marco.textContent = ''; const t = teatro() || { lat: -27.4, lon: -58.9 }, f = el('iframe', 'width:100%;height:320px;border:0;border-radius:4px');
+    f.src = 'https://embed.windy.com/embed2.html?lat=' + encodeURIComponent(+t.lat || -27.4) + '&lon=' + encodeURIComponent(+t.lon || -58.9) + '&zoom=6&level=surface&overlay=' + ov + '&menu=&message=true&marker=&calendar=now&type=map&location=coordinates&metricWind=km%2Fh&metricTemp=%C2%B0C';
+    f.title = 'Windy'; f.loading = 'lazy'; f.referrerPolicy = 'no-referrer'; f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups'); marco.appendChild(f);
+  }
+  function pintarMetar() {
+    if (!zonaMetar) return; while (zonaMetar.childNodes.length > 1) zonaMetar.removeChild(zonaMetar.lastChild);
+    zonaMetar.appendChild(check('Mostrar en el mapa', pref.metar, v => { pref.metar = v; guardarPref(); if (v) cargarMetar().then(() => null).catch(() => msgMetar('⚠ No se pudo obtener el METAR.')); else dibujarMetar(); }));
+    zonaMetar.appendChild(check('Todas las estaciones de Argentina (no solo las prioritarias)', pref.todas, v => { pref.todas = v; guardarPref(); dibujarMetar(); pintarMetar(); }));
+    const b = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;margin:4px 0', '↻ Actualizar'); b.type = 'button'; b.onclick = () => cargarMetar(true).catch(() => msgMetar('⚠ No se pudo obtener el METAR.')); zonaMetar.appendChild(b);
+    const m = el('div', 'font-size:11px;color:#fbbf24'); m.id = 'met-metar-msg'; zonaMetar.appendChild(m);
+    if (!metar) { zonaMetar.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Active “Mostrar en el mapa” o toque Actualizar para consultar.')); return; }
+    if (metar.desactualizado) m.textContent = '⚠ El servicio no respondió: se muestran los últimos datos guardados.';
+    const t = el('table', 'width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px'); const th = el('tr'); ['Est.', 'Cat.', 'Viento', 'Vis.', 'Techo', 'Hora'].forEach(x => th.appendChild(el('th', 'text-align:left;color:#94a3b8;padding:2px 3px', x))); t.appendChild(th);
+    metar.estaciones.filter(e => pref.todas || e.pri).forEach(e => {
+      const r = el('tr', 'cursor:pointer;border-top:1px solid #1e293b'); r.title = e.n + '\n' + e.raw;
+      [[e.id, 'font-weight:bold'], [e.fc, 'color:#fff;background:' + (FC[e.fc] || '#64748b') + ';border-radius:3px;text-align:center'], [dirTxt(e.wd) + ' ' + (e.ws !== null ? e.ws + 'kt' : ''), ''], [e.v !== null ? e.v + ' km' : '—', ''], [e.h !== null ? e.h + ' ft' : '—', ''], [e.ot ? hhmm(e.ot * 1000) : '—', '']].forEach(([x, s]) => r.appendChild(el('td', 'padding:2px 3px;' + s, x)));
+      r.onclick = () => { const mp = mapa(); if (mp) { mp.setView([e.la, e.lo], Math.max(mp.getZoom(), 8)); if (!pref.metar) { pref.metar = true; guardarPref(); dibujarMetar(); pintarMetar(); } } };
+      t.appendChild(r);
+    });
+    zonaMetar.appendChild(t); zonaMetar.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', 'Fuente: ' + metar.fuente + ' · consultado ' + hhmm(metar.generado) + ' · se renueva cada 15 min. Categorías: VFR verde, MVFR azul, IFR rojo, LIFR violeta.'));
+    zonaMetar.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'No se encontró METAR para Bernardo de Irigoyen; si tiene otro código de aeródromo, avise para agregarlo.'));
+  }
+  function msgMetar(t) { const m = $('met-metar-msg'); if (m) m.textContent = t; }
+  function pintarPartes() {
+    if (!zonaPartes) return; zonaPartes.textContent = '';
+    if (!partes) { zonaPartes.appendChild(el('div', 'margin:8px 0;color:#94a3b8', 'Consultando partes…')); return; }
+    const caja = seccion('📋 Partes por sector (' + partes.partes.length + ' vigente' + (partes.partes.length === 1 ? '' : 's') + ')', true);
+    // sector propio
+    if (partes.sectores.length) {
+      const f = el('div', 'display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap'); f.appendChild(el('span', '', 'Mi sector:'));
+      const s = estiloSel(el('select')); const o0 = el('option', '', '(sin sector: veo todos)'); o0.value = ''; s.appendChild(o0); partes.sectores.forEach(n => { const o = el('option', '', n); o.value = n; s.appendChild(o); }); s.value = partes.miSector || '';
+      s.onchange = async () => { try { const r = await api('MET_ASIGNAR', { sector: s.value }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } };
+      f.appendChild(s); caja.appendChild(f); caja.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Los partes de su sector le llegan además como mensaje en 📨.'));
+    } else caja.appendChild(el('div', 'font-size:12px;color:#fbbf24;margin:6px 0', 'Este teatro no tiene sectores definidos: el administrador puede agregarlos desde el Panel de mando.'));
+    if (!partes.partes.length) caja.appendChild(el('div', 'margin:6px 0;color:#94a3b8', 'No hay partes vigentes.'));
+    partes.partes.forEach(p => {
+      const t = el('div', 'border-left:4px solid ' + SEV[p.sev][1] + ';background:#1e293b;border-radius:4px;padding:6px 8px;margin:6px 0');
+      const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', p.titulo)); h.appendChild(el('span', 'color:#fff;background:' + SEV[p.sev][1] + ';border-radius:3px;padding:0 5px;font-size:11px', SEV[p.sev][0])); t.appendChild(h);
+      t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (p.sector === 'TODOS' ? 'Todos los sectores' : 'Sector ' + p.sector) + ' · ' + p.autor + ' · hasta ' + fechaHora(p.vence) + (p.enviados ? ' · enviado a ' + p.enviados : '')));
+      t.appendChild(el('div', 'white-space:pre-wrap;margin-top:3px', p.texto));
+      if (partes.puedeEmitir && (p.propio || partes.miembros)) { const c = el('button', 'margin-top:4px;background:#1e293b;border:1px solid #475569;color:#fca5a5;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', 'Cerrar parte'); c.type = 'button'; c.onclick = async () => { if (!confirm('¿Cerrar este parte? Deja de figurar como vigente.')) return; try { const r = await api('MET_PARTE_CERRAR', { id: p.id }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } }; t.appendChild(c); }
+      caja.appendChild(t);
+    });
+    zonaPartes.appendChild(caja);
+    if (partes.puedeEmitir) zonaPartes.appendChild(formParte());
+    if (partes.miembros && partes.sectores.length) zonaPartes.appendChild(asignaciones());
+  }
+  function formParte() {
+    const d = seccion('✍️ Emitir parte meteorológico', !partes.partes.length); const lab = (t, c) => { const l = el('label', 'display:block;margin:5px 0'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); l.appendChild(c); return l; };
+    const sec = estiloSel(el('select')); ['TODOS'].concat(partes.sectores).forEach(n => { const o = el('option', '', n === 'TODOS' ? 'TODOS los sectores' : n); o.value = n; sec.appendChild(o); });
+    const sev = estiloSel(el('select')); partes.severidades.forEach(s => { const o = el('option', '', SEV[s][0]); o.value = s; sev.appendChild(o); }); sev.value = 'PRECAUCION';
+    const hor = estiloSel(el('input')); hor.type = 'number'; hor.min = 1; hor.max = 72; hor.value = 12; hor.style.width = '70px';
+    const tit = estiloSel(el('input')); tit.maxLength = 80; tit.style.width = '100%'; tit.style.boxSizing = 'border-box'; tit.placeholder = 'Ej: Tormentas fuertes con ráfagas';
+    const txt = estiloSel(el('textarea')); txt.rows = 4; txt.maxLength = 1000; txt.style.cssText += ';width:100%;box-sizing:border-box'; txt.placeholder = 'Fenómeno, horario, zona afectada y recomendación para el personal desplegado.';
+    const info = el('div', 'font-size:11px;color:#94a3b8;margin:3px 0'), res = el('div', 'font-size:12px;margin-top:4px');
+    const act = () => { const n = sec.value === 'TODOS' ? null : (partes.porSector[sec.value] || 0); info.textContent = sec.value === 'TODOS' ? 'Llegará por mensaje a todo el teatro.' : n ? 'Llegará por mensaje a ' + n + ' persona(s) con ese sector.' : '⚠ Nadie eligió ese sector todavía: quedará visible en el panel y el mapa, pero no llegará por mensaje.'; }; sec.onchange = act; act();
+    const b = el('button', 'background:#0369a1;border:0;color:#fff;border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:bold', 'Emitir y enviar'); b.type = 'button';
+    b.onclick = async () => {
+      res.textContent = ''; if (!tit.value.trim() || !txt.value.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Escriba título y texto.'; return; }
+      b.disabled = true; try { const r = await api('MET_PARTE_EMITIR', { sector: sec.value, severidad: sev.value, titulo: tit.value.trim(), texto: txt.value.trim(), horas: +hor.value || 12 });
+        if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = r.message; } else { res.style.color = '#86efac'; res.textContent = '✅ Parte emitido' + (r.enviados ? ' y enviado a ' + r.enviados + ' persona(s).' : '.'); tit.value = ''; txt.value = ''; await cargarPartes(); if (typeof window.actualizarMensajes === 'function') window.actualizarMensajes(); }
+      } catch (_) { res.style.color = '#fca5a5'; res.textContent = 'Sin conexión con el servidor.'; } finally { b.disabled = false; }
+    };
+    const f1 = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); f1.append(lab('Sector', sec), lab('Severidad', sev), lab('Vigencia (h)', hor));
+    d.append(f1, info, lab('Título', tit), lab('Texto', txt), b, res); return d;
+  }
+  function asignaciones() {
+    const d = seccion('👥 Sector de cada persona', false); d.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:4px 0', 'Define a quién le llega cada parte. Cada persona también puede elegir el suyo.'));
+    partes.miembros.forEach(m => {
+      const f = el('div', 'display:flex;gap:6px;align-items:center;margin:3px 0'); f.appendChild(el('span', 'flex:1;font-size:12px', m.nombre + ' (' + m.rol + ')'));
+      const s = estiloSel(el('select')); const o0 = el('option', '', '—'); o0.value = ''; s.appendChild(o0); partes.sectores.forEach(n => { const o = el('option', '', n); o.value = n; s.appendChild(o); }); s.value = m.sector || '';
+      s.onchange = async () => { try { const r = await api('MET_ASIGNAR', { correo: m.email, sector: s.value }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } };
+      f.appendChild(s); d.appendChild(f);
+    });
+    return d;
+  }
+
+  /* ---------- Boton y arranque ---------- */
+  function boton() {
+    if (!activa()) { const x = $('btn-meteo'); if (x) x.remove(); return false; }
+    if ($('btn-meteo')) return true;
+    const ref = $('btn-medios') || $('btn-mensajes') || $('btn-informe-meteo') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '🌦 Meteo'); b.id = 'btn-meteo'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref); return true;
+  }
+  let iniciado = false, ultimoTeatro = '';
+  setInterval(() => {
+    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; grid = null; return; }
+    if (!boton()) return;
+    const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
+    if (!iniciado || tid !== ultimoTeatro) {
+      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); leerPref();
+      cargarPartes().catch(() => { iniciado = false; });
+      if (pref.metar) cargarMetar().catch(() => null);
+      if (pref.gfs !== 'ninguna') aplicarGfs();
+      ['color', 'ir'].forEach(k => { capaSat[k] = quitar(capaSat[k]); if (pref[k === 'color' ? 'sat' : 'ir']) aplicarSat(k, true); });
+    }
+  }, 2000);
+  setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
+  window.aresMeteo = { abrir: abrir, recargar: cargarPartes };
+})();
+</script>
+<!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
 
 </body>
 </html>
