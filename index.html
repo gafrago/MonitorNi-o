@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-q</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-s</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyaqjrMgDAbxaMmDOizEtHd-dxWNx75EWF9AUxCUKUbT8O3mYYfvTEYwtrFRgxp4sk7cg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwLfgTsIsVvtj8YzWZUMJKCMcPLZwqkuP-wyDM4njxXSL1Tffob17uOzLkZMe78PALZDQ/exec";
 
 
 ;
@@ -4064,6 +4064,7 @@ window.addEventListener('DOMContentLoaded', () => {
     };
     const env = el('button', 'padding:9px 12px;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#d1fae5;cursor:pointer', '✉️ Enviar a usuarios');
     env.title = 'Envía un resumen con el informe adjunto; cada destinatario lo abre con datos actualizados';
+    if (String(sesionActiva.rol).toLowerCase() !== 'meteorologo') { env.disabled = true; env.title = 'Solo el Meteorólogo envía informes meteorológicos a los usuarios'; env.style.opacity = '.45'; env.style.cursor = 'not-allowed'; }
     env.onclick = async () => {
       const sel = lista.filter(s => cks[s.k].checked); if (!sel.length) { msg.style.color = '#fca5a5'; msg.textContent = 'Elija al menos una zona.'; return; }
       env.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Consultando el modelo meteorológico…';
@@ -4210,7 +4211,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const sel = (css) => el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;' + (css || ''));
     const fila = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center');
     let tipoSel = null, paraSel = null, alcSel = null, pers = null, temaSel = sel(), priSel = sel();
-    TEMAS.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; temaSel.appendChild(o); }); temaSel.value = (borrador && borrador.tema) || 'OTRO';
+    TEMAS.filter(([v]) => v !== 'METEOROLOGICO' || d.rol === 'Meteorologo').forEach(([v, t]) => { const o = el('option', '', t); o.value = v; temaSel.appendChild(o); });   // los informes meteorologicos los envia solo el Meteorologo temaSel.value = (borrador && borrador.tema) || 'OTRO';
     [['NORMAL', 'Prioridad normal'], ['URGENTE', '🔴 Urgente']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; priSel.appendChild(o); });
 
     if (respondiendo) {
@@ -4226,7 +4227,10 @@ window.addEventListener('DOMContentLoaded', () => {
       if (sup) {
         alcSel = sel(); [['ESTE', 'En este teatro'], ['ELEGIDOS', 'Teatros elegidos…'], ['TODOS', 'TODOS los teatros']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; alcSel.appendChild(o); }); fila.appendChild(alcSel);
       }
-      paraSel = sel(); [['TODOS', 'Para: todo el teatro'], ['SUPERIORES', 'Para: Administrador y Planificador'], ['ROL:operador', 'Para: todos los Operadores'], ['ROL:planificador', 'Para: todos los Planificadores'], ['ROL:administrador', 'Para: todos los Administradores'], ['PERSONAS', 'Para: personas elegidas…']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; paraSel.appendChild(o); });
+      const deSector = (d.sectores || []).map(n => ['SECTOR:' + n, 'Para: sector ' + n]);
+      const opcPara = d.rol === 'Meteorologo' ? [['SUPERIORES', 'Para: Administrador y Planificador']].concat(deSector, [['PERSONAS', 'Para: personas elegidas…']])
+        : [['TODOS', 'Para: todo el teatro'], ['SUPERIORES', 'Para: Administrador y Planificador'], ['ROL:operador', 'Para: todos los Operadores'], ['ROL:planificador', 'Para: todos los Planificadores'], ['ROL:administrador', 'Para: todos los Administradores']].concat(deSector, [['PERSONAS', 'Para: personas elegidas…']]);
+      paraSel = sel(); opcPara.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; paraSel.appendChild(o); });
       fila.appendChild(paraSel);
     }
     fila.appendChild(temaSel); fila.appendChild(priSel);
@@ -4625,13 +4629,26 @@ window.addEventListener('DOMContentLoaded', () => {
       (info || s).insertAdjacentElement('afterend', btnSync); }
     btnSync.style.display = d && d.puedeEditar ? 'block' : 'none';
   }
+  function desdeMedios() {      // la lista de seleccion se arma con los medios aereos del teatro (los mismos que ve el desplegar unidad); la hoja Aeronaves solo aporta lo que no este en Medios
+    var d = medios(), s = $('mis-medio'); if (!s || !d) return;
+    var aer = d.unidades.filter(function (u) { return u.dominio === 'AEREO' && u.estado !== 'BAJA'; }); if (!aer.length) return;
+    var previo = s.value, ids = {}, extra = [], extraNo = []; aer.forEach(function (u) { ids[u.identificacion] = 1; });
+    Array.prototype.forEach.call(s.options, function (o) { if (o.value && !ids[o.value]) (o.disabled ? extraNo : extra).push({ v: o.value, t: o.textContent }); });
+    var libres = aer.filter(function (u) { return u.estado === 'DISPONIBLE'; }), otros = aer.filter(function (u) { return u.estado !== 'DISPONIBLE'; });
+    var rotulo = function (u) { return u.identificacion + ' - ' + u.modelo + (u.fuerza ? ' [' + u.fuerza + ']' : '') + (u.base ? ' (Base: ' + u.base + ')' : ''); };
+    var opcion = function (u, off) { var m = modeloDe(u), o = new Option(off ? rotulo(u) + ' · ' + u.estado.replace('_', ' ').toLowerCase() : rotulo(u), u.identificacion); o.dataset.fz = u.fuerza || ''; if (m && m.alcance !== '' && m.alcance !== undefined) o.dataset.alcance = m.alcance; if (m && m.vel !== '' && m.vel !== undefined) o.dataset.vel = m.vel; if (off) o.disabled = true; return o; };
+    s.innerHTML = ''; s.add(new Option('Seleccione aeronave disponible… (' + (libres.length + extra.length) + ')', ''));
+    libres.forEach(function (u) { s.add(opcion(u, false)); }); extra.forEach(function (x) { s.add(new Option(x.t, x.v)); });
+    if (otros.length || extraNo.length) { var g = document.createElement('optgroup'); g.label = 'No disponibles (no se pueden asignar)'; otros.forEach(function (u) { g.appendChild(opcion(u, true)); }); extraNo.forEach(function (x) { var o = new Option(x.t, x.v); o.disabled = true; g.appendChild(o); }); s.appendChild(g); }
+    if (previo) s.value = previo;
+  }
   if (typeof cargaOrig === 'function') window.cargarAeronavesMision = async function () {
     await Promise.all([cargaOrig.apply(this, arguments), recargar()]);
     var d = medios();
     if (!sincronizado && d && d.puedeEditar && faltantes().length) {            // unidades cargadas antes de que existiera el vinculo: se pasan solas, una vez
       sincronizado = true; try { await apiSync(); await cargaOrig.apply(this, arguments); } catch (_) { /* queda el boton manual */ }
     }
-    enriquecer(); mostrarInfo(); botonSync();
+    desdeMedios(); enriquecer(); mostrarInfo(); botonSync();
   };
   try { cargarAeronavesMision = window.cargarAeronavesMision; } catch (_) { /* idem */ }
   var selM = $('mis-medio'); if (selM) selM.addEventListener('change', mostrarInfo);
@@ -4885,7 +4902,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', p.titulo)); h.appendChild(el('span', 'color:#fff;background:' + SEV[p.sev][1] + ';border-radius:3px;padding:0 5px;font-size:11px', SEV[p.sev][0])); t.appendChild(h);
       t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (p.sector === 'TODOS' ? 'Todos los sectores' : 'Sector ' + p.sector) + ' · ' + p.autor + ' · hasta ' + fechaHora(p.vence) + (p.enviados ? ' · enviado a ' + p.enviados : '')));
       t.appendChild(el('div', 'white-space:pre-wrap;margin-top:3px', p.texto));
-      if (partes.puedeEmitir && (p.propio || partes.miembros)) { const c = el('button', 'margin-top:4px;background:#1e293b;border:1px solid #475569;color:#fca5a5;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', 'Cerrar parte'); c.type = 'button'; c.onclick = async () => { if (!confirm('¿Cerrar este parte? Deja de figurar como vigente.')) return; try { const r = await api('MET_PARTE_CERRAR', { id: p.id }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } }; t.appendChild(c); }
+      if ((partes.puedeEmitir && p.propio) || partes.puedeCerrarTodos) { const c = el('button', 'margin-top:4px;background:#1e293b;border:1px solid #475569;color:#fca5a5;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', 'Cerrar parte'); c.type = 'button'; c.onclick = async () => { if (!confirm('¿Cerrar este parte? Deja de figurar como vigente.')) return; try { const r = await api('MET_PARTE_CERRAR', { id: p.id }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } }; t.appendChild(c); }
       caja.appendChild(t);
     });
     zonaPartes.appendChild(caja);
@@ -4947,6 +4964,35 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
+
+<!-- ===== INICIO BLOQUE ROL METEOROLOGO: pegar ULTIMO, antes de </body>, despues de bloque-meteo.html ===== -->
+<style id="estilo-rol-meteo">
+  /* El usuario con rol Meteorologo ve: meteorologia, niveles de rios (capa y panel del visor estrategico) y mensajeria. No ve panel lateral operativo, medios, aeronaves, unidades, bitacora ni SITREP */
+  body.rol-meteo #sidebar, body.rol-meteo #vista-analytics,
+  body.rol-meteo .tab-btn[onclick*="analytics"], body.rol-meteo #btn-medios,
+  body.rol-meteo button[onclick*="generarSITREP"] { display: none !important; }
+  body.rol-meteo #map-tactico { left: 0 !important; }
+</style>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esMeteo = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && String(sesionActiva.rol).toLowerCase() === 'meteorologo'); } catch (_) { return false; } };
+  let aplicado = false;
+  setInterval(() => {
+    const m = esMeteo(); document.body.classList.toggle('rol-meteo', m);
+    if (!m) { aplicado = false; return; }
+    if (aplicado) return; aplicado = true;
+    const nada = async function () { return null; };
+    try { window.cargarAeronavesMision = nada; } catch (_) { /* nada */ }
+    ['chk-infra', 'chk-cortes', 'chk-unidades'].forEach(id => { const c = $(id); if (c) { c.checked = false; if (c.parentNode) c.parentNode.style.display = 'none'; } });   // quedan los hidrometros (caudal de los rios) y las tormentas
+    try { toggleCapas(); renderizarRecursos(); } catch (_) { /* nada */ }
+    try { cambiarPestana('tactica'); } catch (_) { /* nada */ }
+    setTimeout(() => { try { mapTactico.invalidateSize(); } catch (_) { /* nada */ } if (window.aresMeteo && !$('meteo-panel')) window.aresMeteo.abrir(); }, 1500);
+  }, 1000);
+})();
+</script>
+<!-- ===== FIN BLOQUE ROL METEOROLOGO ===== -->
 
 </body>
 </html>
