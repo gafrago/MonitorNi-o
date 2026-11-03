@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-p</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-q</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxAjw11SwDM_DL5oenHbF2nzuQs6NxPs1yzSZPNNilMOGdJE6xtY7KB_D86RoVzQ3GUOw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyaqjrMgDAbxaMmDOizEtHd-dxWNx75EWF9AUxCUKUbT8O3mYYfvTEYwtrFRgxp4sk7cg/exec";
 
 
 ;
@@ -4610,9 +4610,28 @@ window.addEventListener('DOMContentLoaded', () => {
     var p = []; if (o.dataset.fz) p.push('Fuerza: ' + o.dataset.fz); if (o.dataset.alcance) p.push('Alcance ref.: ' + o.dataset.alcance + ' km'); if (o.dataset.vel) p.push('Vel.: ' + o.dataset.vel + ' kt');
     info.textContent = p.length ? p.join(' · ') : 'Sin datos de catálogo para esta aeronave.';
   }
-  var cargaOrig = window.cargarAeronavesMision;
+  var cargaOrig = window.cargarAeronavesMision, sincronizado = false, btnSync = null;
+  async function apiSync() {
+    var r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'AERONAVES_SINCRONIZAR', email: sesionActiva.email, pin: sesionActiva.pin }) })).json(); return r;
+  }
+  function faltantes() {      // unidades aereas cargadas en Medios que no figuran en la lista de aeronaves
+    var d = medios(), s = $('mis-medio'); if (!d || !s) return []; var ids = {}; Array.prototype.forEach.call(s.options, function (o) { ids[o.value] = 1; });
+    return d.unidades.filter(function (u) { return u.dominio === 'AEREO' && u.estado !== 'BAJA' && !ids[u.identificacion]; });
+  }
+  function botonSync() {
+    var s = $('mis-medio'), d = medios(); if (!s) return;
+    if (!btnSync) { btnSync = txt('button', 'background:none;border:0;color:#38bdf8;cursor:pointer;font-size:11px;padding:0;text-align:left;display:block', '↻ Actualizar aeronaves desde 🧰 Medios'); btnSync.type = 'button';
+      btnSync.onclick = async function () { btnSync.textContent = 'Sincronizando…'; try { var r = await apiSync(); btnSync.textContent = r.status === 'success' ? '✔ ' + r.sincronizadas + ' aeronave(s) sincronizada(s)' : '⚠ ' + r.message; await window.cargarAeronavesMision(); } catch (_) { btnSync.textContent = '⚠ Sin conexión'; } };
+      (info || s).insertAdjacentElement('afterend', btnSync); }
+    btnSync.style.display = d && d.puedeEditar ? 'block' : 'none';
+  }
   if (typeof cargaOrig === 'function') window.cargarAeronavesMision = async function () {
-    await Promise.all([cargaOrig.apply(this, arguments), recargar()]); enriquecer();
+    await Promise.all([cargaOrig.apply(this, arguments), recargar()]);
+    var d = medios();
+    if (!sincronizado && d && d.puedeEditar && faltantes().length) {            // unidades cargadas antes de que existiera el vinculo: se pasan solas, una vez
+      sincronizado = true; try { await apiSync(); await cargaOrig.apply(this, arguments); } catch (_) { /* queda el boton manual */ }
+    }
+    enriquecer(); mostrarInfo(); botonSync();
   };
   try { cargarAeronavesMision = window.cargarAeronavesMision; } catch (_) { /* idem */ }
   var selM = $('mis-medio'); if (selM) selM.addEventListener('change', mostrarInfo);
