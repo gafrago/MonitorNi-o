@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-s</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-t</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -4967,10 +4967,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
 <!-- ===== INICIO BLOQUE ROL METEOROLOGO: pegar ULTIMO, antes de </body>, despues de bloque-meteo.html ===== -->
 <style id="estilo-rol-meteo">
-  /* El usuario con rol Meteorologo ve: meteorologia, niveles de rios (capa y panel del visor estrategico) y mensajeria. No ve panel lateral operativo, medios, aeronaves, unidades, bitacora ni SITREP */
-  body.rol-meteo #sidebar, body.rol-meteo #vista-analytics,
-  body.rol-meteo .tab-btn[onclick*="analytics"], body.rol-meteo #btn-medios,
-  body.rol-meteo button[onclick*="generarSITREP"] { display: none !important; }
+  /* El usuario con rol Meteorologo ve: meteorologia, niveles de rios (capa, panel y cuadro hidrico) y mensajeria. No ve panel lateral operativo, medios, aeronaves, unidades, misiones, bitacora, sismos, incendios, eventos ni SITREP */
+  body.rol-meteo #sidebar, body.rol-meteo #btn-medios, body.rol-meteo button[onclick*="generarSITREP"],
+  body.rol-meteo #card-sismos, body.rol-meteo #card-incendios, body.rol-meteo #card-eventos { display: none !important; }
+  /* En la pestana "Inteligencia Hibrida" conserva: pronostico, cuadro hidrico (rios) y tormentas. Se ocultan misiones, despliegue, bitacora, sismos, incendios y eventos. */
   body.rol-meteo #map-tactico { left: 0 !important; }
 </style>
 <script>
@@ -4985,6 +4985,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (aplicado) return; aplicado = true;
     const nada = async function () { return null; };
     try { window.cargarAeronavesMision = nada; } catch (_) { /* nada */ }
+    ['tabla-misiones', 'analitica-fuerzas', 'bitacora'].forEach(id => { const c = $(id), k = c && c.closest('.analytics-card'); if (k) k.style.display = 'none'; });
     ['chk-infra', 'chk-cortes', 'chk-unidades'].forEach(id => { const c = $(id); if (c) { c.checked = false; if (c.parentNode) c.parentNode.style.display = 'none'; } });   // quedan los hidrometros (caudal de los rios) y las tormentas
     try { toggleCapas(); renderizarRecursos(); } catch (_) { /* nada */ }
     try { cambiarPestana('tactica'); } catch (_) { /* nada */ }
