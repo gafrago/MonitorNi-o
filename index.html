@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-n</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-o</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbx99axnjs2sbqV3ZbIUpBz98KKwmzDLNR70qyjD8vhEHkT8Y3t6tVU4Q56Lp5iU3Q5tIg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxFVw3N-D80aqUtGROoO6hAUpLh_0f24VMWvGAd4m3bfurAT8XikPOTZ9ui6hl55Wb1dQ/exec";
 
 
 ;
@@ -4301,7 +4301,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const DOM = { AEREO: ['✈️', 'Aéreos'], TERRESTRE: ['🚚', 'Terrestres'], NAVAL: ['⚓', 'Navales'], RADAR: ['📡', 'Radares'] };
   const COL = { DISPONIBLE: '#16a34a', EN_MISION: '#2563eb', MANTENIMIENTO: '#d97706', NO_DISPONIBLE: '#dc2626' };
   const ETQ = { DISPONIBLE: 'Disponible', EN_MISION: 'En misión', MANTENIMIENTO: 'Mantenimiento', NO_DISPONIBLE: 'No disponible' };
-  let datos = null, capa = null, panel = null, verMapa = true, cargado = false;
+  let datos = null, capa = null, panel = null, verMapa = true, cargado = false, fFuerza = 'TODAS';
 
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   async function api(accion, extra) {
@@ -4324,7 +4324,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const m = modeloDe(u.idModelo), col = COL[u.estado] || '#64748b', ic = (DOM[u.dominio] || ['•'])[0];
       const icono = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="width:26px;height:26px;border-radius:50%;background:#0f172acc;border:2px solid ' + col + ';display:flex;align-items:center;justify-content:center;font-size:14px">' + ic + '</div>' });
       const pop = el('div', 'font:12px sans-serif');
-      pop.appendChild(el('b', '', u.identificacion)); pop.appendChild(el('br')); pop.appendChild(document.createTextNode(u.modelo + (u.base ? ' · ' + u.base : '')));
+      pop.appendChild(el('b', '', u.identificacion)); pop.appendChild(el('br')); pop.appendChild(document.createTextNode((u.fuerza ? '[' + u.fuerza + '] ' : '') + u.modelo + (u.base ? ' · ' + u.base : '')));
       pop.appendChild(el('br')); pop.appendChild(el('span', 'color:' + col + ';font-weight:bold', ETQ[u.estado] || u.estado));
       if (m && m.cobertura) { pop.appendChild(el('br')); pop.appendChild(document.createTextNode('Cobertura de referencia: ' + f0(m.cobertura) + ' km')); }
       if (u.notas) { pop.appendChild(el('br')); pop.appendChild(document.createTextNode(u.notas)); }
@@ -4374,18 +4374,20 @@ window.addEventListener('DOMContentLoaded', () => {
       const b = el('button', 'border:1px solid #475569;border-radius:14px;padding:3px 11px;cursor:pointer;color:#e2e8f0;background:' + (k === filtro ? '#1d4ed8' : 'transparent'), t + ' (' + cuenta(k) + ')'); b.type = 'button'; b.onclick = () => lista(caja, k); fil.appendChild(b);
     });
     const lm = el('label', 'margin-left:auto;display:flex;gap:5px;align-items:center;font-size:12px;color:#cbd5e1;cursor:pointer'), ck = el('input'); ck.type = 'checkbox'; ck.checked = verMapa; ck.onchange = () => { verMapa = ck.checked; dibujar(); };
-    lm.append(ck, document.createTextNode('Mostrar en el mapa')); fil.appendChild(lm); caja.appendChild(fil);
+    lm.append(ck, document.createTextNode('Mostrar en el mapa'));
+    const fs = el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:3px;font-size:12px'); [['TODAS', 'Todas las fuerzas']].concat(Object.keys(datos.fuerzas || {}).map(k => [k, k + ' · ' + datos.fuerzas[k]])).forEach(([v, t]) => { const o = el('option', '', t); o.value = v; fs.appendChild(o); });
+    fs.value = fFuerza; fs.onchange = () => { fFuerza = fs.value; lista(caja, filtro); }; fil.append(fs, lm); caja.appendChild(fil);
     const cuerpo = el('div', 'overflow:auto;padding:10px 14px;flex:1;min-height:140px'); caja.appendChild(cuerpo);
     if (!datos.modelos.length) {
       cuerpo.appendChild(el('div', 'background:#1e293b;border-radius:6px;padding:14px;color:#fcd34d', 'Este teatro todavía no tiene medios habilitados. El superadministrador los elige desde el Panel de mando (botón 🧭 Medios de la tarjeta del teatro).'));
     } else {
-      const us = datos.unidades.filter(u => filtro === 'TODOS' || u.dominio === filtro).sort((a, b) => a.dominio.localeCompare(b.dominio) || a.identificacion.localeCompare(b.identificacion));
+      const us = datos.unidades.filter(u => (filtro === 'TODOS' || u.dominio === filtro) && (fFuerza === 'TODAS' || u.fuerza === fFuerza)).sort((a, b) => a.dominio.localeCompare(b.dominio) || a.identificacion.localeCompare(b.identificacion));
       if (!us.length) cuerpo.appendChild(el('div', 'color:#94a3b8;padding:18px;text-align:center', 'No hay unidades cargadas' + (filtro === 'TODOS' ? '.' : ' en esta categoría.')));
       us.forEach(u => {
         const m = modeloDe(u.idModelo), t = el('div', 'display:flex;gap:10px;align-items:center;border:1px solid #334155;border-left:4px solid ' + (COL[u.estado] || '#64748b') + ';border-radius:6px;padding:7px 10px;margin-bottom:7px;background:#0b1222');
         t.appendChild(el('div', 'font-size:20px', (DOM[u.dominio] || ['•'])[0]));
         const c = el('div', 'flex:1;min-width:0'); c.appendChild(el('div', 'font-weight:bold;font-size:14px', u.identificacion));
-        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', u.modelo + (u.base ? ' · ' + u.base : '') + (u.lat === null ? ' · sin posición' : '') + (m && m.cobertura ? ' · cobertura ' + f0(m.cobertura) + ' km' : '')));
+        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', (u.fuerza ? '[' + u.fuerza + '] ' : '') + u.modelo + (u.base ? ' · ' + u.base : '') + (u.lat === null ? ' · sin posición' : '') + (m && m.cobertura ? ' · cobertura ' + f0(m.cobertura) + ' km' : '')));
         if (u.notas) c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-top:2px', u.notas));
         t.appendChild(c); t.appendChild(el('span', 'font-size:11.5px;color:' + (COL[u.estado] || '#94a3b8') + ';font-weight:bold;white-space:nowrap', ETQ[u.estado] || u.estado));
         if (u.lat !== null && mapa()) { const v = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 7px;cursor:pointer', '🎯'); v.type = 'button'; v.title = 'Ver en el mapa'; v.onclick = () => { cerrar(); try { mapa().setView([u.lat, u.lon], Math.max(mapa().getZoom(), 9)); } catch (_) {} }; t.appendChild(v); }
@@ -4416,6 +4418,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const sel = campo('Modelo (solo los habilitados en este teatro)', el('select'));
     Object.keys(DOM).forEach(d => { const porCat = {}; datos.modelos.filter(m => m.dominio === d).forEach(m => { (porCat[m.categoria] = porCat[m.categoria] || []).push(m); });
       Object.keys(porCat).sort().forEach(cat => { const g = el('optgroup'); g.label = DOM[d][0] + ' ' + cat; porCat[cat].forEach(m => { const o = el('option', '', m.nombre); o.value = m.id; g.appendChild(o); }); sel.appendChild(g); }); });
+    const fza = campo('Fuerza u organismo al que pertenece', el('select')); { const o0 = el('option', '', 'Elija la fuerza…'); o0.value = ''; fza.appendChild(o0); Object.keys(datos.fuerzas || {}).forEach(k => { const o = el('option', '', k + ' · ' + datos.fuerzas[k]); o.value = k; fza.appendChild(o); }); }
     const ident = campo('Identificación (matrícula, patente, nombre o código)', el('input')); ident.maxLength = 40;
     const base = campo('Base o lugar de asiento', el('input')); base.maxLength = 60;
     const pos = el('div', 'display:flex;gap:6px'); c.appendChild(pos);
@@ -4434,14 +4437,14 @@ window.addEventListener('DOMContentLoaded', () => {
     };
     const est = campo('Estado', el('select')); (datos.estados || Object.keys(ETQ)).forEach(k => { const o = el('option', '', ETQ[k] || k); o.value = k; est.appendChild(o); });
     const notas = campo('Notas (opcional)', el('input')); notas.maxLength = 200;
-    if (u) { sel.value = u.idModelo; ident.value = u.identificacion; base.value = u.base; lat.value = u.lat === null ? '' : u.lat; lon.value = u.lon === null ? '' : u.lon; est.value = u.estado; notas.value = u.notas; }
+    if (u) { sel.value = u.idModelo; fza.value = u.fuerza || ''; ident.value = u.identificacion; base.value = u.base; lat.value = u.lat === null ? '' : u.lat; lon.value = u.lon === null ? '' : u.lon; est.value = u.estado; notas.value = u.notas; }
     const msg = el('div', 'min-height:16px;font-size:12.5px;color:#fca5a5'); c.appendChild(msg);
     const fila = el('div', 'display:flex;gap:8px'); const ok = el('button', 'flex:1;background:#16a34a;color:#fff;border:none;border-radius:4px;padding:8px;cursor:pointer;font-weight:bold', 'Guardar'), no = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:8px 14px;cursor:pointer', 'Volver');
     ok.type = 'button'; no.type = 'button'; no.onclick = () => lista(caja, 'TODOS');
     ok.onclick = async () => {
       msg.textContent = ''; ok.disabled = true;
       try {
-        const r = await api('UNIDAD_GUARDAR', { id: u ? u.id : '', idModelo: sel.value, identificacion: ident.value.trim(), base: base.value.trim(), lat: lat.value.trim(), lon: lon.value.trim(), estado: est.value, notas: notas.value.trim() });
+        const r = await api('UNIDAD_GUARDAR', { id: u ? u.id : '', idModelo: sel.value, fuerza: fza.value, identificacion: ident.value.trim(), base: base.value.trim(), lat: lat.value.trim(), lon: lon.value.trim(), estado: est.value, notas: notas.value.trim() });
         if (r.status !== 'success') { msg.textContent = r.message || 'No se pudo guardar.'; ok.disabled = false; return; }
         await cargar(); lista(caja, 'TODOS');
       } catch (_) { msg.textContent = 'Error de enlace con el servidor.'; ok.disabled = false; }
@@ -4449,6 +4452,8 @@ window.addEventListener('DOMContentLoaded', () => {
     fila.append(ok, no); c.appendChild(fila); caja.appendChild(c);
   }
   window.abrirMedios = abrir;
+  window.aresMedios = () => datos;                 // lo usan los paneles Desplegar unidad y Planificar mision
+  window.recargarMedios = () => cargar().catch(() => null);
 })();
 </script>
 <!-- ===== FIN BLOQUE MEDIOS ===== -->
@@ -4493,5 +4498,150 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE VISTA ===== -->
+<!-- ============ A.R.E.S.: MEDIOS EN "DESPLEGAR UNIDAD" Y "PLANIFICAR MISION" + FUERZA ============
+     Pegar ULTIMO, antes de </body> (despues de bloque-medios.html). -->
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var FZA = { VIALIDAD: null, FAA: ['#0284c7', 'Fuerza Aérea'], EA: ['#4d7c0f', 'Ejército'], ARA: ['#0e7490', 'Armada'], PNA: ['#1e3a8a', 'Prefectura'], GN: ['#15803d', 'Gendarmería'],
+    PFA: ['#6d28d9', 'Policía Federal'], PSA: ['#7c3aed', 'Seg. Aeroportuaria'], POL: ['#334155', 'Policía provincial'], DC: ['#ea580c', 'Defensa Civil'], BOM: ['#b91c1c', 'Bomberos'], CIV: ['#a16207', 'Civil / otras'] };
+  var seleccion = {};                // id de unidad -> true (medios tildados en el desplegar)
+  var pendiente = null;              // ids capturados antes del reset del formulario
+  function medios() { try { return window.aresMedios ? window.aresMedios() : null; } catch (_) { return null; } }
+  function recargar() { try { return window.recargarMedios ? window.recargarMedios() : Promise.resolve(); } catch (_) { return Promise.resolve(); } }
+  function txt(t, s, c) { var e = document.createElement(t); if (s) e.style.cssText = s; if (c !== undefined) e.textContent = c; return e; }
+  function km(a, b, c, d) { var R = 6371, r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
+
+  /* 1) Fuerzas adicionales en el alta y en el filtro, e iconos con su color */
+  function extenderFuerzas() {
+    var s1 = $('nueva-institucion'), s2 = $('filtro-institucion');
+    Object.keys(FZA).forEach(function (k) {
+      if (!FZA[k]) return;
+      if (s1 && !s1.querySelector('option[value="' + k + '"]')) { var o = new Option(k + ' - ' + FZA[k][1], k); s1.add(o); }
+      if (s2 && !s2.querySelector('option[value="' + k + '"]')) { var p = new Option(k, k); s2.add(p); }
+    });
+  }
+  var iconoOrig = window.crearIcono;
+  if (typeof iconoOrig === 'function') {
+    window.crearIcono = function (inst, estado) {
+      if (inst === 'VIALIDAD' || !FZA[inst]) return iconoOrig(inst, estado);
+      var dot = estado === 'ASIGNADO' ? '#22c55e' : estado === 'DISPONIBLE' ? '#eab308' : estado === 'REPLEGADO' ? '#3b82f6' : '#ef4444';
+      return L.divIcon({ className: 'custom-div-icon', html: '<div class="pin-tactico" style="background-color:' + FZA[inst][0] + '"><span class="sigla">' + inst + '</span><div class="estado-dot" style="background-color:' + dot + '"></div></div>', iconSize: [34, 34], iconAnchor: [17, 34] });
+    };
+    try { crearIcono = window.crearIcono; } catch (_) { /* funcion declarada: la global ya quedo reemplazada */ }
+  }
+
+  /* 2) Selector de medios dentro de "Desplegar Unidad y Medios" */
+  var det = null, lista = null, resumen = null, filtroF = 'TODAS';
+  function construirPicker() {
+    var f = $('form-recurso'), ref = $('nuevo-equipos'); if (!f || !ref || $('dep-medios')) return;
+    det = document.createElement('details'); det.id = 'dep-medios'; det.style.cssText = 'border:1px solid #334155;border-radius:6px;padding:6px;margin:2px 0';
+    var sm = txt('summary', 'cursor:pointer;font-size:12px;color:#38bdf8', '🧰 Asignar medios del catálogo (opcional)'); det.appendChild(sm);
+    var fs = document.createElement('select'); fs.id = 'dep-fuerza'; fs.style.cssText = 'width:100%;margin:6px 0;font-size:12px';
+    fs.onchange = function () { filtroF = fs.value; pintar(); }; det.appendChild(fs);
+    lista = txt('div', 'max-height:170px;overflow-y:auto;font-size:12px'); det.appendChild(lista);
+    resumen = txt('div', 'font-size:11px;color:#94a3b8;margin-top:4px', 'Sin medios seleccionados.'); det.appendChild(resumen);
+    ref.insertAdjacentElement('afterend', det);
+    det.addEventListener('toggle', function () { if (det.open) { lista.textContent = 'Consultando medios…'; recargar().then(pintar); } });
+  }
+  function libres() { var d = medios(); return d ? d.unidades.filter(function (u) { return u.estado === 'DISPONIBLE' && (filtroF === 'TODAS' || u.fuerza === filtroF); }) : []; }
+  function pintar() {
+    if (!lista) return; var d = medios(); lista.textContent = '';
+    if (!d) { lista.textContent = 'Los medios no están disponibles (¿sin sesión o sin catálogo?).'; return; }
+    var fs = $('dep-fuerza'); if (fs && fs.options.length < 2) { fs.add(new Option('Todas las fuerzas', 'TODAS')); Object.keys(d.fuerzas || {}).forEach(function (k) { fs.add(new Option(k + ' · ' + d.fuerzas[k], k)); }); fs.value = filtroF; }
+    var us = libres(); Object.keys(seleccion).forEach(function (id) { if (!d.unidades.some(function (u) { return u.id === id && u.estado === 'DISPONIBLE'; })) delete seleccion[id]; });
+    if (!us.length) lista.textContent = 'No hay medios DISPONIBLES' + (filtroF !== 'TODAS' ? ' de esa fuerza' : '') + '. Se cargan desde 🧰 Medios.';
+    us.forEach(function (u) {
+      var l = txt('label', 'display:flex;gap:6px;align-items:center;padding:2px 0;cursor:pointer'), c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!seleccion[u.id];
+      c.onchange = function () { if (c.checked) seleccion[u.id] = true; else delete seleccion[u.id]; aplicar(); };
+      l.appendChild(c); l.appendChild(txt('b', 'color:' + ((FZA[u.fuerza] || ['#64748b'])[0]), u.fuerza || '—')); l.appendChild(txt('span', '', u.identificacion + ' · ' + u.modelo + (u.base ? ' (' + u.base + ')' : ''))); lista.appendChild(l);
+    });
+    aplicar(true);
+  }
+  function elegidos() { var d = medios(); return d ? d.unidades.filter(function (u) { return seleccion[u.id]; }) : []; }
+  function aplicar(soloResumen) {
+    var el = elegidos(); resumen.textContent = el.length ? el.length + ' medio(s): ' + el.map(function (u) { return u.identificacion; }).join(', ') : 'Sin medios seleccionados.';
+    if (soloResumen === true || !el.length) return;
+    var fz = el.map(function (u) { return u.fuerza; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+    if (fz.length === 1 && $('nueva-institucion').querySelector('option[value="' + fz[0] + '"]')) $('nueva-institucion').value = fz[0];
+    $('nuevo-vehiculos').value = el.length;
+    $('nuevo-equipos').value = el.map(function (u) { return u.modelo + ' ' + u.identificacion; }).join(', ');
+    if (!$('nuevo-nombre').value.trim()) $('nuevo-nombre').value = (fz.length === 1 ? fz[0] + ' - ' : '') + el[0].modelo + (el.length > 1 ? ' +' + (el.length - 1) : '');
+    var p = el.filter(function (u) { return u.lat !== null && u.lon !== null; })[0];
+    if (p && !$('nueva-lat').value) { $('nueva-lat').value = p.lat; $('nueva-lon').value = p.lon; }
+  }
+  var altaOrig = window.agregarRecursoEnVivo;
+  window.agregarRecursoEnVivo = async function (e) {
+    pendiente = Object.keys(seleccion);                    // se captura ANTES: la funcion original hace reset() del formulario
+    var d = medios();
+    if (pendiente.length && d) {                           // el servidor rechaza medios que ya no estan DISPONIBLES: se avisa antes
+      var mal = pendiente.filter(function (id) { return !d.unidades.some(function (u) { return u.id === id && u.estado === 'DISPONIBLE'; }); });
+      if (mal.length) { e.preventDefault(); alert('Algún medio seleccionado ya no está disponible. Reabra la lista y elija de nuevo.'); seleccion = {}; pintar(); return; }
+    }
+    try { await altaOrig(e); } finally {
+      pendiente = null; seleccion = {}; if (det) { det.open = false; } if (lista) pintar();
+      setTimeout(recargar, 1200);
+    }
+  };
+  var auditOrig = window.ejecutarAccionAuditada;
+  window.ejecutarAccionAuditada = function (tab, accion, datos, motivo) {
+    if (tab === 'Recursos_Terreno' && accion === 'INSERT' && pendiente && pendiente.length) datos = Object.assign({}, datos, { Medios: pendiente.join(',') });
+    return auditOrig.call(this, tab, accion, datos, motivo);
+  };
+  try { ejecutarAccionAuditada = window.ejecutarAccionAuditada; } catch (_) { /* no es let/const */ }
+
+  /* 3) Planificar mision: aeronaves con fuerza, modelo, alcance y control de rango */
+  function unidadPorMatricula(m) { var d = medios(); return d ? d.unidades.filter(function (u) { return u.dominio === 'AEREO' && u.identificacion === m; })[0] : null; }
+  function modeloDe(u) { var d = medios(); return d && u ? d.modelos.filter(function (m) { return m.id === u.idModelo; })[0] : null; }
+  var info = null;
+  function enriquecer() {
+    var sel = $('mis-medio'); if (!sel) return;
+    Array.prototype.forEach.call(sel.options, function (o) {
+      var u = o.value ? unidadPorMatricula(o.value) : null; if (!u || o.dataset.fz) return;
+      var m = modeloDe(u); o.dataset.fz = u.fuerza || ''; if (m && m.alcance !== '') o.dataset.alcance = m.alcance; if (m && m.vel !== '') o.dataset.vel = m.vel;
+      o.textContent = o.value + ' - ' + u.modelo + (u.fuerza ? ' [' + u.fuerza + ']' : '') + (u.base ? ' (Base: ' + u.base + ')' : '');
+    });
+    mostrarInfo();
+  }
+  function mostrarInfo() {
+    var sel = $('mis-medio'); if (!sel) return; if (!info) { info = txt('div', 'font-size:11px;color:#94a3b8;margin:2px 0'); sel.insertAdjacentElement('afterend', info); }
+    var o = sel.options[sel.selectedIndex]; if (!o || !o.value) { info.textContent = ''; return; }
+    var p = []; if (o.dataset.fz) p.push('Fuerza: ' + o.dataset.fz); if (o.dataset.alcance) p.push('Alcance ref.: ' + o.dataset.alcance + ' km'); if (o.dataset.vel) p.push('Vel.: ' + o.dataset.vel + ' kt');
+    info.textContent = p.length ? p.join(' · ') : 'Sin datos de catálogo para esta aeronave.';
+  }
+  var cargaOrig = window.cargarAeronavesMision;
+  if (typeof cargaOrig === 'function') window.cargarAeronavesMision = async function () {
+    await Promise.all([cargaOrig.apply(this, arguments), recargar()]); enriquecer();
+  };
+  try { cargarAeronavesMision = window.cargarAeronavesMision; } catch (_) { /* idem */ }
+  var selM = $('mis-medio'); if (selM) selM.addEventListener('change', mostrarInfo);
+
+  var misOrig = window.guardarMisionVuelo;
+  window.guardarMisionVuelo = async function (e) {
+    e.preventDefault();
+    var sel = $('mis-medio'), o = sel && sel.options[sel.selectedIndex];
+    if (o && o.value && o.dataset.alcance) {
+      try {
+        var a = await window.resolverPunto($('mis-origen').value, $('mis-origen')), b = await window.resolverPunto($('mis-destino').value, $('mis-destino'));
+        if (a && b) {
+          var dist = km(a.lat, a.lon, b.lat, b.lon), alc = Number(o.dataset.alcance), ida = dist > alc, ciclo = !ida && dist * 2 > alc;
+          if (ida || ciclo) {
+            var m = ida ? 'La distancia origen-destino (' + Math.round(dist) + ' km) supera el alcance de referencia de ' + o.value + ' (' + alc + ' km).' : 'El trayecto de ida y vuelta (' + Math.round(dist * 2) + ' km) supera el alcance de referencia de ' + o.value + ' (' + alc + ' km).';
+            if (!confirm('⚠ ' + m + '\nEs una referencia del catálogo, no un cálculo de planificación.\n¿Guardar la misión de todos modos?')) return;
+          }
+        }
+      } catch (er) { console.warn('ARES rango:', er); }
+    }
+    await misOrig.call(this, e);
+    setTimeout(function () { recargar().then(enriquecer); }, 1500);
+  };
+  var fm = $('form-mision') || (selM && selM.closest('form')); if (fm) fm.setAttribute('onsubmit', 'guardarMisionVuelo(event)');
+
+  extenderFuerzas(); construirPicker();
+})();
+</script>
+<!-- ===== FIN BLOQUE DESPLIEGUE ===== -->
+
 </body>
 </html>
