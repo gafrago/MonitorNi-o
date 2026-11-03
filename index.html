@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-m</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-n</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -3466,6 +3466,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const SEV = { BAJA: '#16a34a', MEDIA: '#d97706', ALTA: '#ea580c', CRITICA: '#b91c1c' };
   const TIPOS = { INCENDIO: '🔥 Incendio', SISMO_DANOS: '🌐 Sismo / daños', INUNDACION: '🌊 Inundación', DERRUMBE: '⛰️ Derrumbe / alud', TORMENTA: '⛈️ Tormenta severa', OTRO: '⚠️ Otro' };
   let T = null, mods = [], eventos = [], sismos = [], tormentas = [], timers = [];
+  const CLAVE_TORM = 'ares_torm_visible';
+  let verTorm = (() => { try { return localStorage.getItem(CLAVE_TORM) !== '0'; } catch (_) { return true; } })();   // la preferencia se recuerda en este navegador
   const tiene = m => mods.indexOf(m) >= 0;
   const mapas = () => { const a = []; try { if (mapTactico) a.push(mapTactico); } catch (_) {} try { if (mapRadar) a.push(mapRadar); } catch (_) {} return a; };
   const grupos = new Map();                                    // mapa -> {sismos, eventos}
@@ -3489,10 +3491,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const tit = document.querySelector('#top-banner strong'); if (tit) tit.textContent = 'CENTRO DE OPERACIONES — ' + t.nombre.toUpperCase() + ' (A.R.E.S. C4I)';
     const h2 = document.querySelector('#vista-analytics h2'); if (h2) h2.textContent = '📊 Panel de Inteligencia — ' + t.nombre;
     timers.forEach(clearInterval); timers = [];
+    const vieja = $('lbl-torm'); if (vieja) vieja.remove();
     if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) montarEventos();
     if (tiene('SISMOS')) { montarSismos(); cargarSismos(); timers.push(setInterval(cargarSismos, 10 * 60000)); }
     if (tiene('INCENDIOS')) montarIncendios();
-    if (tiene('TORMENTAS')) { montarTormentas(); cargarTormentas(); timers.push(setInterval(cargarTormentas, 30 * 60000)); }
+    if (tiene('TORMENTAS')) { montarToggleTormentas(); montarTormentas(); cargarTormentas(); timers.push(setInterval(cargarTormentas, 30 * 60000)); }
     setTimeout(redibujar, 1200);
   };
 
@@ -3533,6 +3536,13 @@ window.addEventListener('DOMContentLoaded', () => {
      OJO: es un indice de POTENCIAL (energia convectiva CAPE, indice de ascenso, rafagas), no la deteccion de rayos en tiempo real. */
   const RIESGO = [[2500, 'EXTREMO', '#b91c1c'], [1000, 'ALTO', '#ea580c'], [300, 'MODERADO', '#eab308'], [-1, 'BAJO', '#16a34a']];
   const nivelCape = c => RIESGO.find(r => c > r[0]);
+  /* Casilla en la barra de capas del mapa: quita o pone los iconos y zonas de tormentas (tactico y estrategico) */
+  function montarToggleTormentas() {
+    const barra = document.querySelector('.layer-control-bar'); if (!barra || $('lbl-torm')) return;
+    const l = el('label', ''), c = el('input'); c.type = 'checkbox'; c.id = 'chk-tormentas'; c.checked = verTorm;
+    c.onchange = () => { verTorm = c.checked; try { localStorage.setItem(CLAVE_TORM, verTorm ? '1' : '0'); } catch (_) {} redibujar(); };
+    l.id = 'lbl-torm'; l.append(c, document.createTextNode(' ⚡ Tormentas')); barra.appendChild(l);
+  }
   function montarTormentas() {
     if ($('card-tormentas')) return;
     const grid = document.querySelector('#vista-analytics .analytics-grid'); if (!grid) return;
@@ -3681,7 +3691,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (tiene('TORMENTAS')) {
         const gt = g(map, 'tormentas'); gt.clearLayers();
-        tormentas.forEach(p => { const n = nivelCape(p.cape);
+        (verTorm ? tormentas : []).forEach(p => { const n = nivelCape(p.cape);
           if (p.cape >= 300) { const tam = n[1] === 'EXTREMO' ? 40 : n[1] === 'ALTO' ? 34 : 28; L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div class="torm-ico ' + n[1].toLowerCase() + '" style="width:' + tam + 'px;height:' + tam + 'px;background:' + n[2] + ';font-size:' + Math.round(tam * .6) + 'px">⚡</div>', iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] }), zIndexOffset: 500 }).addTo(gt)
             .bindPopup('<b>⚡ Tormentas eléctricas: potencial ' + n[1] + '</b><br>CAPE máx. ' + Math.round(p.cape) + ' J/kg' + (p.hora ? '<br>Pico: ' + p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (p.gust !== null ? '<br>Ráfaga máx. ' + Math.round(p.gust) + ' km/h' : '') + '<br><small>Modelo; no es detección de rayos</small>'); }
           L.circle([p.lat, p.lon], { radius: p.paso * 500, color: n[2], weight: 1, fillColor: n[2], fillOpacity: p.cape >= 300 ? .28 : .08 }).addTo(gt)
@@ -4442,5 +4452,46 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE MEDIOS ===== -->
+<!-- ===== INICIO BLOQUE VISTA: pegar ULTIMO, antes de </body> ===== -->
+<style>
+  #vista-tactica.sidebar-oculto #sidebar { display: none !important; }
+  @media (max-width: 800px) { #vista-tactica.sidebar-oculto #map-tactico { flex: 1 1 auto !important; } }
+  .ctl-sidebar a { display: block; width: 30px; height: 30px; line-height: 30px; text-align: center; font-size: 15px; text-decoration: none; color: #1e293b; background: #fff; cursor: pointer; }
+</style>
+<script>
+/* A.R.E.S.: boton del mapa tactico para ocultar / mostrar el panel lateral izquierdo (mas superficie de mapa).
+   Se recuerda la preferencia en este navegador. */
+(function () {
+  'use strict';
+  const CLAVE = 'ares_sidebar_oculto';
+  const leer = () => { try { return localStorage.getItem(CLAVE) === '1'; } catch (_) { return false; } };
+  const guardar = v => { try { localStorage.setItem(CLAVE, v ? '1' : '0'); } catch (_) {} };
+  function aplicar(oculto, enlace) {
+    const v = document.getElementById('vista-tactica'); if (!v) return;
+    v.classList.toggle('sidebar-oculto', oculto);
+    if (enlace) { enlace.textContent = oculto ? '▶' : '◀'; enlace.title = oculto ? 'Mostrar el panel lateral' : 'Ocultar el panel lateral (más mapa)'; enlace.setAttribute('aria-label', enlace.title); }
+    const ajustar = () => { try { if (mapTactico) mapTactico.invalidateSize(); } catch (_) {} };
+    ajustar(); setTimeout(ajustar, 120); setTimeout(ajustar, 400);
+  }
+  function montar() {
+    let mp; try { mp = (typeof mapTactico !== 'undefined') ? mapTactico : null; } catch (_) { mp = null; }
+    if (!mp || !window.L || mp.__ctlSidebar) return;
+    mp.__ctlSidebar = true;
+    const Ctl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        const d = L.DomUtil.create('div', 'leaflet-bar leaflet-control ctl-sidebar'), a = L.DomUtil.create('a', '', d);
+        a.href = '#'; a.setAttribute('role', 'button');
+        L.DomEvent.disableClickPropagation(d);
+        L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); const ahora = !document.getElementById('vista-tactica').classList.contains('sidebar-oculto'); guardar(ahora); aplicar(ahora, a); });
+        aplicar(leer(), a); return d;
+      }
+    });
+    new Ctl().addTo(mp);
+  }
+  setInterval(montar, 1000);
+})();
+</script>
+<!-- ===== FIN BLOQUE VISTA ===== -->
 </body>
 </html>
