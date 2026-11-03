@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-l</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-m</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxo9yO7_p2GYIGUeQ24Z9E5LBBcx6EXUmHvXbcY8CjSk1r4CucQQ4iczO3YfRrKz3x6pA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbx99axnjs2sbqV3ZbIUpBz98KKwmzDLNR70qyjD8vhEHkT8Y3t6tVU4Q56Lp5iU3Q5tIg/exec";
 
 
 ;
@@ -3785,6 +3785,70 @@ window.addEventListener('DOMContentLoaded', () => {
         botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
       });
     }
+    function formMedios(t) {
+      let cat = [], sel = new Set(), dom = 'TODOS', uso = 'TODOS', q = '';
+      const ICON = { AEREO: '✈️ Aéreos', TERRESTRE: '🚚 Terrestres', NAVAL: '⚓ Navales', RADAR: '📡 Radares' };
+      const f = modal('🧭 Medios del teatro ' + t.nombre + ' (' + t.id + ')', (c, msg, cerrar) => {
+        const mkb = (txt, fn, css) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;cursor:pointer;font-size:12px;' + (css || ''), txt); b.type = 'button'; b.onclick = fn; return b; };
+        c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:8px', 'Elija los modelos de aeronaves, vehículos, embarcaciones y radares que este teatro puede usar. Después los Planificadores cargan las unidades concretas (matrícula, base, posición). Los valores técnicos son de referencia: corríjalos si hace falta.'));
+        const barra = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px'); c.appendChild(barra);
+        const lista = el('div', 'max-height:48vh;overflow:auto;border:1px solid #334155;border-radius:6px;padding:6px;background:#0f172a'); c.appendChild(lista);
+        const cont = el('span', 'margin-left:auto;font-size:12px;color:#93c5fd;font-weight:bold');
+        const visibles = () => cat.filter(m => (dom === 'TODOS' || m.dominio === dom) && (uso === 'TODOS' || m.uso === uso) && (!q || (m.nombre + ' ' + m.fabricante + ' ' + m.categoria).toLowerCase().indexOf(q) >= 0));
+        const specs = m => [m.vel !== '' && m.vel ? m.vel + ' kt' : '', m.alcance !== '' && m.alcance ? 'alc. ' + m.alcance + ' km' : '', m.cap !== '' && m.cap ? m.cap + ' pers.' : '', m.carga !== '' && m.carga ? m.carga + ' kg' : '', m.cobertura !== '' && m.cobertura ? 'cobertura ' + m.cobertura + ' km' : ''].filter(Boolean).join(' · ');
+        function pintar() {
+          lista.innerHTML = ''; cont.textContent = sel.size + ' habilitado(s)';
+          if (!cat.length) {
+            lista.appendChild(el('div', 'padding:12px;color:#fcd34d', 'El catálogo está vacío.'));
+            lista.appendChild(mkb('Cargar catálogo inicial', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Cargando catálogo…'; const j = await admin('CATALOGO_INICIAL', {}); msg.style.color = j.status === 'success' ? '#4ade80' : '#fca5a5'; msg.textContent = (j.status === 'success' ? '✅ ' : '⚠ ') + (j.message || ''); if (j.status === 'success') cargarCat(true); }, 'background:#14532d;margin:6px 12px'));
+            return;
+          }
+          const vis = visibles(); if (!vis.length) lista.appendChild(el('div', 'padding:12px;color:#94a3b8', 'Ningún modelo coincide con el filtro.'));
+          const grupos = {}; vis.forEach(m => { const k = m.dominio + '|' + m.categoria; (grupos[k] = grupos[k] || []).push(m); });
+          Object.keys(grupos).sort().forEach(k => {
+            const g = grupos[k], todos = g.every(m => sel.has(m.id)), h = el('label', 'display:flex;gap:7px;align-items:center;background:#1e293b;border-radius:4px;padding:4px 8px;margin:6px 0 3px;font-weight:bold;cursor:pointer');
+            const hc = el('input'); hc.type = 'checkbox'; hc.checked = todos; hc.onchange = () => { g.forEach(m => { if (m.activo !== false) { if (hc.checked) sel.add(m.id); else sel.delete(m.id); } }); pintar(); };
+            h.append(hc, document.createTextNode((ICON[g[0].dominio] || g[0].dominio).split(' ')[0] + ' ' + g[0].categoria + ' (' + g.length + ')')); lista.appendChild(h);
+            g.forEach(m => {
+              const l = el('label', 'display:flex;gap:8px;align-items:flex-start;padding:3px 8px 3px 22px;cursor:pointer;border-radius:3px'), ck = el('input'); ck.type = 'checkbox'; ck.checked = sel.has(m.id); ck.style.marginTop = '3px';
+              ck.onchange = () => { if (ck.checked) sel.add(m.id); else sel.delete(m.id); cont.textContent = sel.size + ' habilitado(s)'; };
+              const tx = el('div', 'flex:1'); tx.appendChild(el('div', '', m.nombre + (m.uso ? '  [' + m.uso.toLowerCase() + ']' : ''))); const sp = specs(m); if (sp) tx.appendChild(el('div', 'font-size:11px;color:#94a3b8', sp));
+              l.append(ck, tx); lista.appendChild(l);
+            });
+          });
+        }
+        const tabs = [['TODOS', 'Todos']].concat(Object.keys(ICON).map(d => [d, ICON[d]]));
+        const botsTab = tabs.map(([k, txt]) => { const b = mkb(txt, () => { dom = k; botsTab.forEach((x, i) => { x.style.background = tabs[i][0] === dom ? '#1d4ed8' : '#0f172a'; }); pintar(); }); if (k === dom) b.style.background = '#1d4ed8'; barra.appendChild(b); return b; });
+        const usoSel = el('select'); [['TODOS', 'Todos los usos'], ['MILITAR', 'Militar'], ['CIVIL', 'Civil'], ['DUAL', 'Dual']].forEach(([v, x]) => usoSel.add(new Option(x, v)));
+        usoSel.style.cssText = 'padding:4px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12px'; usoSel.onchange = () => { uso = usoSel.value; pintar(); };
+        const bus = el('input'); bus.placeholder = 'Buscar…'; bus.style.cssText = 'padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12px;width:120px'; bus.oninput = () => { q = bus.value.trim().toLowerCase(); pintar(); };
+        barra.append(usoSel, bus, mkb('Marcar visibles', () => { visibles().forEach(m => { if (m.activo !== false) sel.add(m.id); }); pintar(); }), mkb('Quitar visibles', () => { visibles().forEach(m => sel.delete(m.id)); pintar(); }), mkb('＋ Modelo propio', nuevoModelo, 'border-color:#16a34a'), cont);
+        function nuevoModelo() {
+          modal('➕ Modelo propio (se agrega al catálogo)', (c2, msg2, cerrar2) => {
+            const d = campo(c2, 'Dominio', 'select', '', undefined, i => { ['AEREO', 'TERRESTRE', 'NAVAL', 'RADAR'].forEach(x => i.add(new Option(x, x))); });
+            const cg = campo(c2, 'Categoría (ej: Helicoptero, Camion, Radar meteorologico)', 'text', '', '', i => { i.maxLength = 60; });
+            const nm = campo(c2, 'Nombre del modelo', 'text', '', '', i => { i.maxLength = 80; });
+            const fb = campo(c2, 'Fabricante (opcional)', 'text', '', '', i => { i.maxLength = 60; });
+            const us = campo(c2, 'Uso', 'select', '', undefined, i => { ['DUAL', 'MILITAR', 'CIVIL'].forEach(x => i.add(new Option(x, x))); });
+            const vl = campo(c2, 'Velocidad de crucero (nudos, opcional)', 'text', '', ''), al = campo(c2, 'Alcance (km, opcional)', 'text', '', ''), cp = campo(c2, 'Capacidad (personas, opcional)', 'text', '', ''), cg2 = campo(c2, 'Carga útil (kg, opcional)', 'text', '', ''), cb = campo(c2, 'Cobertura de detección (km, solo radares)', 'text', '', '');
+            [vl, al, cp, cg2, cb].forEach(i => { i.inputMode = 'decimal'; });
+            botones(c2, 'Guardar modelo', async () => {
+              msg2.style.color = '#94a3b8'; msg2.textContent = 'Guardando…';
+              const j = await admin('MEDIO', { m: { dominio: d.value, categoria: cg.value.trim(), nombre: nm.value.trim(), fabricante: fb.value.trim(), uso: us.value, vel: vl.value, alcance: al.value, cap: cp.value, carga: cg2.value, cobertura: cb.value } });
+              if (j.status === 'success') { msg2.style.color = '#4ade80'; msg2.textContent = '✅ ' + j.message; setTimeout(() => { cerrar2(); cargarCat(true); }, 700); } else { msg2.style.color = '#fca5a5'; msg2.textContent = '⚠ ' + (j.message || 'Error'); }
+            }, cerrar2);
+          });
+        }
+        async function cargarCat(conservar) {   // conservar = no perder lo tildado y aun no guardado
+          lista.innerHTML = ''; lista.appendChild(el('div', 'padding:12px;color:#94a3b8', '⏳ Cargando catálogo…'));
+          try { const j = await admin('MEDIOS_LEER', { teatro: t.id }); if (j.status !== 'success') throw new Error(j.message || 'error'); cat = j.catalogo || []; if (!conservar) sel = new Set(j.seleccion || []); pintar(); }
+          catch (e) { lista.innerHTML = ''; lista.appendChild(el('div', 'padding:12px;color:#fca5a5', '⚠ ' + (e && e.message || 'No se pudo cargar'))); }
+        }
+        botones(c, 'Guardar selección', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MEDIOS_TEATRO', { teatro: t.id, ids: Array.from(sel) }), cerrar); }, cerrar);
+        cargarCat();
+      });
+      f.firstChild.style.width = 'min(940px,98vw)';
+    }
     function formUsuario() {
       modal('👤 Nuevo usuario (o cambiar su PIN)', (c, msg, cerrar) => {
         const em = campo(c, 'Correo (será su usuario)', 'text', 'nombre@correo', '', i => { i.maxLength = 100; i.autocomplete = 'off'; });
@@ -3827,9 +3891,11 @@ window.addEventListener('DOMContentLoaded', () => {
         c.appendChild(m);
         if ((t.misiones || []).length) { const l = el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px'); l.appendChild(el('div', 'color:#94a3b8;font-size:10.5px', 'Misiones activas')); t.misiones.forEach(x => l.appendChild(el('div', '', '• ' + x.tipo + ' · ' + x.medio + ' · ' + x.estado + (x.fecha ? ' · ' + x.fecha : '')))); c.appendChild(l); }
         const u = el('div', 'font-size:11px;color:#94a3b8'); u.textContent = '👥 ' + (t.usuarios || []).length + ' usuario(s): ' + (t.usuarios || []).map(x => x.email + ' (' + x.rol + ')').join(', '); c.appendChild(u);
+        c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', '🧭 ' + (t.modelos || 0) + ' modelo(s) habilitado(s) · ' + (t.medios || 0) + ' unidad(es) cargada(s)'));
         const bar = el('div', 'display:flex;gap:6px;margin-top:10px');
         const be = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '✏️ Editar / módulos'), ba = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '👥 Accesos');
-        be.type = 'button'; ba.type = 'button'; be.onclick = () => formTeatro(t); ba.onclick = () => formAcceso(t); bar.append(be, ba); c.appendChild(bar);
+        be.type = 'button'; ba.type = 'button'; be.onclick = () => formTeatro(t); ba.onclick = () => formAcceso(t);
+        const bm = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🧭 Medios'); bm.type = 'button'; bm.onclick = () => formMedios(t); bar.append(be, ba, bm); c.appendChild(bar);
         rej.appendChild(c);
       });
       cuerpo.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:12px', 'Generado ' + new Date(gen).toLocaleString('es-AR') + ' · los datos se guardan 45 s en caché · para entrar a un teatro use "Cambiar teatro".'));
@@ -4213,5 +4279,168 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE MENSAJES ===== -->
+<!-- ===== INICIO BLOQUE MEDIOS: pegar ULTIMO, antes de </body>, despues del bloque de mensajes ===== -->
+<script>
+/* A.R.E.S.: medios del teatro. Muestra los modelos que el superadministrador habilito para este teatro y permite cargar las
+   unidades concretas (matricula, base, posicion, estado). Aeronaves, vehiculos, embarcaciones y radares se dibujan en el mapa
+   tactico; los radares con su circulo de cobertura. Todo texto se muestra con textContent (nunca como HTML). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const DOM = { AEREO: ['✈️', 'Aéreos'], TERRESTRE: ['🚚', 'Terrestres'], NAVAL: ['⚓', 'Navales'], RADAR: ['📡', 'Radares'] };
+  const COL = { DISPONIBLE: '#16a34a', EN_MISION: '#2563eb', MANTENIMIENTO: '#d97706', NO_DISPONIBLE: '#dc2626' };
+  const ETQ = { DISPONIBLE: 'Disponible', EN_MISION: 'En misión', MANTENIMIENTO: 'Mantenimiento', NO_DISPONIBLE: 'No disponible' };
+  let datos = null, capa = null, panel = null, verMapa = true, cargado = false;
+
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const f0 = v => (v === '' || v === null || v === undefined || !isFinite(v)) ? '' : String(Math.round(Number(v) * 10) / 10);
+  const modeloDe = id => ((datos && datos.modelos) || []).filter(m => m.id === id)[0];
+
+  /* ---------- Mapa ---------- */
+  function mapa() { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } }
+  function dibujar() {
+    const mp = mapa(); if (!mp) return;
+    if (capa) { try { capa.remove(); } catch (_) {} capa = null; }
+    if (!verMapa || !datos) return;
+    capa = L.layerGroup();
+    datos.unidades.forEach(u => {
+      if (u.lat === null || u.lon === null || !isFinite(u.lat) || !isFinite(u.lon)) return;
+      const m = modeloDe(u.idModelo), col = COL[u.estado] || '#64748b', ic = (DOM[u.dominio] || ['•'])[0];
+      const icono = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="width:26px;height:26px;border-radius:50%;background:#0f172acc;border:2px solid ' + col + ';display:flex;align-items:center;justify-content:center;font-size:14px">' + ic + '</div>' });
+      const pop = el('div', 'font:12px sans-serif');
+      pop.appendChild(el('b', '', u.identificacion)); pop.appendChild(el('br')); pop.appendChild(document.createTextNode(u.modelo + (u.base ? ' · ' + u.base : '')));
+      pop.appendChild(el('br')); pop.appendChild(el('span', 'color:' + col + ';font-weight:bold', ETQ[u.estado] || u.estado));
+      if (m && m.cobertura) { pop.appendChild(el('br')); pop.appendChild(document.createTextNode('Cobertura de referencia: ' + f0(m.cobertura) + ' km')); }
+      if (u.notas) { pop.appendChild(el('br')); pop.appendChild(document.createTextNode(u.notas)); }
+      L.marker([u.lat, u.lon], { icon: icono, title: u.identificacion }).bindPopup(pop).addTo(capa);
+      if (u.dominio === 'RADAR' && m && m.cobertura) L.circle([u.lat, u.lon], { radius: m.cobertura * 1000, color: col, weight: 1.5, dashArray: '6 5', fillColor: '#a855f7', fillOpacity: .05, interactive: false }).addTo(capa);
+    });
+    capa.addTo(mp);
+  }
+  async function cargar() {
+    const r = await api('MEDIOS_LISTAR'); if (r.status !== 'success') throw new Error(r.message || 'No se pudieron cargar los medios');
+    datos = r; cargado = true; dibujar(); return r;
+  }
+
+  /* ---------- Boton ---------- */
+  function boton() {
+    if (!activa()) { const x = $('btn-medios'); if (x) x.remove(); return false; }
+    if ($('btn-medios')) return true;
+    const ref = $('btn-mensajes') || $('btn-informe-meteo') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '🧭 Medios'); b.id = 'btn-medios'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.onclick = abrir;
+    ref.parentNode.insertBefore(b, ref); return true;
+  }
+  setInterval(() => {
+    if (!activa()) { if ($('btn-medios')) boton(); cargado = false; return; }
+    if (boton() && !cargado) { cargado = true; cargar().catch(() => { cargado = false; }); }
+  }, 1500);
+
+  /* ---------- Panel ---------- */
+  function cerrar() { if (panel) { panel.remove(); panel = null; } }
+  async function abrir() {
+    if (!activa()) return; cerrar();
+    const fondo = el('div', 'position:fixed;inset:0;z-index:2147483000;background:#000a;display:flex;align-items:center;justify-content:center;padding:8px');
+    fondo.onclick = ev => { if (ev.target === fondo) cerrar(); };
+    const caja = el('div', 'background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:10px;width:min(820px,100%);max-height:94vh;display:flex;flex-direction:column;font:13px sans-serif'); caja.id = 'medios-panel';
+    fondo.appendChild(caja); document.body.appendChild(fondo); panel = fondo; caja.appendChild(el('div', 'padding:14px', 'Cargando medios…'));
+    try { await cargar(); lista(caja, 'TODOS'); } catch (e) { caja.innerHTML = ''; caja.appendChild(el('div', 'padding:14px;color:#fca5a5', 'No se pudieron cargar los medios: ' + (e && e.message || 'error'))); }
+  }
+  function cabecera(caja, titulo) {
+    const cab = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #334155');
+    cab.appendChild(el('b', 'flex:1;font-size:15px', titulo));
+    const x = el('button', 'background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrar; cab.appendChild(x); caja.appendChild(cab);
+  }
+  function lista(caja, filtro) {
+    caja.innerHTML = ''; cabecera(caja, '🧭 Medios · ' + ((window.ARES_TEATRO && window.ARES_TEATRO.nombre) || ''));
+    const fil = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 14px 0');
+    const cuenta = d => datos.unidades.filter(u => d === 'TODOS' || u.dominio === d).length;
+    [['TODOS', 'Todos']].concat(Object.keys(DOM).map(d => [d, DOM[d][0] + ' ' + DOM[d][1]])).forEach(([k, t]) => {
+      const b = el('button', 'border:1px solid #475569;border-radius:14px;padding:3px 11px;cursor:pointer;color:#e2e8f0;background:' + (k === filtro ? '#1d4ed8' : 'transparent'), t + ' (' + cuenta(k) + ')'); b.type = 'button'; b.onclick = () => lista(caja, k); fil.appendChild(b);
+    });
+    const lm = el('label', 'margin-left:auto;display:flex;gap:5px;align-items:center;font-size:12px;color:#cbd5e1;cursor:pointer'), ck = el('input'); ck.type = 'checkbox'; ck.checked = verMapa; ck.onchange = () => { verMapa = ck.checked; dibujar(); };
+    lm.append(ck, document.createTextNode('Mostrar en el mapa')); fil.appendChild(lm); caja.appendChild(fil);
+    const cuerpo = el('div', 'overflow:auto;padding:10px 14px;flex:1;min-height:140px'); caja.appendChild(cuerpo);
+    if (!datos.modelos.length) {
+      cuerpo.appendChild(el('div', 'background:#1e293b;border-radius:6px;padding:14px;color:#fcd34d', 'Este teatro todavía no tiene medios habilitados. El superadministrador los elige desde el Panel de mando (botón 🧭 Medios de la tarjeta del teatro).'));
+    } else {
+      const us = datos.unidades.filter(u => filtro === 'TODOS' || u.dominio === filtro).sort((a, b) => a.dominio.localeCompare(b.dominio) || a.identificacion.localeCompare(b.identificacion));
+      if (!us.length) cuerpo.appendChild(el('div', 'color:#94a3b8;padding:18px;text-align:center', 'No hay unidades cargadas' + (filtro === 'TODOS' ? '.' : ' en esta categoría.')));
+      us.forEach(u => {
+        const m = modeloDe(u.idModelo), t = el('div', 'display:flex;gap:10px;align-items:center;border:1px solid #334155;border-left:4px solid ' + (COL[u.estado] || '#64748b') + ';border-radius:6px;padding:7px 10px;margin-bottom:7px;background:#0b1222');
+        t.appendChild(el('div', 'font-size:20px', (DOM[u.dominio] || ['•'])[0]));
+        const c = el('div', 'flex:1;min-width:0'); c.appendChild(el('div', 'font-weight:bold;font-size:14px', u.identificacion));
+        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', u.modelo + (u.base ? ' · ' + u.base : '') + (u.lat === null ? ' · sin posición' : '') + (m && m.cobertura ? ' · cobertura ' + f0(m.cobertura) + ' km' : '')));
+        if (u.notas) c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-top:2px', u.notas));
+        t.appendChild(c); t.appendChild(el('span', 'font-size:11.5px;color:' + (COL[u.estado] || '#94a3b8') + ';font-weight:bold;white-space:nowrap', ETQ[u.estado] || u.estado));
+        if (u.lat !== null && mapa()) { const v = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 7px;cursor:pointer', '🎯'); v.type = 'button'; v.title = 'Ver en el mapa'; v.onclick = () => { cerrar(); try { mapa().setView([u.lat, u.lon], Math.max(mapa().getZoom(), 9)); } catch (_) {} }; t.appendChild(v); }
+        if (datos.puedeEditar) {
+          const e = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 7px;cursor:pointer', '✏️'); e.type = 'button'; e.title = 'Editar'; e.onclick = () => formulario(caja, u);
+          const d = el('button', 'background:none;border:1px solid #7f1d1d;color:#fca5a5;border-radius:4px;padding:2px 7px;cursor:pointer', '🗑'); d.type = 'button'; d.title = 'Dar de baja';
+          d.onclick = async () => { if (!confirm('¿Dar de baja ' + u.identificacion + '?')) return; try { const r = await api('UNIDAD_BAJA', { id: u.id }); if (r.status !== 'success') return alert(r.message || 'No se pudo'); await cargar(); lista(caja, filtro); } catch (_) {} };
+          t.append(e, d);
+        }
+        cuerpo.appendChild(t);
+      });
+      const det = el('details', 'margin-top:10px;font-size:12px;color:#94a3b8'); det.appendChild(el('summary', 'cursor:pointer', 'Modelos habilitados en este teatro (' + datos.modelos.length + ')'));
+      Object.keys(DOM).forEach(d => { const l = datos.modelos.filter(m => m.dominio === d); if (l.length) det.appendChild(el('div', 'margin:4px 0', DOM[d][0] + ' ' + l.map(m => m.nombre).join(' · '))); });
+      cuerpo.appendChild(det);
+    }
+    const pie = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid #334155');
+    pie.appendChild(el('span', 'flex:1;font-size:10.5px;color:#64748b', datos.puedeEditar ? 'Las aeronaves cargadas aquí se agregan solas a la lista del planificador de misiones aéreas.' : 'Solo Planificador y Administrador cargan unidades.'));
+    if (datos.puedeEditar && datos.modelos.length) { const n = el('button', 'background:#16a34a;color:#fff;border:none;border-radius:4px;padding:7px 14px;cursor:pointer;font-weight:bold', '＋ Nueva unidad'); n.type = 'button'; n.onclick = () => formulario(caja, null); pie.appendChild(n); }
+    caja.appendChild(pie);
+  }
+
+  /* ---------- Alta / edicion de una unidad ---------- */
+  function formulario(caja, u) {
+    caja.innerHTML = ''; cabecera(caja, u ? '✏️ Editar ' + u.identificacion : '＋ Nueva unidad');
+    const c = el('div', 'overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px');
+    const css = 'width:100%;box-sizing:border-box;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:7px;font:13px sans-serif';
+    const campo = (rot, nodo) => { const l = el('label', 'display:block;font-size:11.5px;color:#94a3b8', rot); nodo.style.cssText = css + ';margin-top:3px'; l.appendChild(nodo); c.appendChild(l); return nodo; };
+    const sel = campo('Modelo (solo los habilitados en este teatro)', el('select'));
+    Object.keys(DOM).forEach(d => { const porCat = {}; datos.modelos.filter(m => m.dominio === d).forEach(m => { (porCat[m.categoria] = porCat[m.categoria] || []).push(m); });
+      Object.keys(porCat).sort().forEach(cat => { const g = el('optgroup'); g.label = DOM[d][0] + ' ' + cat; porCat[cat].forEach(m => { const o = el('option', '', m.nombre); o.value = m.id; g.appendChild(o); }); sel.appendChild(g); }); });
+    const ident = campo('Identificación (matrícula, patente, nombre o código)', el('input')); ident.maxLength = 40;
+    const base = campo('Base o lugar de asiento', el('input')); base.maxLength = 60;
+    const pos = el('div', 'display:flex;gap:6px'); c.appendChild(pos);
+    const lat = el('input'), lon = el('input'); lat.placeholder = 'Latitud (ej: -27.45)'; lon.placeholder = 'Longitud (ej: -59.05)'; [lat, lon].forEach(i => { i.style.cssText = css; i.inputMode = 'decimal'; pos.appendChild(i); });
+    const ay = el('div', 'display:flex;gap:6px;flex-wrap:wrap');
+    const bMapa = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:4px 10px;cursor:pointer', '📍 Elegir en el mapa'), bCen = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:4px 10px;cursor:pointer', 'Centro del teatro');
+    [bMapa, bCen].forEach(b => { b.type = 'button'; ay.appendChild(b); }); c.appendChild(ay);
+    bCen.onclick = () => { const t = window.ARES_TEATRO; if (t && isFinite(t.lat)) { lat.value = t.lat; lon.value = t.lon; } };
+    bMapa.onclick = () => {
+      const mp = mapa(); if (!mp) return alert('El mapa todavía no está disponible.');
+      panel.style.display = 'none'; const aviso = el('div', 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483100;background:#1d4ed8;color:#fff;padding:8px 14px;border-radius:6px;font:13px sans-serif', 'Haga clic en el mapa para fijar la posición (Esc cancela)'); document.body.appendChild(aviso);
+      const fin = () => { aviso.remove(); document.removeEventListener('keydown', esc); if (panel) panel.style.display = ''; };
+      const esc = e => { if (e.key === 'Escape') { mp.off('click', alClic); fin(); } };
+      const alClic = e => { lat.value = e.latlng.lat.toFixed(5); lon.value = e.latlng.lng.toFixed(5); fin(); };
+      document.addEventListener('keydown', esc); mp.once('click', alClic);
+    };
+    const est = campo('Estado', el('select')); (datos.estados || Object.keys(ETQ)).forEach(k => { const o = el('option', '', ETQ[k] || k); o.value = k; est.appendChild(o); });
+    const notas = campo('Notas (opcional)', el('input')); notas.maxLength = 200;
+    if (u) { sel.value = u.idModelo; ident.value = u.identificacion; base.value = u.base; lat.value = u.lat === null ? '' : u.lat; lon.value = u.lon === null ? '' : u.lon; est.value = u.estado; notas.value = u.notas; }
+    const msg = el('div', 'min-height:16px;font-size:12.5px;color:#fca5a5'); c.appendChild(msg);
+    const fila = el('div', 'display:flex;gap:8px'); const ok = el('button', 'flex:1;background:#16a34a;color:#fff;border:none;border-radius:4px;padding:8px;cursor:pointer;font-weight:bold', 'Guardar'), no = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:8px 14px;cursor:pointer', 'Volver');
+    ok.type = 'button'; no.type = 'button'; no.onclick = () => lista(caja, 'TODOS');
+    ok.onclick = async () => {
+      msg.textContent = ''; ok.disabled = true;
+      try {
+        const r = await api('UNIDAD_GUARDAR', { id: u ? u.id : '', idModelo: sel.value, identificacion: ident.value.trim(), base: base.value.trim(), lat: lat.value.trim(), lon: lon.value.trim(), estado: est.value, notas: notas.value.trim() });
+        if (r.status !== 'success') { msg.textContent = r.message || 'No se pudo guardar.'; ok.disabled = false; return; }
+        await cargar(); lista(caja, 'TODOS');
+      } catch (_) { msg.textContent = 'Error de enlace con el servidor.'; ok.disabled = false; }
+    };
+    fila.append(ok, no); c.appendChild(fila); caja.appendChild(c);
+  }
+  window.abrirMedios = abrir;
+})();
+</script>
+<!-- ===== FIN BLOQUE MEDIOS ===== -->
 </body>
 </html>
