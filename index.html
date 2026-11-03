@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-i</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-02-j</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbz230rUzgZ52lzYOQ52vjmGQbJ9MADWdffvWVI2HoJC_c2hEs0wB3jJG2CifB6D09ouuw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzMUvE9_5WM4JmC8UNgk7jqNdJTG1e38jXOWiY4fE5icOgR7564TL1dFsRsuwd7_V0MBw/exec";
 
 
 ;
@@ -3453,6 +3453,9 @@ window.addEventListener('DOMContentLoaded', () => {
   body.mod-no-hidrico #panel-rios, body.mod-no-hidrico #panel-auto-inundaciones, body.mod-no-hidrico .mod-h { display: none !important; }
   body.mod-no-meteo .mod-m { display: none !important; }
   body.mod-no-juris .mod-j { display: none !important; }
+  .torm-ico { display:flex; align-items:center; justify-content:center; border-radius:50%; border:2px solid #fff; color:#fff; font-weight:bold; box-shadow:0 0 6px rgba(0,0,0,.6); }
+  .torm-ico.alto, .torm-ico.extremo { animation: tormPulso 1.4s ease-in-out infinite; }
+  @keyframes tormPulso { 0%,100% { transform:scale(1); box-shadow:0 0 6px rgba(0,0,0,.6); } 50% { transform:scale(1.18); box-shadow:0 0 16px rgba(250,204,21,.95); } }
   .mod-sev { display:inline-block; padding:1px 7px; border-radius:9px; color:#fff; font-size:11px; font-weight:bold; }
 </style>
 <script>
@@ -3534,7 +3537,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if ($('card-tormentas')) return;
     const grid = document.querySelector('#vista-analytics .analytics-grid'); if (!grid) return;
     const c = el('div', ''); c.className = 'analytics-card'; c.id = 'card-tormentas'; c.style.gridColumn = 'span 2';
-    c.appendChild(el('h4', '', '⛈️ Potencial de tormentas eléctricas (próximas 24 h)'));
+    c.appendChild(el('h4', '', '⚡ Potencial de tormentas eléctricas (próximas 24 h)'));
     c.appendChild(el('div', 'font-size:12px;color:#475569;margin-bottom:6px', '')).id = 'torm-info';
     const caja = el('div', 'max-height:260px;overflow-y:auto'), tb = el('table'); tb.className = 'analytics-table'; tb.id = 'tabla-tormentas';
     tb.innerHTML = '<thead><tr><th>Punto (lat, lon)</th><th>Potencial</th><th>CAPE máx.</th><th>Hora pico</th><th>Índice de ascenso</th><th>Ráfaga máx.</th><th>Lluvia 24 h</th></tr></thead><tbody></tbody>'; caja.appendChild(tb); c.appendChild(caja);
@@ -3563,7 +3566,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (info) { const n = peor.cape >= 0 ? nivelCape(peor.cape) : null; info.textContent = n ? 'Potencial máximo en el teatro: ' + n[1] + ' (CAPE ' + Math.round(peor.cape) + ' J/kg) · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Sin datos del modelo.'; info.style.color = n ? n[2] : '#475569'; info.style.fontWeight = 'bold'; }
       const tb = document.querySelector('#tabla-tormentas tbody');
       if (tb) { tb.innerHTML = ''; tormentas.slice().sort((a, b) => b.cape - a.cape).forEach(p => { const n = nivelCape(p.cape), tr = tb.insertRow();
-        [p.lat.toFixed(2) + ', ' + p.lon.toFixed(2), n[1], Math.round(p.cape) + ' J/kg', p.hora ? p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—', p.li === null ? '—' : p.li.toFixed(1), p.gust === null ? '—' : Math.round(p.gust) + ' km/h', p.lluvia.toFixed(1) + ' mm']
+        [p.lat.toFixed(2) + ', ' + p.lon.toFixed(2), (p.cape >= 300 ? '⚡ ' : '') + n[1], Math.round(p.cape) + ' J/kg', p.hora ? p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—', p.li === null ? '—' : p.li.toFixed(1), p.gust === null ? '—' : Math.round(p.gust) + ' km/h', p.lluvia.toFixed(1) + ' mm']
           .forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = n[2]; } }); }); }
       redibujar();
     } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el modelo (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
@@ -3678,7 +3681,10 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (tiene('TORMENTAS')) {
         const gt = g(map, 'tormentas'); gt.clearLayers();
-        tormentas.forEach(p => { const n = nivelCape(p.cape); L.circle([p.lat, p.lon], { radius: p.paso * 500, color: n[2], weight: 1, fillColor: n[2], fillOpacity: p.cape >= 300 ? .28 : .08 }).addTo(gt)
+        tormentas.forEach(p => { const n = nivelCape(p.cape);
+          if (p.cape >= 300) { const tam = n[1] === 'EXTREMO' ? 40 : n[1] === 'ALTO' ? 34 : 28; L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div class="torm-ico ' + n[1].toLowerCase() + '" style="width:' + tam + 'px;height:' + tam + 'px;background:' + n[2] + ';font-size:' + Math.round(tam * .6) + 'px">⚡</div>', iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] }), zIndexOffset: 500 }).addTo(gt)
+            .bindPopup('<b>⚡ Tormentas eléctricas: potencial ' + n[1] + '</b><br>CAPE máx. ' + Math.round(p.cape) + ' J/kg' + (p.hora ? '<br>Pico: ' + p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (p.gust !== null ? '<br>Ráfaga máx. ' + Math.round(p.gust) + ' km/h' : '') + '<br><small>Modelo; no es detección de rayos</small>'); }
+          L.circle([p.lat, p.lon], { radius: p.paso * 500, color: n[2], weight: 1, fillColor: n[2], fillOpacity: p.cape >= 300 ? .28 : .08 }).addTo(gt)
           .bindPopup('<b>⛈️ Potencial ' + n[1] + '</b><br>CAPE máx. ' + Math.round(p.cape) + ' J/kg' + (p.hora ? '<br>Pico: ' + p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (p.gust !== null ? '<br>Ráfaga máx. ' + Math.round(p.gust) + ' km/h' : '') + '<br><small>Modelo; no es detección de rayos</small>'); });
       }
       if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) {
@@ -3735,6 +3741,9 @@ window.addEventListener('DOMContentLoaded', () => {
       ok.type = 'button'; no.type = 'button'; no.onclick = cerrar; ok.onclick = async () => { ok.disabled = true; try { await onOk(ok); } finally { ok.disabled = false; } }; fila.append(ok, no); c.appendChild(fila); };
     const resultado = (msg, j, cerrar) => { if (j.status === 'success') { msg.style.color = '#4ade80'; msg.textContent = '✅ ' + j.message; setTimeout(() => { cerrar(); cargar(); }, 900); } else { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); } };
 
+    function parseSectores(txt) {
+      return String(txt).split('\n').map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(','); const lon = parseFloat(String(p.pop()).replace(',', '.')), lat = parseFloat(String(p.pop()).replace(',', '.')); return { nombre: p.join(',').trim(), lat, lon }; });
+    }
     function formTeatro(t) {
       const nuevo = !t; t = t || { tipo: 'EJERCICIO', zoom: 7, radio: 300, modulos: ['ZONAS'], activo: true };
       modal(nuevo ? '➕ Nuevo teatro de operaciones' : '✏️ Editar teatro ' + t.id, (c, msg, cerrar) => {
@@ -3751,13 +3760,17 @@ window.addEventListener('DOMContentLoaded', () => {
         const fila = el('div', 'display:flex;gap:6px'); const mk = (r, v) => { const w = el('div', 'flex:1'); const i = campo(w, r, 'number', '', v, x => { x.step = 'any'; }); fila.appendChild(w); return i; };
         const lat = mk('Latitud', t.lat), lon = mk('Longitud', t.lon), zoom = mk('Zoom (4-12)', t.zoom), radio = mk('Alcance km', t.radio); c.appendChild(fila);
         bb.onclick = async () => { try { msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…'; const r = await fetch('https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(busq.value)); const j = await r.json(); const f = (j.features || [])[0]; if (!f) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar.'; return; } lon.value = f.geometry.coordinates[0].toFixed(4); lat.value = f.geometry.coordinates[1].toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Coordenadas cargadas: ' + [f.properties.name, f.properties.state].filter(Boolean).join(', '); } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; } };
+        c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Sectores o zonas de influencia para los informes (uno por línea: Nombre, latitud, longitud). Ej: Barranqueras, -27.49, -58.93'));
+        const sec = el('textarea'); sec.rows = 4; sec.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px;font-family:monospace'; sec.value = (t.sectores || []).map(x => x.nombre + ', ' + x.lat + ', ' + x.lon).join('\n'); c.appendChild(sec);
+        const bs = el('button', 'margin-top:4px;padding:4px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🔍 Agregar sector buscando el lugar escrito arriba'); bs.type = 'button'; c.appendChild(bs);
+        bs.onclick = async () => { try { msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…'; const r = await fetch('https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(busq.value)); const j = await r.json(); const f = (j.features || [])[0]; if (!f) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar.'; return; } sec.value += (sec.value && !sec.value.endsWith('\n') ? '\n' : '') + (f.properties.name || busq.value) + ', ' + f.geometry.coordinates[1].toFixed(4) + ', ' + f.geometry.coordinates[0].toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Sector agregado.'; } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar.'; } };
         c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Qué emergencia cubre este teatro (módulos):'));
         const cks = {}; MODS.forEach(([k, d]) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:4px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = (t.modulos || []).indexOf(k) >= 0; cks[k] = ck; l.append(ck, document.createTextNode(d)); c.appendChild(l); });
         const opt = (rot, val) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:6px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!val; l.append(ck, document.createTextNode(rot)); c.appendChild(l); return ck; };
         const act = opt('Teatro activo', t.activo !== false), pub = opt('Los invitados (sin usuario) ven los ríos de este teatro', t.publico), syn = opt('Actualizar los ríos con el INA cada hora', t.sync);
         botones(c, nuevo ? 'Crear teatro' : 'Guardar cambios', async () => {
           msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
-          const datos = { id: id.value.trim().toUpperCase(), nombre: nom.value.trim(), tipo: tipo.value, lat: parseFloat(lat.value), lon: parseFloat(lon.value), zoom: parseInt(zoom.value, 10) || 8, radio: parseFloat(radio.value) || 300, modulos: MODS.map(m => m[0]).filter(k => cks[k].checked), activo: act.checked, publico: pub.checked, sync: syn.checked };
+          const datos = { id: id.value.trim().toUpperCase(), nombre: nom.value.trim(), tipo: tipo.value, lat: parseFloat(lat.value), lon: parseFloat(lon.value), zoom: parseInt(zoom.value, 10) || 8, radio: parseFloat(radio.value) || 300, modulos: MODS.map(m => m[0]).filter(k => cks[k].checked), sectores: parseSectores(sec.value), activo: act.checked, publico: pub.checked, sync: syn.checked };
           if (nuevo) { datos.sheetId = sid.value.trim(); datos.crear = crear.checked; }
           resultado(msg, await admin('TEATRO', { t: datos }), cerrar);
         }, cerrar);
@@ -3829,5 +3842,162 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE MODULOS ===== -->
+<!-- ===== INICIO BLOQUE INFORME METEO: pegar ULTIMO, antes de </body> ===== -->
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const CENTRO_NEA = { lat: -27.5, lon: -59.0 };
+  const CARD = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+  const cardinal = g => isFinite(g) ? CARD[Math.round(((g % 360) + 360) % 360 / 22.5) % 16] : '-';
+  const COD = { 0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Nublado', 45: 'Niebla', 48: 'Niebla con escarcha', 51: 'Llovizna leve', 53: 'Llovizna', 55: 'Llovizna intensa', 56: 'Llovizna helada', 57: 'Llovizna helada intensa',
+    61: 'Lluvia leve', 63: 'Lluvia', 65: 'Lluvia intensa', 66: 'Lluvia helada', 67: 'Lluvia helada intensa', 71: 'Nevada leve', 73: 'Nevada', 75: 'Nevada intensa', 77: 'Granizo fino', 80: 'Chubascos leves', 81: 'Chubascos', 82: 'Chubascos violentos', 85: 'Chubascos de nieve', 86: 'Chubascos de nieve intensos', 95: 'Tormenta', 96: 'Tormenta con granizo', 99: 'Tormenta con granizo fuerte' };
+  const txtCod = c => COD[c] || 'Sin dato';
+  const dominante = cods => { const v = cods.filter(c => isFinite(c)); if (!v.length) return NaN; const llu = v.filter(c => c !== 45 && c !== 48); return Math.max.apply(null, llu.length ? llu : v); };
+  const NIVEL = [[2500, 'EXTREMO'], [1000, 'ALTO'], [300, 'MODERADO'], [-1, 'BAJO']];
+  const nivelCape = c => (NIVEL.find(n => c > n[0]) || NIVEL[3])[1];
+  const f1 = v => isFinite(v) ? v.toFixed(1) : '-', f0 = v => isFinite(v) ? String(Math.round(v)) : '-';
+  const limpio = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+  const hayMod = m => { const t = window.ARES_TEATRO; return !t || (t.modulos || []).indexOf(m) >= 0; };   // sin teatro (modo clasico) = todo
+
+  /* ---------- Que sectores hay para elegir ---------- */
+  function centro() { const t = window.ARES_TEATRO; if (t && isFinite(t.lat) && isFinite(t.lon)) return { lat: t.lat, lon: t.lon, nombre: t.nombre }; return { lat: CENTRO_NEA.lat, lon: CENTRO_NEA.lon, nombre: 'Zona NEA (Chaco y Corrientes)' }; }
+  function sectoresDisponibles() {
+    const t = window.ARES_TEATRO, out = [], vistos = {};
+    const add = (n, la, lo) => { const k = String(n).toLowerCase(); if (!n || !isFinite(la) || !isFinite(lo) || vistos[k]) return; vistos[k] = 1; out.push({ nombre: String(n), lat: Number(la), lon: Number(lo) }); };
+    if (t && (t.sectores || []).length) t.sectores.forEach(s => add(s.nombre, s.lat, s.lon));
+    else {
+      try { (estacionesHidro || []).forEach(h => add(h.estacion, h.lat, h.lon)); } catch (_) {}
+      if (!out.length && !t) { const s = $('sel-pronostico'); if (s) [].forEach.call(s.options, o => { const p = o.value.split(','); add(o.text, parseFloat(p[0]), parseFloat(p[1])); }); }
+    }
+    return out;
+  }
+
+  /* ---------- Descarga y analisis de datos ---------- */
+  async function traer(puntos) {
+    const H = 'temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cape,lifted_index';
+    const D = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max';
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + puntos.map(p => p.lat.toFixed(3)).join(',') + '&longitude=' + puntos.map(p => p.lon.toFixed(3)).join(',') +
+      '&hourly=' + H + '&daily=' + D + '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,precipitation&forecast_days=3&timezone=auto';
+    const c = new AbortController(), to = setTimeout(() => c.abort(), 30000);
+    try { const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); return Array.isArray(j) ? j : [j]; }
+    finally { clearTimeout(to); }
+  }
+  function analizar(d, hoy) {
+    const h = d.hourly || {}, tt = (h.time || []).map(x => Date.parse(x)), idx = tt.map((x, i) => i).filter(i => tt[i] >= hoy - 3600e3);
+    const ventana = hs => idx.filter(i => tt[i] <= hoy + hs * 3600e3);
+    const suma = (a, w) => w.reduce((s, i) => s + (isFinite(a && a[i]) ? a[i] : 0), 0), max = (a, w) => w.reduce((m, i) => (isFinite(a && a[i]) && a[i] > m ? a[i] : m), -Infinity), min = (a, w) => w.reduce((m, i) => (isFinite(a && a[i]) && a[i] < m ? a[i] : m), Infinity);
+    const w24 = ventana(24), w48 = ventana(48), w72 = ventana(72);
+    const r = { actual: d.current || {}, lluvia24: suma(h.precipitation, w24), lluvia48: suma(h.precipitation, w48), lluvia72: suma(h.precipitation, w72), rafaga48: max(h.wind_gusts_10m, w48), cape24: max(h.cape, w24), cape48: max(h.cape, w48), li24: min(h.lifted_index, w24),
+      hrMin24: min(h.relative_humidity_2m, w24), tMax24: max(h.temperature_2m, w24), rafaga24: max(h.wind_gusts_10m, w24), probMax48: max(h.precipitation_probability, w48), cond: dominante(w48.map(i => h.weather_code && h.weather_code[i])) };
+    if (!isFinite(r.cape24)) r.cape24 = 0; if (!isFinite(r.cape48)) r.cape48 = 0;
+    r.nivelTorm = nivelCape(r.cape24); r.horaPicoCape = (() => { let m = -1, b = -1; w24.forEach(i => { if (isFinite(h.cape && h.cape[i]) && h.cape[i] > m) { m = h.cape[i]; b = i; } }); return b >= 0 && m >= 300 ? new Date(tt[b]) : null; })();
+    // peligro de incendio (indicador simple de referencia)
+    const hr = r.hrMin24, g = r.rafaga24, T = r.tMax24;
+    r.incendio = !isFinite(hr) ? '-' : (hr <= 30 && g >= 40 && T >= 30) ? 'MUY ALTO' : (hr <= 30 && (g >= 30 || T >= 30)) ? 'ALTO' : hr <= 45 ? 'MODERADO' : 'BAJO';
+    // bloques de 6 h (48 h)
+    r.bloques = []; const w = ventana(48); for (let k = 0; k < w.length; k += 6) { const b = w.slice(k, k + 6); if (b.length < 3) continue;
+      const prom = a => { const v = b.map(i => a && a[i]).filter(isFinite); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : NaN; };
+      r.bloques.push({ desde: new Date(tt[b[0]]), t: prom(h.temperature_2m), lluvia: suma(h.precipitation, b), prob: max(h.precipitation_probability, b), viento: prom(h.wind_speed_10m), dir: prom(h.wind_direction_10m), rafaga: max(h.wind_gusts_10m, b), cod: dominante(b.map(i => h.weather_code && h.weather_code[i])), cape: max(h.cape, b) }); }
+    const dd = d.daily || {}; r.dias = (dd.time || []).map((t, i) => ({ fecha: t, cod: dd.weather_code && dd.weather_code[i], tmax: dd.temperature_2m_max && dd.temperature_2m_max[i], tmin: dd.temperature_2m_min && dd.temperature_2m_min[i], lluvia: dd.precipitation_sum && dd.precipitation_sum[i], prob: dd.precipitation_probability_max && dd.precipitation_probability_max[i], viento: dd.wind_speed_10m_max && dd.wind_speed_10m_max[i], rafaga: dd.wind_gusts_10m_max && dd.wind_gusts_10m_max[i] }));
+    r.obs = []; if (r.lluvia24 >= 100) r.obs.push('LLUVIA EXTREMA: se estiman ' + f0(r.lluvia24) + ' mm en 24 h.'); else if (r.lluvia24 >= 50) r.obs.push('Lluvia intensa: se estiman ' + f0(r.lluvia24) + ' mm en 24 h.'); else if (r.lluvia24 >= 20) r.obs.push('Lluvias moderadas: ' + f0(r.lluvia24) + ' mm en 24 h.');
+    if (r.lluvia72 >= 150) r.obs.push('Acumulado de ' + f0(r.lluvia72) + ' mm en 72 h: riesgo de anegamientos y crecida de cursos menores.');
+    if (r.rafaga48 >= 90) r.obs.push('Ráfagas muy fuertes (hasta ' + f0(r.rafaga48) + ' km/h): restringir operaciones aéreas y trabajos en altura.'); else if (r.rafaga48 >= 60) r.obs.push('Ráfagas fuertes (hasta ' + f0(r.rafaga48) + ' km/h).');
+    if (r.nivelTorm === 'EXTREMO' || r.nivelTorm === 'ALTO') r.obs.push('Potencial ' + r.nivelTorm + ' de tormentas eléctricas' + (r.horaPicoCape ? ' con pico estimado hacia las ' + r.horaPicoCape.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '') + '.');
+    if (r.incendio === 'ALTO' || r.incendio === 'MUY ALTO') r.obs.push('Condiciones favorables a incendios: humedad mínima ' + f0(r.hrMin24) + ' %, ráfagas ' + f0(r.rafaga24) + ' km/h, temperatura máxima ' + f0(r.tMax24) + ' °C.');
+    if (!r.obs.length) r.obs.push('Sin condiciones adversas destacables según el modelo para las próximas 48 h.');
+    return r;
+  }
+
+  /* ---------- Armado del PDF ---------- */
+  const dist = (a, b, c, d) => { const R = 6371, r = x => x * Math.PI / 180, dl = r(c - a), dg = r(d - b), h = Math.sin(dl / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  function estacionesCerca(p, radioKm) { let l = []; try { l = (estacionesHidro || []).filter(h => isFinite(h.lat) && isFinite(h.lon) && isFinite(h.actual)); } catch (_) {} return radioKm ? l.filter(h => dist(p.lat, p.lon, h.lat, h.lon) <= radioKm) : l; }
+  function pdf(ambitos, nombreArchivo, titulo) {
+    const { jsPDF } = window.jspdf, doc = new jsPDF(), t = window.ARES_TEATRO, ahora = new Date(), conInc = hayMod('INCENDIOS'), conHid = hayMod('HIDRICO');
+    const quien = (sesionActiva && sesionActiva.nombre) || 'N/A', tn = t ? t.nombre : centro().nombre;
+    doc.setFontSize(16); doc.setTextColor(30, 41, 59); doc.text('A.R.E.S. C4I - INFORME METEOROLOGICO', 14, 16);
+    doc.setFontSize(10.5); doc.text(titulo, 14, 23);
+    doc.setFontSize(9); doc.setTextColor(71, 85, 105); doc.text('Teatro: ' + tn + '   |   Emision: ' + ahora.toLocaleString('es-AR') + '   |   Elaboro: ' + quien, 14, 29);
+    let y = 34; if (t && t.tipo === 'EJERCICIO') { doc.setTextColor(180, 83, 9); doc.setFontSize(9.5); doc.text('EJERCICIO / SIMULACION - DATOS DE PRACTICA, NO ES UN OPERATIVO REAL', 14, y); y += 6; }
+    doc.setFontSize(11.5); doc.setTextColor(41, 128, 185); doc.text('1. Resumen para las proximas 24 / 48 / 72 horas', 14, y);
+    const head = ['Ambito', 'Condicion', 'T max/min hoy', 'Lluvia 24/48/72 h (mm)', 'Rafaga max 48 h', 'Tormentas electricas']; if (conInc) head.push('Riesgo incendio');
+    doc.autoTable({ startY: y + 3, head: [head], styles: { fontSize: 8 }, headStyles: { fillColor: [41, 128, 185] },
+      body: ambitos.map(a => { const d0 = a.r.dias[0] || {}; const fila = [a.nombre, txtCod(a.r.cond), f0(d0.tmax) + ' / ' + f0(d0.tmin) + ' C', f0(a.r.lluvia24) + ' / ' + f0(a.r.lluvia48) + ' / ' + f0(a.r.lluvia72), f0(a.r.rafaga48) + ' km/h', a.r.nivelTorm + ' (CAPE ' + f0(a.r.cape24) + ')']; if (conInc) fila.push(a.r.incendio); return fila; }),
+      didParseCell: h => { if (h.section === 'body' && h.column.index === 5) { const v = String(h.cell.raw); if (v.indexOf('EXTREMO') === 0) h.cell.styles.textColor = [185, 28, 28]; else if (v.indexOf('ALTO') === 0) h.cell.styles.textColor = [234, 88, 12]; } } });
+    y = doc.lastAutoTable.finalY + 8;
+    const todos = estacionesCerca(centro(), 0);
+    if (conHid && todos.length && ambitos.length > 1) {
+      doc.setFontSize(11.5); doc.setTextColor(41, 128, 185); doc.text('Situacion hidrometrica de referencia', 14, y);
+      doc.autoTable({ startY: y + 3, head: [['Estacion', 'Rio', 'Altura (m)', 'Alerta (m)', 'Evacuacion (m)', 'Estado']], styles: { fontSize: 8 }, headStyles: { fillColor: [14, 116, 144] }, body: todos.map(h => [h.estacion, h.rio, f1(Number(h.actual)), f1(Number(h.alerta)), f1(Number(h.evacuacion)), (typeof estadoHidro === 'function' ? estadoHidro(h).txt : '')]) });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+    ambitos.forEach((a, n) => {
+      doc.addPage(); let yy = 16; doc.setFontSize(13); doc.setTextColor(30, 41, 59); doc.text((n + 2 - 1) + '. ' + a.nombre.toUpperCase(), 14, yy); yy += 5;
+      const ac = a.r.actual; doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+      doc.text('Coordenadas: ' + a.lat.toFixed(3) + ', ' + a.lon.toFixed(3) + '   |   Ahora: ' + txtCod(ac.weather_code) + ', ' + f1(ac.temperature_2m) + ' C, humedad ' + f0(ac.relative_humidity_2m) + ' %, viento ' + cardinal(ac.wind_direction_10m) + ' ' + f0(ac.wind_speed_10m) + ' km/h (rafagas ' + f0(ac.wind_gusts_10m) + ')', 14, yy + 2, { maxWidth: 182 }); yy += 10;
+      doc.setFontSize(10.5); doc.setTextColor(192, 57, 43); doc.text('Observaciones', 14, yy); doc.setFontSize(9); doc.setTextColor(30, 41, 59);
+      a.r.obs.forEach(o => { yy += 5; const l = doc.splitTextToSize('- ' + o, 180); doc.text(l, 16, yy); yy += (l.length - 1) * 4; }); yy += 6;
+      doc.setFontSize(10.5); doc.setTextColor(41, 128, 185); doc.text('Pronostico por dia', 14, yy);
+      doc.autoTable({ startY: yy + 2, head: [['Fecha', 'Condicion', 'Max', 'Min', 'Lluvia (mm)', 'Prob. max', 'Viento max', 'Rafaga max']], styles: { fontSize: 8 }, headStyles: { fillColor: [41, 128, 185] },
+        body: a.r.dias.map(d => [new Date(d.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' }), txtCod(d.cod), f0(d.tmax) + ' C', f0(d.tmin) + ' C', f1(d.lluvia), f0(d.prob) + ' %', f0(d.viento) + ' km/h', f0(d.rafaga) + ' km/h']) });
+      yy = doc.lastAutoTable.finalY + 7; doc.setFontSize(10.5); doc.setTextColor(41, 128, 185); doc.text('Proximas 48 horas (bloques de 6 h)', 14, yy);
+      doc.autoTable({ startY: yy + 2, head: [['Desde', 'Condicion', 'Temp.', 'Lluvia (mm)', 'Prob.', 'Viento', 'Rafaga', 'CAPE']], styles: { fontSize: 8 }, headStyles: { fillColor: [100, 116, 139] },
+        body: a.r.bloques.map(b => [b.desde.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }), txtCod(b.cod), f0(b.t) + ' C', f1(b.lluvia), f0(b.prob) + ' %', cardinal(b.dir) + ' ' + f0(b.viento) + ' km/h', f0(b.rafaga) + ' km/h', f0(b.cape)]) });
+      yy = doc.lastAutoTable.finalY + 7;
+      if (conHid) { const cer = a.esGeneral ? [] : estacionesCerca(a, 80); if (cer.length) { if (yy > 235) { doc.addPage(); yy = 16; } doc.setFontSize(10.5); doc.setTextColor(14, 116, 144); doc.text('Hidrometria cercana (hasta 80 km)', 14, yy);
+        doc.autoTable({ startY: yy + 2, head: [['Estacion', 'Rio', 'Altura (m)', 'Alerta (m)', 'Evacuacion (m)', 'Estado']], styles: { fontSize: 8 }, headStyles: { fillColor: [14, 116, 144] }, body: cer.map(h => [h.estacion, h.rio, f1(Number(h.actual)), f1(Number(h.alerta)), f1(Number(h.evacuacion)), (typeof estadoHidro === 'function' ? estadoHidro(h).txt : '')]) }); } }
+    });
+    const n = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+      doc.text('Fuente: modelos numericos via Open-Meteo. Producto de apoyo a la decision: no reemplaza los avisos oficiales del Servicio Meteorologico Nacional. CAPE >=300 moderado, >=1000 alto, >=2500 extremo (referencia).', 14, 285, { maxWidth: 182 });
+      doc.text('A.R.E.S. C4I - ' + tn + ' - pagina ' + i + ' de ' + n, 14, 292); }
+    doc.save(nombreArchivo);
+  }
+
+  /* ---------- Ventana de seleccion ---------- */
+  window.abrirInformeMeteo = function () {
+    if (!sesionActiva || !sesionActiva.autenticado || sesionActiva.invitado) return;
+    if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.');
+    if ($('modal-informe')) return;
+    const c0 = centro(), secs = sectoresDisponibles();
+    const f = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:10px'); f.id = 'modal-informe';
+    const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:18px;width:min(480px,96vw);max-height:92vh;overflow:auto;color:#f8fafc;font-size:13px;font-family:sans-serif');
+    c.appendChild(el('h3', 'margin:0 0 4px;font-size:16px', '🌦️ Informe meteorológico')); c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:10px', 'Teatro: ' + c0.nombre + '. Elija qué zonas incluir (pronóstico a 72 h, lluvias, viento, tormentas' + (hayMod('INCENDIOS') ? ', riesgo de incendio' : '') + ').'));
+    const lista = [{ k: 'GENERAL', nombre: 'Zona completa del teatro (' + c0.nombre + ')', lat: c0.lat, lon: c0.lon, esGeneral: true }].concat(secs.map((s, i) => Object.assign({ k: 'S' + i }, s)));
+    const cks = {}; lista.forEach((s, i) => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:5px 0'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = i === 0; cks[s.k] = ck; l.append(ck, document.createTextNode(s.esGeneral ? s.nombre : 'Sector: ' + s.nombre)); c.appendChild(l); });
+    if (!secs.length) c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin:6px 0', 'Este teatro no tiene sectores definidos. El administrador puede agregarlos desde el Panel de mando (Editar teatro → Sectores).'));
+    const bt = el('div', 'display:flex;gap:8px;margin:8px 0'); const sa = el('button', 'font-size:11.5px;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer', 'Todos'), sn = el('button', 'font-size:11.5px;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer', 'Ninguno'); sa.type = sn.type = 'button';
+    sa.onclick = () => Object.values(cks).forEach(k => { k.checked = true; }); sn.onclick = () => Object.values(cks).forEach(k => { k.checked = false; }); bt.append(sa, sn); c.appendChild(bt);
+    const l2 = el('label', 'display:flex;gap:8px;align-items:center;margin:8px 0;font-size:12.5px'); const sep = el('input'); sep.type = 'checkbox'; l2.append(sep, document.createTextNode('Generar un PDF separado por cada zona elegida')); c.appendChild(l2);
+    const msg = el('div', 'min-height:16px;margin:8px 0;font-size:12.5px'); c.appendChild(msg);
+    const fila = el('div', 'display:flex;gap:8px'); const ok = el('button', 'flex:1;padding:9px;border:none;border-radius:4px;background:#2563eb;color:#fff;cursor:pointer;font-weight:bold', '📄 Generar PDF'), no = el('button', 'padding:9px 14px;border:1px solid #475569;border-radius:4px;background:none;color:#cbd5e1;cursor:pointer', 'Cerrar'); ok.type = no.type = 'button'; no.onclick = () => f.remove();
+    ok.onclick = async () => {
+      const sel = lista.filter(s => cks[s.k].checked); if (!sel.length) { msg.style.color = '#fca5a5'; msg.textContent = 'Elija al menos una zona.'; return; }
+      ok.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Consultando el modelo meteorológico…';
+      try {
+        const datos = await traer(sel), hoy = Date.now(); const ambitos = sel.map((s, i) => ({ nombre: s.esGeneral ? 'Zona completa - ' + c0.nombre : s.nombre, lat: s.lat, lon: s.lon, esGeneral: !!s.esGeneral, r: analizar(datos[i], hoy) }));
+        const dia = new Date().toISOString().slice(0, 10), base = 'Informe_Meteo_' + limpio((window.ARES_TEATRO && window.ARES_TEATRO.id) || 'NEA');
+        if (sep.checked && ambitos.length > 1) ambitos.forEach((a, i) => setTimeout(() => pdf([a], base + '_' + limpio(a.nombre) + '_' + dia + '.pdf', 'Informe: ' + a.nombre), i * 700));
+        else pdf(ambitos, base + (ambitos.length === 1 ? '_' + limpio(ambitos[0].nombre) : '') + '_' + dia + '.pdf', ambitos.length === 1 ? 'Informe: ' + ambitos[0].nombre : 'Informe general y por sectores');
+        if (typeof logEvento === 'function') logEvento('Generó informe meteorológico (' + ambitos.map(a => a.nombre).join(', ').slice(0, 120) + ')');
+        msg.style.color = '#4ade80'; msg.textContent = '✅ Informe generado.' + (sep.checked && ambitos.length > 1 ? ' Si el navegador pide permiso para descargar varios archivos, acéptelo.' : '');
+      } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ No se pudo generar: ' + (e && e.name === 'AbortError' ? 'el servicio meteorológico no respondió' : (e && e.message || 'error')); }
+      finally { ok.disabled = false; }
+    };
+    fila.append(ok, no); c.appendChild(fila); f.appendChild(c); document.body.appendChild(f);
+  };
+
+  /* ---------- Boton en la barra superior ---------- */
+  function boton() {
+    if ($('btn-informe-meteo')) return;
+    const sit = document.querySelector('#top-banner .btn-pdf'); if (!sit || !sit.parentNode) return;
+    const b = el('button', 'margin-right:6px', '🌦️ Informe meteorológico'); b.id = 'btn-informe-meteo'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.onclick = window.abrirInformeMeteo;
+    sit.parentNode.insertBefore(b, sit);
+  }
+  boton();
+})();
+</script>
+<!-- ===== FIN BLOQUE INFORME METEO ===== -->
 </body>
 </html>
