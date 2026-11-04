@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-f</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-g</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxmJjhSptMJByv8ykFKbEKwFIugcQNkTpNrx4O1GAD5albMlRVLOSbARWb29tFXaoewHQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycby_iUPTKUFKI7dlQBvKja4HlrlkCdo0xXaTkzgfQ0D-91XjGp3UZX8bKVYk6ro8vT3zKg/exec";
 
 
 ;
@@ -3857,7 +3857,7 @@ window.addEventListener('DOMContentLoaded', () => {
       modal('👥 Accesos al teatro ' + t.nombre, (c, msg, cerrar) => {
         c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + ')').join(', ') || 'ninguno')));
         const us = campo(c, 'Usuario', 'select', '', undefined, i => { (usuariosTodos.length ? usuariosTodos : []).forEach(u => i.add(new Option(u.email + (u.nombre ? ' — ' + u.nombre : ''), u.email))); });
-        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r, r))); });
+        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador', 'Meteorologo'].forEach(r => i.add(new Option(r === 'Meteorologo' ? 'Meteorólogo' : r, r))); });
         const quitar = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const qk = el('input'); qk.type = 'checkbox'; quitar.append(qk, document.createTextNode('Quitarle el acceso a este teatro')); c.appendChild(quitar);
         botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
       });
