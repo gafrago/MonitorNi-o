@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-e</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-f</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyrxy4UjWVLC_v05Dy64WAe6bIL1yxy45f4vk_unI8pxMfY0XSXxNIFxCJYoh2pIWnqYQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxmJjhSptMJByv8ykFKbEKwFIugcQNkTpNrx4O1GAD5albMlRVLOSbARWb29tFXaoewHQ/exec";
 
 
 ;
@@ -4014,6 +4014,7 @@ window.addEventListener('DOMContentLoaded', () => {
       try { (estacionesHidro || []).forEach(h => add(h.estacion, h.lat, h.lon)); } catch (_) {}
       if (!out.length && !t) { const s = $('sel-pronostico'); if (s) [].forEach.call(s.options, o => { const p = o.value.split(','); add(o.text, parseFloat(p[0]), parseFloat(p[1])); }); }
     }
+    try { ((window.aresMeteo && window.aresMeteo.zonas && window.aresMeteo.zonas()) || []).forEach(z => add(z.nombre, z.lat, z.lon)); } catch (_) { /* zonas del Meteorologo: opcionales */ }
     return out;
   }
 
@@ -4776,8 +4777,8 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   const ENLACES = [['SMN: radar, satélite y pronósticos', 'https://www.smn.gob.ar/'], ['SMN: servicios aeronáuticos (METAR / AEROMET)', 'https://www.smn.gob.ar/'], ['Meteored Argentina', 'https://www.meteored.com.ar/'], ['OGIMET (METAR y SYNOP)', 'https://www.ogimet.com/'], ['Windy', 'https://www.windy.com/']];
 
-  let partes = null, metar = null, panel = null, grid = null, gridT = 0, capaAlert = null, capaMetar = null, capaGfs = null, capaSat = {}, nTile = {};
-  let pref = { alertas: true, metar: false, todas: false, gfs: 'ninguna', hora: 0, sat: false, ir: false };
+  let partes = null, metar = null, panel = null, grid = null, gridT = 0, capaAlert = null, capaMetar = null, capaGfs = null, capaSat = {}, nTile = {}, capaZonas = null, borrador = null, esperandoClic = null;
+  let pref = { zonas: true, alertas: true, metar: false, todas: false, gfs: 'ninguna', hora: 0, sat: false, ir: false };
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   const clavePref = () => 'ares_meteo_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
   function leerPref() { try { const j = JSON.parse(localStorage.getItem(clavePref()) || 'null'); if (j && typeof j === 'object') pref = Object.assign(pref, j); } catch (_) { /* sin almacenamiento */ } }
@@ -4797,9 +4798,9 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- Partes meteorologicos ---------- */
   async function cargarPartes() {
     const r = await api('MET_PARTES'); if (r.status !== 'success') throw new Error(r.message || 'No se pudieron leer los partes');
-    partes = r; dibujarAlertas(); badge(); if (panel) pintarPartes(); return r;
+    partes = r; dibujarAlertas(); dibujarZonas(); badge(); if (panel) pintarPartes(); return r;
   }
-  const relevantes = () => (partes ? partes.partes.filter(p => p.sector === 'TODOS' || !partes.miSector || p.sector === partes.miSector) : []);
+  const relevantes = () => (partes ? partes.partes.filter(p => p.paraMi || p.sector === 'TODOS' || !partes.miSector || p.sector === partes.miSector) : []);
   const sevMax = l => l.reduce((m, p) => Math.max(m, SEV_ORDEN.indexOf(p.sev)), -1);
   function badge() {
     const b = $('btn-meteo'); if (!b) return; const l = relevantes(), m = sevMax(l);
@@ -4817,6 +4818,44 @@ window.addEventListener('DOMContentLoaded', () => {
       L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: '<div style="width:30px;height:30px;border-radius:50%;background:' + col + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 0 8px ' + col + '">🌦</div>' }), title: 'Parte meteorológico: ' + n }).addTo(capaAlert).bindPopup(popupParte(p));
     });
     capaAlert.addTo(mp);
+  }
+  /* ---------- Zonas propias del Meteorologo (visibles para todo el teatro) ---------- */
+  const zonas = () => (partes && partes.zonas) || [];
+  const miCorreo = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  function dibujarZonas() {
+    capaZonas = quitar(capaZonas); const mp = mapa(); if (!mp || !pref.zonas || !partes || !zonas().length) return;
+    capaZonas = L.layerGroup();
+    zonas().forEach(z => {
+      const vig = partes.partes.filter(p => p.zona === z.nombre), mx = vig.length ? vig.reduce((m, p) => Math.max(m, SEV_ORDEN.indexOf(p.sev)), -1) : -1, col = mx >= 0 ? SEV[SEV_ORDEN[mx]][1] : '#22d3ee';
+      const d = el('div', 'font:12px sans-serif;max-width:240px'); d.appendChild(el('b', '', '📍 Zona: ' + z.nombre)); d.appendChild(el('div', 'color:#475569', 'Radio ' + z.radio + ' km' + (z.autor ? ' · ' + z.autor : '')));
+      if (z.notas) d.appendChild(el('div', 'white-space:pre-wrap;margin-top:3px', z.notas));
+      vig.forEach(p => d.appendChild(el('div', 'margin-top:4px;color:' + SEV[p.sev][1], '⚠ ' + SEV[p.sev][0] + ': ' + p.titulo)));
+      L.circle([z.lat, z.lon], { radius: z.radio * 1000, color: col, weight: 2, fillColor: col, fillOpacity: mx >= 0 ? .14 : .05, dashArray: '2 7' }).addTo(capaZonas).bindPopup(d);
+      L.marker([z.lat, z.lon], { icon: L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10], html: '<div style="width:20px;height:20px;border-radius:4px;background:' + col + ';border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:bold 11px sans-serif">Z</div>' }) }).addTo(capaZonas).bindPopup(d.cloneNode(true));
+    });
+    capaZonas.addTo(mp);
+  }
+  /* ---------- Lista de usuarios con casillas y atajos ---------- */
+  function selectorDestino(lista, sectores, cambio) {
+    const raiz = el('div', 'border:1px solid #475569;border-radius:6px;padding:6px;background:#0f172a'), filas = {}, rolN = r => String(r || '').toLowerCase();
+    const bcss = 'font-size:11px;padding:2px 7px;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:4px;cursor:pointer';
+    const cab = el('div', 'display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:5px'), cont = el('div', 'font-size:11px;color:#7dd3fc;margin:3px 0');
+    const act = () => { const n = obtener().length; cont.textContent = n ? n + ' persona(s) marcada(s)' : 'Ninguna persona marcada'; if (cambio) cambio(n); };
+    const marcar = (f, v) => { lista.forEach(u => { if (f(u)) filas[u.email].k.checked = v; }); act(); };
+    const btn = (t, fn) => { const b = el('button', bcss, t); b.type = 'button'; b.onclick = fn; return b; };
+    cab.append(btn('Todos', () => marcar(() => true, true)), btn('Ninguno', () => marcar(() => true, false)), btn('Todos los operadores', () => marcar(u => rolN(u.rol) === 'operador', true)), btn('Administrador y Planificador', () => marcar(u => rolN(u.rol) === 'administrador' || rolN(u.rol) === 'planificador', true)));
+    if (sectores && sectores.length) { const s = estiloSel(el('select')); const o0 = el('option', '', '➕ Todo un sector…'); o0.value = ''; s.appendChild(o0); sectores.forEach(n => { const o = el('option', '', n + ' (' + lista.filter(u => u.sector === n).length + ')'); o.value = n; s.appendChild(o); }); s.onchange = () => { if (s.value) marcar(u => u.sector === s.value, true); s.value = ''; }; cab.appendChild(s); }
+    const q = estiloSel(el('input')); q.placeholder = 'Buscar persona…'; q.style.cssText += ';width:100%;box-sizing:border-box;margin-bottom:4px';
+    const caja = el('div', 'max-height:170px;overflow:auto');
+    lista.slice().sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).forEach(u => {
+      const l = el('label', 'display:flex;gap:6px;align-items:center;margin:2px 0;cursor:pointer;font-size:12px'), k = el('input'); k.type = 'checkbox'; k.onchange = act;
+      l.append(k, el('span', 'flex:1', u.nombre || u.email), el('span', 'color:#94a3b8;font-size:11px', u.rol + (u.sector ? ' · ' + u.sector : ''))); filas[u.email] = { k: k, l: l, t: (String(u.nombre) + ' ' + u.email + ' ' + u.rol + ' ' + (u.sector || '')).toLowerCase() }; caja.appendChild(l);
+    });
+    if (!lista.length) caja.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'No hay otros usuarios en este teatro.'));
+    q.oninput = () => { const t = q.value.trim().toLowerCase(); Object.keys(filas).forEach(e => { filas[e].l.style.display = !t || filas[e].t.indexOf(t) >= 0 ? 'flex' : 'none'; }); };
+    const obtener = () => Object.keys(filas).filter(e => filas[e].k.checked);
+    raiz.append(cab, q, caja, cont); act();
+    return { el: raiz, obtener: obtener, marcar: (emails) => { (emails || []).forEach(e => { if (filas[e]) filas[e].k.checked = true; }); act(); }, limpiar: () => marcar(() => true, false) };
   }
   function popupParte(p) {
     const d = el('div', 'font:12px sans-serif;max-width:240px');
@@ -4915,6 +4954,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const sc = seccion('🗺 Capas del mapa', true);
     sc.appendChild(check('🌦 Alertas por sector (partes vigentes)', pref.alertas, v => { pref.alertas = v; guardarPref(); dibujarAlertas(); }));
+    sc.appendChild(check('📍 Zonas de seguimiento del Meteorólogo', pref.zonas, v => { pref.zonas = v; guardarPref(); dibujarZonas(); }));
     sc.appendChild(check('🛰 Satélite GOES (color)', pref.sat, v => { pref.sat = v; guardarPref(); aplicarSat('color', v); })); sc.appendChild(el('div', 'font-size:11px;color:#fbbf24', '')).id = 'met-sat-msg-color';
     sc.appendChild(check('☁ Satélite GOES infrarrojo (tope de nubes: más frío y más brillante = más alto)', pref.ir, v => { pref.ir = v; guardarPref(); aplicarSat('ir', v); })); sc.appendChild(el('div', 'font-size:11px;color:#fbbf24', '')).id = 'met-sat-msg-ir';
     const fg = el('div', 'margin:6px 0'); fg.appendChild(el('div', 'font-weight:bold;margin-bottom:3px', 'Modelo GFS (NOAA, vía Open-Meteo)'));
@@ -4975,33 +5015,109 @@ window.addEventListener('DOMContentLoaded', () => {
     partes.partes.forEach(p => {
       const t = el('div', 'border-left:4px solid ' + SEV[p.sev][1] + ';background:#1e293b;border-radius:4px;padding:6px 8px;margin:6px 0');
       const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', p.titulo)); h.appendChild(el('span', 'color:#fff;background:' + SEV[p.sev][1] + ';border-radius:3px;padding:0 5px;font-size:11px', SEV[p.sev][0])); t.appendChild(h);
-      t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (p.sector === 'TODOS' ? 'Todos los sectores' : 'Sector ' + p.sector) + ' · ' + p.autor + ' · hasta ' + fechaHora(p.vence) + (p.enviados ? ' · enviado a ' + p.enviados : '')));
+      t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (p.sector === 'TODOS' ? 'Todos los sectores' : p.sector === 'PERSONAS' ? 'Personas elegidas' : 'Sector ' + p.sector) + (p.zona ? ' · Zona ' + p.zona : '') + ' · ' + p.autor + ' · hasta ' + fechaHora(p.vence) + (p.enviados ? ' · enviado a ' + p.enviados : '')));
       t.appendChild(el('div', 'white-space:pre-wrap;margin-top:3px', p.texto));
       if ((partes.puedeEmitir && p.propio) || partes.puedeCerrarTodos) { const c = el('button', 'margin-top:4px;background:#1e293b;border:1px solid #475569;color:#fca5a5;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', 'Cerrar parte'); c.type = 'button'; c.onclick = async () => { if (!confirm('¿Cerrar este parte? Deja de figurar como vigente.')) return; try { const r = await api('MET_PARTE_CERRAR', { id: p.id }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } }; t.appendChild(c); }
       caja.appendChild(t);
     });
     zonaPartes.appendChild(caja);
     if (partes.puedeEmitir) zonaPartes.appendChild(formParte());
+    zonaPartes.appendChild(seccionZonas());
     if (partes.miembros && partes.sectores.length) zonaPartes.appendChild(asignaciones());
   }
+  /* ---------- Gestion de zonas ---------- */
+  function seccionZonas() {
+    const edita = !!(partes.puedeEmitir || partes.puedeCerrarTodos), d = seccion('📍 Zonas de seguimiento (' + zonas().length + ')', false);
+    const lab = (t, c) => { const l = el('label', 'display:block;margin:4px 0'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); l.appendChild(c); return l; };
+    d.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:4px 0', edita ? 'Defina zonas propias (aunque no sean sectores del teatro): se ven en el mapa para todos, y puede incluirlas en sus partes, informes y reportes.' : 'Zonas que el Meteorólogo sigue de cerca. Se muestran en el mapa.'));
+    if (!zonas().length) d.appendChild(el('div', 'color:#94a3b8;font-size:12px;margin:4px 0', 'No hay zonas definidas.'));
+    zonas().forEach(z => {
+      const f = el('div', 'display:flex;gap:5px;align-items:center;margin:3px 0;background:#1e293b;border-radius:4px;padding:4px 6px'); f.appendChild(el('span', 'flex:1;font-size:12px', '📍 ' + z.nombre + ' · ' + z.radio + ' km'));
+      const bs = (t, fn, c) => { const b = el('button', 'background:#0f172a;border:1px solid #475569;color:' + (c || '#e2e8f0') + ';border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px', t); b.type = 'button'; b.onclick = fn; return b; };
+      f.appendChild(bs('Ver', () => { const mp = mapa(); if (mp) { mp.setView([z.lat, z.lon], 7, { animate: false }); if (!pref.zonas) { pref.zonas = true; guardarPref(); dibujarZonas(); } } }));
+      if (edita && (partes.puedeCerrarTodos || z.autorEmail === miCorreo())) {
+        f.appendChild(bs('Editar', () => { borrador = { id: z.id, nombre: z.nombre, lat: z.lat, lon: z.lon, radio: z.radio, notas: z.notas || '' }; pintarPartes(); }));
+        f.appendChild(bs('Borrar', async () => { if (!confirm('¿Borrar la zona “' + z.nombre + '”?')) return; try { const r = await api('MET_ZONA_BORRAR', { id: z.id }); if (r.status !== 'success') alert(r.message); await cargarPartes(); } catch (_) { /* sesion */ } }, '#fca5a5'));
+      }
+      d.appendChild(f);
+    });
+    if (!edita) return d;
+    if (!borrador) { const b = el('button', 'margin-top:6px;background:#0369a1;border:0;color:#fff;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px', '➕ Nueva zona'); b.type = 'button'; b.onclick = () => { borrador = { id: '', nombre: '', lat: '', lon: '', radio: 100, notas: '' }; pintarPartes(); }; d.appendChild(b); d.open = true; return d; }
+    d.open = true; const bo = borrador, caja = el('div', 'border-top:1px solid #334155;margin-top:8px;padding-top:6px');
+    caja.appendChild(el('b', 'font-size:12px', bo.id ? 'Editar zona' : 'Nueva zona'));
+    const inp = (k, tipo, ancho, extra) => { const i = estiloSel(el('input')); i.type = tipo; i.value = bo[k]; i.style.width = ancho; if (extra) extra(i); i.oninput = () => { bo[k] = i.value; }; return i; };
+    const nom = inp('nombre', 'text', '100%', i => { i.maxLength = 40; i.style.boxSizing = 'border-box'; i.placeholder = 'Ej: Delta del Paraná'; });
+    const lat = inp('lat', 'number', '110px', i => { i.step = 'any'; }), lon = inp('lon', 'number', '110px', i => { i.step = 'any'; }), rad = inp('radio', 'number', '80px', i => { i.min = 10; i.max = 600; });
+    const nts = estiloSel(el('textarea')); nts.rows = 2; nts.maxLength = 200; nts.style.cssText += ';width:100%;box-sizing:border-box'; nts.value = bo.notas; nts.oninput = () => { bo.notas = nts.value; };
+    const msg = el('div', 'font-size:12px;min-height:15px;margin:4px 0'), lugares = el('div');
+    const ubic = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); ubic.append(lab('Latitud', lat), lab('Longitud', lon), lab('Radio (km, 10–600)', rad));
+    const busq = estiloSel(el('input')); busq.placeholder = 'Buscar lugar (ej: Concepción del Uruguay, Entre Ríos)'; busq.style.cssText += ';flex:1;min-width:140px';
+    const poner = f => { bo.lat = +f.lat.toFixed(4); bo.lon = +f.lon.toFixed(4); if (!bo.nombre) bo.nombre = String(f.nombre).split(',')[0].slice(0, 40); lat.value = bo.lat; lon.value = bo.lon; nom.value = bo.nombre; };
+    async function buscar() {
+      lugares.textContent = ''; const q = busq.value.trim(); if (!q) { msg.style.color = '#fca5a5'; msg.textContent = 'Escriba el lugar a buscar.'; return; }
+      msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…';
+      try {
+        const j = await (await fetch('https://photon.komoot.io/api/?limit=10&lat=-30&lon=-60&q=' + encodeURIComponent(q))).json();
+        const fs = (j.features || []).filter(f => f && f.geometry && Array.isArray(f.geometry.coordinates)).map(f => { const pr = f.properties || {}; return { nombre: [pr.name, pr.state, pr.country].filter(Boolean).join(', ') || q, lat: Number(f.geometry.coordinates[1]), lon: Number(f.geometry.coordinates[0]), ar: pr.countrycode === 'AR' }; }).filter(f => isFinite(f.lat) && isFinite(f.lon));
+        fs.sort((x, y) => (y.ar ? 1 : 0) - (x.ar ? 1 : 0));
+        if (!fs.length) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró. Pruebe con provincia o cargue las coordenadas a mano.'; return; }
+        msg.style.color = '#94a3b8'; msg.textContent = 'Elija el lugar correcto:';
+        fs.slice(0, 6).forEach(f => { const b = el('button', 'display:block;width:100%;text-align:left;margin-top:3px;padding:4px 8px;border-radius:4px;border:1px solid ' + (f.ar ? '#475569' : '#b45309') + ';background:#0f172a;color:' + (f.ar ? '#e2e8f0' : '#fcd34d') + ';cursor:pointer;font-size:12px', (f.ar ? '' : '⚠ FUERA DE ARGENTINA · ') + f.nombre + ' (' + f.lat.toFixed(2) + ', ' + f.lon.toFixed(2) + ')'); b.type = 'button'; b.onclick = () => { lugares.textContent = ''; msg.textContent = ''; poner(f); }; lugares.appendChild(b); });
+      } catch (_) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; }
+    }
+    const bb = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px', '🔎 Buscar'); bb.type = 'button'; bb.onclick = buscar; busq.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } };
+    const bm = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px', '📍 Tocar en el mapa'); bm.type = 'button';
+    bm.onclick = () => {
+      const mp = mapa(); if (!mp) { msg.style.color = '#fca5a5'; msg.textContent = 'El mapa no está disponible.'; return; }
+      panel.style.display = 'none'; const aviso = el('div', 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483400;background:#0369a1;color:#fff;padding:8px 14px;border-radius:6px;font:13px sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.5)', 'Toque el mapa para ubicar el centro de la zona (clic fuera del mapa o Esc cancela)');
+      document.body.appendChild(aviso);
+      const fin = () => { try { mp.off('click', alClic); } catch (_) { /* nada */ } document.removeEventListener('keydown', alEsc, true); aviso.remove(); esperandoClic = null; if (panel) panel.style.display = ''; };
+      const alClic = e => { bo.lat = +e.latlng.lat.toFixed(4); bo.lon = +e.latlng.lng.toFixed(4); fin(); pintarPartes(); }, alEsc = e => { if (e.key === 'Escape') { fin(); } };
+      esperandoClic = fin; mp.once('click', alClic); document.addEventListener('keydown', alEsc, true);
+    };
+    const bg = el('button', 'background:#15803d;border:0;color:#fff;border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:bold', bo.id ? 'Guardar cambios' : 'Guardar zona'); bg.type = 'button';
+    const bc = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:6px 12px;cursor:pointer', 'Cancelar'); bc.type = 'button'; bc.onclick = () => { borrador = null; pintarPartes(); };
+    bg.onclick = async () => {
+      if (!bo.nombre.trim()) { msg.style.color = '#fca5a5'; msg.textContent = 'Ponga un nombre.'; return; }
+      if (bo.lat === '' || bo.lon === '' || !isFinite(+bo.lat) || !isFinite(+bo.lon)) { msg.style.color = '#fca5a5'; msg.textContent = 'Falta ubicar la zona: busque un lugar, toque el mapa o cargue las coordenadas.'; return; }
+      if (!(+bo.radio >= 10 && +bo.radio <= 600)) { msg.style.color = '#fca5a5'; msg.textContent = 'El radio debe estar entre 10 y 600 km.'; return; }
+      if (!(+bo.lat >= -56 && +bo.lat <= -21 && +bo.lon >= -74 && +bo.lon <= -52) && !confirm('Esa ubicación parece estar FUERA de Argentina. ¿Guardarla igual?')) return;
+      bg.disabled = true; try { const r = await api('MET_ZONA_GUARDAR', { id: bo.id, nombre: bo.nombre.trim(), lat: +bo.lat, lon: +bo.lon, radio: +bo.radio, notas: bo.notas.trim() });
+        if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = r.message; } else { borrador = null; await cargarPartes(); const mp = mapa(); if (mp) { const z = zonas().filter(x => x.id === r.id)[0]; if (z) mp.setView([z.lat, z.lon], 7, { animate: false }); } }
+      } catch (_) { msg.style.color = '#fca5a5'; msg.textContent = 'Sin conexión con el servidor.'; } finally { bg.disabled = false; }
+    };
+    const fb = el('div', 'display:flex;gap:5px;margin:6px 0'); fb.append(busq, bb);
+    caja.append(lab('Nombre', nom), fb, lugares, el('div', 'display:flex;margin:4px 0'), ubic, bm, lab('Notas (opcional)', nts), msg, el('div', 'display:flex;gap:8px'));
+    caja.lastChild.append(bg, bc); d.appendChild(caja); return d;
+  }
+
   function formParte() {
     const d = seccion('✍️ Emitir parte meteorológico', !partes.partes.length); const lab = (t, c) => { const l = el('label', 'display:block;margin:5px 0'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); l.appendChild(c); return l; };
-    const sec = estiloSel(el('select')); ['TODOS'].concat(partes.sectores).forEach(n => { const o = el('option', '', n === 'TODOS' ? 'TODOS los sectores' : n); o.value = n; sec.appendChild(o); });
+    const sec = estiloSel(el('select')); ['TODOS'].concat(partes.sectores, ['']).forEach(n => { const o = el('option', '', n === 'TODOS' ? 'TODOS los sectores' : n === '' ? '(ninguno: solo las personas que marque)' : n); o.value = n; sec.appendChild(o); });
+    const zsel = estiloSel(el('select')); const z0 = el('option', '', '(ninguna)'); z0.value = ''; zsel.appendChild(z0); zonas().forEach(z => { const o = el('option', '', z.nombre); o.value = z.nombre; zsel.appendChild(o); });
+    const sup = el('label', 'display:flex;gap:6px;align-items:center;margin:4px 0;font-size:12px'), supK = el('input'); supK.type = 'checkbox'; sup.append(supK, document.createTextNode('Incluir a Administrador y Planificador'));
+    let alCambiar = null; const pick = selectorDestino(partes.destinatarios || [], partes.sectores, () => { if (alCambiar) alCambiar(); });
     const sev = estiloSel(el('select')); partes.severidades.forEach(s => { const o = el('option', '', SEV[s][0]); o.value = s; sev.appendChild(o); }); sev.value = 'PRECAUCION';
     const hor = estiloSel(el('input')); hor.type = 'number'; hor.min = 1; hor.max = 72; hor.value = 12; hor.style.width = '70px';
     const tit = estiloSel(el('input')); tit.maxLength = 80; tit.style.width = '100%'; tit.style.boxSizing = 'border-box'; tit.placeholder = 'Ej: Tormentas fuertes con ráfagas';
     const txt = estiloSel(el('textarea')); txt.rows = 4; txt.maxLength = 1000; txt.style.cssText += ';width:100%;box-sizing:border-box'; txt.placeholder = 'Fenómeno, horario, zona afectada y recomendación para el personal desplegado.';
     const info = el('div', 'font-size:11px;color:#94a3b8;margin:3px 0'), res = el('div', 'font-size:12px;margin-top:4px');
-    const act = () => { const n = sec.value === 'TODOS' ? null : (partes.porSector[sec.value] || 0); info.textContent = sec.value === 'TODOS' ? 'Llegará por mensaje a todo el teatro.' : n ? 'Llegará por mensaje a ' + n + ' persona(s) con ese sector.' : '⚠ Nadie eligió ese sector todavía: quedará visible en el panel y el mapa, pero no llegará por mensaje.'; }; sec.onchange = act; act();
+    const act = () => {
+      if (sec.value === 'TODOS') { info.textContent = 'Llegará por mensaje a todo el teatro.'; return; }
+      const ds = partes.destinatarios || [], set = {}; ds.forEach(u => { if ((sec.value && u.sector === sec.value) || (supK.checked && /^(administrador|planificador)$/i.test(u.rol))) set[u.email] = 1; }); pick.obtener().forEach(e => { set[e] = 1; });
+      const n = Object.keys(set).length; info.textContent = n ? 'Llegará por mensaje a ' + n + ' persona(s).' : '⚠ Nadie recibiría este parte: elija un sector o marque personas.'; };
+    sec.onchange = act; supK.onchange = act; alCambiar = act; act();
     const b = el('button', 'background:#0369a1;border:0;color:#fff;border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:bold', 'Emitir y enviar'); b.type = 'button';
     b.onclick = async () => {
       res.textContent = ''; if (!tit.value.trim() || !txt.value.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Escriba título y texto.'; return; }
-      b.disabled = true; try { const r = await api('MET_PARTE_EMITIR', { sector: sec.value, severidad: sev.value, titulo: tit.value.trim(), texto: txt.value.trim(), horas: +hor.value || 12 });
+      if (!sec.value && !pick.obtener().length && !supK.checked) { res.style.color = '#fca5a5'; res.textContent = 'Elija un sector o marque al menos una persona.'; return; }
+      b.disabled = true; try { const r = await api('MET_PARTE_EMITIR', { sector: sec.value, usuarios: pick.obtener(), superiores: supK.checked, zona: zsel.value, severidad: sev.value, titulo: tit.value.trim(), texto: txt.value.trim(), horas: +hor.value || 12 });
         if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = r.message; } else { res.style.color = '#86efac'; res.textContent = '✅ Parte emitido' + (r.enviados ? ' y enviado a ' + r.enviados + ' persona(s).' : '.'); tit.value = ''; txt.value = ''; await cargarPartes(); if (typeof window.actualizarMensajes === 'function') window.actualizarMensajes(); }
       } catch (_) { res.style.color = '#fca5a5'; res.textContent = 'Sin conexión con el servidor.'; } finally { b.disabled = false; }
     };
-    const f1 = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); f1.append(lab('Sector', sec), lab('Severidad', sev), lab('Vigencia (h)', hor));
-    d.append(f1, info, lab('Título', tit), lab('Texto', txt), b, res); return d;
+    const f1 = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); f1.append(lab('Sector', sec), lab('Zona (opcional)', zsel), lab('Severidad', sev), lab('Vigencia (h)', hor));
+    const pl = el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Además, enviar a estas personas:');
+    d.append(f1, sup, pl, pick.el, info, lab('Título', tit), lab('Texto', txt), b, res); return d;
   }
   function asignaciones() {
     const d = seccion('👥 Sector de cada persona', false); d.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:4px 0', 'Define a quién le llega cada parte. Cada persona también puede elegir el suyo.'));
@@ -5023,11 +5139,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   let iniciado = false, ultimoTeatro = '';
   setInterval(() => {
-    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; grid = null; return; }
+    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
     if (!boton()) return;
     const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
     if (!iniciado || tid !== ultimoTeatro) {
-      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); leerPref();
+      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
       cargarPartes().catch(() => { iniciado = false; });
       if (pref.metar) cargarMetar().catch(() => null);
       if (pref.gfs !== 'ninguna') aplicarGfs();
@@ -5035,7 +5151,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { abrir: abrir, recargar: cargarPartes };
+  window.aresMeteo = { abrir: abrir, recargar: cargarPartes, zonas: zonas, selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
@@ -5815,12 +5931,13 @@ window.addEventListener('DOMContentLoaded', () => {
   /* =====================  Ventana del Meteorologo: armar y enviar  ===================== */
   let ventana = null;
   const bboxTeatro = () => { const t = teatro() || {}, lat = isFinite(t.lat) ? t.lat : -27.5, lon = isFinite(t.lon) ? t.lon : -59, r = (isFinite(t.radio) && t.radio > 0 ? t.radio : 400) / 111; return [lat - r, lon - r * 1.5 / Math.cos(lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180), lat + r, lon + r * 1.5]; };
+  const bboxZona = z => { const h = Math.max(0.5, z.radio * 1.25 / 111), w = h * 1.5 / Math.cos(z.lat * Math.PI / 180); return [z.lat - h, z.lon - w, z.lat + h, z.lon + w]; };
   const bboxSector = s => [s.lat - 0.9, s.lon - 1.35, s.lat + 0.9, s.lon + 1.35];
   function bboxMapa() { try { const b = mapTactico.getBounds(), la = (b.getSouth() + b.getNorth()) / 2, lo = (b.getWest() + b.getEast()) / 2; let h = b.getNorth() - b.getSouth(), w = b.getEast() - b.getWest(); if (w / h < 1.5) w = h * 1.5; else h = w / 1.5; return [la - h / 2, lo - w / 2, la + h / 2, lo + w / 2]; } catch (_) { return bboxTeatro(); } }
   async function abrir() {
     if (!esMeteo()) return; if (ventana) return; if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.'); if (!IM()) return alert('Falta el módulo de informes meteorológicos.');
     let info; try { info = await api('MET_PARTES'); } catch (_) { return; } if (info.status !== 'success') return alert(info.message || 'No se pudo leer el teatro.');
-    const sectores = info.sectores || [], porSector = info.porSector || {}, imgs = [], t = teatro() || {};
+    const sectores = info.sectores || [], porSector = info.porSector || {}, imgs = [], t = teatro() || {}, zonasMet = info.zonas || [];
     ventana = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:10px'); ventana.id = 'reporte-meteo';
     const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:16px 18px;width:min(640px,97vw);max-height:94vh;overflow:auto;color:#f8fafc;font:13px sans-serif');
     const css = 'display:block;width:100%;box-sizing:border-box;padding:5px;margin-top:2px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:13px sans-serif';
@@ -5835,17 +5952,20 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!sectores.length) caja.appendChild(el('div', 'color:#fca5a5;font-size:12px', 'Este teatro no tiene sectores definidos. El administrador puede agregarlos desde el Panel de mando.'));
     const ls = el('label', 'display:flex;gap:8px;align-items:center;margin-top:4px'), ks = el('input'); ks.type = 'checkbox'; ls.append(ks, document.createTextNode('Incluir también a Administrador y Planificador')); c.append(caja, ls);
     const ba = el('div', 'display:flex;gap:6px;margin-top:4px'); const bt = el('button', 'font-size:11px;padding:2px 8px', 'Todos los sectores'); bt.type = 'button'; bt.onclick = () => sectores.forEach(n => { if (!cs[n].disabled) cs[n].checked = true; }); ba.appendChild(bt); c.appendChild(ba);
+    c.appendChild(el('div', 'margin-top:8px;font-size:12px;color:#94a3b8', 'Además, marque personas una por una (o use los atajos):'));
+    const pick = (window.aresMeteo && window.aresMeteo.selectorDestino) ? window.aresMeteo.selectorDestino(info.destinatarios || [], sectores) : { el: el('div'), obtener: () => [] }; c.appendChild(pick.el);
     // datos
     c.appendChild(tit('2. Qué datos incluir (de las zonas elegidas)'));
     const OPC = [['resumen', 'Resumen 24 / 48 / 72 h (lluvia, ráfagas, tormentas)', true], ['obs', 'Observaciones y alertas calculadas', true], ['dias', 'Pronóstico por día', false], ['bloques', 'Próximas 48 h en bloques de 6 h', false], ['metar', 'METAR de las estaciones de la zona y las prioritarias', true], ['hidro', 'Niveles de ríos (hidrometría)', false], ['partes', 'Partes meteorológicos vigentes del teatro', false]];
     const ck = {}; OPC.forEach(o => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:2px 0'), k = el('input'); k.type = 'checkbox'; k.checked = o[2]; l.append(k, document.createTextNode(o[1])); ck[o[0]] = k; c.appendChild(l); });
     const lg = el('label', 'display:flex;gap:8px;align-items:center;margin-top:4px'), kg = el('input'); kg.type = 'checkbox'; lg.append(kg, document.createTextNode('Incluir también la zona completa del teatro')); c.appendChild(lg);
+    const ckZ = {}; if (zonasMet.length) { c.appendChild(el('div', 'margin-top:6px;font-size:12px;color:#94a3b8', 'Zonas propias a incluir (datos del modelo):')); zonasMet.forEach(z => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:2px 0'), k = el('input'); k.type = 'checkbox'; l.append(k, document.createTextNode('📍 ' + z.nombre + ' (' + z.radio + ' km)')); ckZ[z.id] = k; c.appendChild(l); }); }
     // imagenes
     c.appendChild(tit('3. Imágenes y capturas (hasta ' + MAX_IMG + ')'));
     const lista = el('div', 'display:flex;flex-direction:column;gap:6px;margin-bottom:6px');
     const fila = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:end');
     const sel = (opts, w) => { const s = el('select', css + ';width:' + (w || 'auto') + ';display:inline-block'); opts.forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; s.appendChild(op); }); return s; };
-    const sTipo = sel(Object.keys(CAPAS).map(k => [k, CAPAS[k].nombre]), '260px'), sZona = sel([['teatro', 'Teatro completo'], ['mapa', 'Lo que veo en el mapa ahora']].concat(sectores.map(n => ['S:' + n, 'Sector ' + n])), '200px'), sHora = sel([['0', 'ahora'], ['6', '+6 h'], ['12', '+12 h'], ['24', '+24 h'], ['48', '+48 h']], '90px');
+    const sTipo = sel(Object.keys(CAPAS).map(k => [k, CAPAS[k].nombre]), '260px'), sZona = sel([['teatro', 'Teatro completo'], ['mapa', 'Lo que veo en el mapa ahora']].concat(sectores.map(n => ['S:' + n, 'Sector ' + n]).concat(zonasMet.map(z => ['Z:' + z.id, 'Zona ' + z.nombre]))), '200px'), sHora = sel([['0', 'ahora'], ['6', '+6 h'], ['12', '+12 h'], ['24', '+24 h'], ['48', '+48 h']], '90px');
     const lt = el('label', 'font-size:11px;color:#94a3b8', 'Producto'), lz = el('label', 'font-size:11px;color:#94a3b8', 'Zona'), lh = el('label', 'font-size:11px;color:#94a3b8', 'Pronóstico a');
     lt.appendChild(el('br')); lt.appendChild(sTipo); lz.appendChild(el('br')); lz.appendChild(sZona); lh.appendChild(el('br')); lh.appendChild(sHora);
     const msgI = el('div', 'min-height:16px;font-size:12px;margin:4px 0;color:#94a3b8');
@@ -5862,7 +5982,7 @@ window.addEventListener('DOMContentLoaded', () => {
     bCap.onclick = async () => {
       if (imgs.length >= MAX_IMG) return; bCap.disabled = true; msgI.style.color = '#94a3b8'; msgI.textContent = 'Generando captura… (descarga de mapa, satélite y modelo)';
       try {
-        const z = sZona.value, sc = z.indexOf('S:') === 0 ? (teatro().sectores || []).filter(s => s.nombre === z.slice(2))[0] : null, bb = z === 'mapa' ? bboxMapa() : sc ? bboxSector(sc) : bboxTeatro();
+        const z = sZona.value, sc = z.indexOf('S:') === 0 ? (teatro().sectores || []).filter(s => s.nombre === z.slice(2))[0] : null, zm = z.indexOf('Z:') === 0 ? zonasMet.filter(q => q.id === z.slice(2))[0] : null, bb = z === 'mapa' ? bboxMapa() : sc ? bboxSector(sc) : zm ? bboxZona(zm) : bboxTeatro();
         const r = await capturar(sTipo.value, bb, Number(sHora.value) || 0, sc ? sc.nombre : (z === 'mapa' ? 'vista del mapa' : (t.nombre || 'teatro'))), j = comprimir(r.canvas);
         imgs.push({ titulo: r.titulo, fuente: r.fuente, w: j.w, h: j.h, dataUrl: j.dataUrl }); msgI.style.color = '#4ade80'; msgI.textContent = '✅ Captura agregada.'; pintarImgs();
       } catch (e) { msgI.style.color = '#fca5a5'; msgI.textContent = '⚠ ' + (e && e.message || 'No se pudo generar la captura.'); }
@@ -5882,6 +6002,7 @@ window.addEventListener('DOMContentLoaded', () => {
     async function armar() {
       const elegidos = sectores.filter(n => cs[n].checked), zonas = []; const sc = teatro() && teatro().sectores ? teatro().sectores : [];
       elegidos.forEach(n => { const s = sc.filter(x => x.nombre === n && isFinite(x.lat) && isFinite(x.lon))[0]; if (s) zonas.push({ nombre: s.nombre, lat: s.lat, lon: s.lon }); });
+      zonasMet.forEach(z => { if (ckZ[z.id] && ckZ[z.id].checked && !zonas.some(x => x.nombre === z.nombre)) zonas.push({ nombre: z.nombre, lat: z.lat, lon: z.lon }); });
       if (kg.checked) { const c0 = IM().centro(); zonas.unshift({ nombre: 'Zona completa - ' + (c0.nombre || 'teatro'), lat: c0.lat, lon: c0.lon, esGeneral: true }); }
       const opc = {}; Object.keys(ck).forEach(k => { opc[k] = ck[k].checked; });
       const secciones = await armarSecciones(opc, zonas);
@@ -5889,12 +6010,12 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     bp.onclick = async () => { bp.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Armando el PDF de prueba…'; try { const a = await armar(); a.paquete.generado = Date.now(); construirPDF(a.paquete, (sesionActiva && sesionActiva.nombre) || '').save(nombrePDF(a.paquete)); res.style.color = '#4ade80'; res.textContent = '✅ PDF de prueba descargado (no se envió nada).'; } catch (e) { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (e && e.message || 'No se pudo armar.'); } finally { bp.disabled = false; } };
     be.onclick = async () => {
-      const elegidos = sectores.filter(n => cs[n].checked); if (!elegidos.length) { res.style.color = '#fca5a5'; res.textContent = 'Elija al menos un sector destinatario.'; return; } if (!ti.value.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Ponga un título.'; return; }
+      const elegidos = sectores.filter(n => cs[n].checked), personas = pick.obtener(); if (!elegidos.length && !personas.length && !ks.checked) { res.style.color = '#fca5a5'; res.textContent = 'Elija al menos un sector o una persona destinataria.'; return; } if (!ti.value.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Ponga un título.'; return; }
       be.disabled = bp.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Armando y enviando el reporte…';
       try {
-        const a = await armar(), r = await api('MSG_ENVIAR', { tipo: 'MENSAJE', tema: 'METEOROLOGICO', prioridad: 'NORMAL', texto: ms.value.trim() || 'Reporte meteorológico adjunto.', sectores: a.elegidos, superiores: ks.checked, paquete: a.paquete });
+        const a = await armar(), r = await api('MSG_ENVIAR', { tipo: 'MENSAJE', tema: 'METEOROLOGICO', prioridad: 'NORMAL', texto: ms.value.trim() || 'Reporte meteorológico adjunto.', sectores: a.elegidos, usuarios: personas, superiores: ks.checked, paquete: a.paquete });
         if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (r.message || 'No se pudo enviar.'); be.disabled = bp.disabled = false; return; }
-        res.style.color = '#4ade80'; res.textContent = '✅ Reporte enviado a los sectores elegidos.'; try { if (typeof logEvento === 'function') logEvento('Envió reporte meteorológico: ' + a.paquete.titulo.slice(0, 80)); } catch (_) { /* nada */ }
+        res.style.color = '#4ade80'; res.textContent = '✅ Reporte enviado a los destinatarios elegidos.'; try { if (typeof logEvento === 'function') logEvento('Envió reporte meteorológico: ' + a.paquete.titulo.slice(0, 80)); } catch (_) { /* nada */ }
         setTimeout(cerrar, 1400);
       } catch (e) { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (e && e.message || 'No se pudo enviar.'); be.disabled = bp.disabled = false; }
     };
