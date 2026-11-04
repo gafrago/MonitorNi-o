@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-b</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-c</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -3668,7 +3668,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function pintarTablaEventos() {
     const tb = document.querySelector('#tabla-eventos tbody'); if (!tb) return; tb.innerHTML = '';
-    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = /^(administrador|planificador)$/.test(String(sesionActiva.rol).toLowerCase());
+    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = String(sesionActiva.rol).toLowerCase() !== 'operador';
     abiertos.forEach(e => {
       const tr = tb.insertRow();
       tr.insertCell().textContent = TIPOS[e.tipo] || e.tipo; const n = tr.insertCell(); n.textContent = e.nombre; if (e.notas) n.title = e.notas;
@@ -3766,14 +3766,28 @@ window.addEventListener('DOMContentLoaded', () => {
           const l = el('label', 'display:flex;gap:6px;align-items:center;margin-top:6px;font-size:11.5px;color:#94a3b8'); crear = el('input'); crear.type = 'checkbox'; l.append(crear, document.createTextNode('Si no tengo planilla, intentar crearla automáticamente')); c.appendChild(l);
         }
         const busq = campo(c, 'Ubicación del teatro: buscar un lugar (opcional)', 'text', 'Ej: Esquel, Chubut');
+        let confirmadoFuera = '';
         const bb = el('button', 'margin-top:4px;padding:4px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🔍 Buscar y llenar coordenadas'); bb.type = 'button'; c.appendChild(bb);
+        const lista = el('div', 'margin-top:4px'); c.appendChild(lista);
+        const buscarLugar = async (q, accion, ok) => {      // muestra varias coincidencias (con pais y provincia) y deja ELEGIR: nunca toma la primera a ciegas
+          lista.textContent = ''; q = String(q || '').trim(); if (!q) { msg.style.color = '#fca5a5'; msg.textContent = 'Escriba el lugar a buscar.'; return; }
+          msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…';
+          try {
+            const j = await (await fetch('https://photon.komoot.io/api/?limit=10&lat=-30&lon=-60&q=' + encodeURIComponent(q))).json();
+            const fs = (j.features || []).filter(f => f && f.geometry && Array.isArray(f.geometry.coordinates)).map(f => { const pr = f.properties || {}; return { nombre: [pr.name, pr.state, pr.country].filter(Boolean).join(', ') || q, lat: Number(f.geometry.coordinates[1]), lon: Number(f.geometry.coordinates[0]), ar: pr.countrycode === 'AR' }; }).filter(f => isFinite(f.lat) && isFinite(f.lon));
+            fs.sort((x, y) => (y.ar ? 1 : 0) - (x.ar ? 1 : 0));
+            if (!fs.length) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar. Pruebe con provincia, por ejemplo “Corrientes, Argentina”, o cargue las coordenadas a mano.'; return; }
+            msg.style.color = '#94a3b8'; msg.textContent = 'Elija el lugar correcto (' + accion.toLowerCase() + '):';
+            fs.slice(0, 6).forEach(f => { const b = el('button', 'display:block;width:100%;text-align:left;margin-top:3px;padding:5px 8px;border-radius:4px;border:1px solid ' + (f.ar ? '#475569' : '#b45309') + ';background:#0f172a;color:' + (f.ar ? '#e2e8f0' : '#fcd34d') + ';cursor:pointer;font-size:12px', (f.ar ? '' : '⚠ FUERA DE ARGENTINA · ') + f.nombre + '  (' + f.lat.toFixed(2) + ', ' + f.lon.toFixed(2) + ')'); b.type = 'button'; b.onclick = () => { lista.textContent = ''; ok(f); }; lista.appendChild(b); });
+          } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; }
+        };
         const fila = el('div', 'display:flex;gap:6px'); const mk = (r, v) => { const w = el('div', 'flex:1'); const i = campo(w, r, 'number', '', v, x => { x.step = 'any'; }); fila.appendChild(w); return i; };
         const lat = mk('Latitud', t.lat), lon = mk('Longitud', t.lon), zoom = mk('Zoom (4-12)', t.zoom), radio = mk('Alcance km', t.radio); c.appendChild(fila);
-        bb.onclick = async () => { try { msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…'; const r = await fetch('https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(busq.value)); const j = await r.json(); const f = (j.features || [])[0]; if (!f) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar.'; return; } lon.value = f.geometry.coordinates[0].toFixed(4); lat.value = f.geometry.coordinates[1].toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Coordenadas cargadas: ' + [f.properties.name, f.properties.state].filter(Boolean).join(', '); } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; } };
+        bb.onclick = () => buscarLugar(busq.value, 'Usar como centro del teatro', f => { lat.value = f.lat.toFixed(4); lon.value = f.lon.toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Centro cargado: ' + f.nombre + ' (' + f.lat.toFixed(3) + ', ' + f.lon.toFixed(3) + '). Revise que sea el lugar correcto antes de guardar.'; });
         c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Sectores o zonas de influencia para los informes (uno por línea: Nombre, latitud, longitud). Ej: Barranqueras, -27.49, -58.93'));
         const sec = el('textarea'); sec.rows = 4; sec.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px;font-family:monospace'; sec.value = (t.sectores || []).map(x => x.nombre + ', ' + x.lat + ', ' + x.lon).join('\n'); c.appendChild(sec);
         const bs = el('button', 'margin-top:4px;padding:4px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🔍 Agregar sector buscando el lugar escrito arriba'); bs.type = 'button'; c.appendChild(bs);
-        bs.onclick = async () => { try { msg.style.color = '#94a3b8'; msg.textContent = 'Buscando…'; const r = await fetch('https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(busq.value)); const j = await r.json(); const f = (j.features || [])[0]; if (!f) { msg.style.color = '#fca5a5'; msg.textContent = 'No se encontró ese lugar.'; return; } sec.value += (sec.value && !sec.value.endsWith('\n') ? '\n' : '') + (f.properties.name || busq.value) + ', ' + f.geometry.coordinates[1].toFixed(4) + ', ' + f.geometry.coordinates[0].toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Sector agregado.'; } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar.'; } };
+        bs.onclick = () => buscarLugar(busq.value, 'Agregar como sector', f => { sec.value += (sec.value && !sec.value.endsWith('\n') ? '\n' : '') + f.nombre.replace(/,/g, ' ') + ', ' + f.lat.toFixed(4) + ', ' + f.lon.toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Sector agregado: ' + f.nombre + ' (' + f.lat.toFixed(3) + ', ' + f.lon.toFixed(3) + ').'; });
         c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Qué emergencia cubre este teatro (módulos):'));
         const cks = {}; MODS.forEach(([k, d]) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:4px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = (t.modulos || []).indexOf(k) >= 0; cks[k] = ck; l.append(ck, document.createTextNode(d)); c.appendChild(l); });
         const opt = (rot, val) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:6px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!val; l.append(ck, document.createTextNode(rot)); c.appendChild(l); return ck; };
@@ -3781,6 +3795,9 @@ window.addEventListener('DOMContentLoaded', () => {
         botones(c, nuevo ? 'Crear teatro' : 'Guardar cambios', async () => {
           msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
           const datos = { id: id.value.trim().toUpperCase(), nombre: nom.value.trim(), tipo: tipo.value, lat: parseFloat(lat.value), lon: parseFloat(lon.value), zoom: parseInt(zoom.value, 10) || 8, radio: parseFloat(radio.value) || 300, modulos: MODS.map(m => m[0]).filter(k => cks[k].checked), sectores: parseSectores(sec.value), activo: act.checked, publico: pub.checked, sync: syn.checked };
+          const enAR = (la, lo) => la >= -56 && la <= -21 && lo >= -74 && lo <= -53;        // recuadro aproximado de Argentina continental
+          const fuera = [datos.nombre + ' (centro)'].filter(() => !enAR(datos.lat, datos.lon)).concat(datos.sectores.filter(x => !enAR(x.lat, x.lon)).map(x => 'sector ' + x.nombre));
+          if (fuera.length && fuera.join('|') !== confirmadoFuera) { confirmadoFuera = fuera.join('|'); msg.style.color = '#fcd34d'; msg.textContent = '⚠ Estas ubicaciones quedan FUERA de Argentina: ' + fuera.join('; ') + '. Si es un error (por ejemplo una búsqueda que eligió otro país), corríjalas. Si es correcto, vuelva a tocar Guardar.'; return; }
           if (nuevo) { datos.sheetId = sid.value.trim(); datos.crear = crear.checked; }
           resultado(msg, await admin('TEATRO', { t: datos }), cerrar);
         }, cerrar);
@@ -3790,7 +3807,7 @@ window.addEventListener('DOMContentLoaded', () => {
       modal('👥 Accesos al teatro ' + t.nombre, (c, msg, cerrar) => {
         c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + ')').join(', ') || 'ninguno')));
         const us = campo(c, 'Usuario', 'select', '', undefined, i => { (usuariosTodos.length ? usuariosTodos : []).forEach(u => i.add(new Option(u.email + (u.nombre ? ' — ' + u.nombre : ''), u.email))); });
-        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Meteorologo', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r === 'Meteorologo' ? 'Meteorólogo' : r, r))); });
+        const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador'].forEach(r => i.add(new Option(r, r))); });
         const quitar = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const qk = el('input'); qk.type = 'checkbox'; quitar.append(qk, document.createTextNode('Quitarle el acceso a este teatro')); c.appendChild(quitar);
         botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
       });
