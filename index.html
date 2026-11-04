@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-c</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-e</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzdCnQ8fR0KUEWPcTGFaJAV6I4MrfXTC92b2ZxPgGU533VPQKIfauZu5FvtGOusgFvezw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyrxy4UjWVLC_v05Dy64WAe6bIL1yxy45f4vk_unI8pxMfY0XSXxNIFxCJYoh2pIWnqYQ/exec";
 
 
 ;
@@ -3461,19 +3461,47 @@ window.addEventListener('DOMContentLoaded', () => {
 <script>
 (function () {
   'use strict';
+  const bCirc = (c, rm) => { const dLa = rm / 111320, dLo = rm / (111320 * Math.max(.2, Math.cos(c[0] * Math.PI / 180))); return L.latLngBounds([[c[0] - dLa, c[1] - dLo], [c[0] + dLa, c[1] + dLo]]); };   // limites de un circulo sin necesitar que este dibujado en el mapa
   const $ = id => document.getElementById(id);
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const SEV = { BAJA: '#16a34a', MEDIA: '#d97706', ALTA: '#ea580c', CRITICA: '#b91c1c' };
   const TIPOS = { INCENDIO: '🔥 Incendio', SISMO_DANOS: '🌐 Sismo / daños', INUNDACION: '🌊 Inundación', DERRUMBE: '⛰️ Derrumbe / alud', TORMENTA: '⛈️ Tormenta severa', OTRO: '⚠️ Otro' };
+  window.aresCobertura = { zonas: () => zonas(), sectores: () => sectoresT(), sectorElegido: () => selSector, enSector: enSector };
   let T = null, mods = [], eventos = [], sismos = [], tormentas = [], timers = [];
   const CLAVE_TORM = 'ares_torm_visible';
   let verTorm = (() => { try { return localStorage.getItem(CLAVE_TORM) !== '0'; } catch (_) { return true; } })();   // la preferencia se recuerda en este navegador
   const tiene = m => mods.indexOf(m) >= 0;
+  /* ---- Cobertura: las capas automaticas miran el circulo del centro del teatro MAS el circulo de cada sector ---- */
+  const SEC_RADIO_DEF = 150;
+  let selSector = '';                                          // '' = todo el teatro; si no, nombre del sector que se esta mirando
+  const sectoresT = () => ((T && T.sectores) || []).filter(s => isFinite(s.lat) && isFinite(s.lon)).map(s => ({ nombre: s.nombre, lat: s.lat, lon: s.lon, radio: isFinite(s.radio) && s.radio > 0 ? s.radio : SEC_RADIO_DEF }));
+  function zonas() {                                           // el sector que ya cae por completo dentro del circulo del centro no se consulta aparte
+    if (!T) return [];
+    const z = [{ nombre: 'Centro del teatro', lat: T.lat, lon: T.lon, radio: T.radio || 400, centro: true }];
+    sectoresT().forEach(s => { if (dist(T.lat, T.lon, s.lat, s.lon) + s.radio > z[0].radio) z.push(s); });
+    return z;
+  }
+  const sectorSel = () => selSector ? sectoresT().filter(s => s.nombre === selSector)[0] || null : null;
+  function enSector(lat, lon) { const s = sectorSel(); return !s || dist(s.lat, s.lon, lat, lon) <= s.radio * 1.05; }
   const mapas = () => { const a = []; try { if (mapTactico) a.push(mapTactico); } catch (_) {} try { if (mapRadar) a.push(mapRadar); } catch (_) {} return a; };
   const grupos = new Map();                                    // mapa -> {sismos, eventos}
   function g(map, k) { let o = grupos.get(map); if (!o) { o = {}; grupos.set(map, o); } if (!o[k]) o[k] = L.layerGroup().addTo(map); return o[k]; }
   const tiempo = ms => { const m = Math.round((Date.now() - ms) / 60000); return !ms ? 'sin actividad registrada' : m < 1 ? 'recién' : m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' días'; };
 
+  /* ---- Selector "Ver: todo el teatro / sector": centra el mapa y deja en las capas y tablas solo lo de ese sector ---- */
+  function enfocar() {
+    let b = null; const s = sectorSel();
+    (s ? [s] : zonas().concat(sectoresT())).forEach(z => { const cb = bCirc([z.lat, z.lon], z.radio * 1000); b = b ? b.extend(cb) : cb; });
+    if (b) mapas().forEach(m => { try { m.fitBounds(b, { padding: [20, 20], animate: false }); } catch (_) { /* mapa oculto */ } });
+  }
+  function montarSelectorSector() {
+    const viejo = $('lbl-sector-capas'); if (viejo) viejo.remove(); selSector = '';
+    const barra = document.querySelector('.layer-control-bar'), sec = sectoresT(); if (!barra || !sec.length) return;
+    const l = el('label', ''), s = el('select', 'margin-left:4px;max-width:160px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:1px 3px'); s.id = 'sel-sector-capas'; s.title = 'Centra el mapa y filtra tormentas, sismos y eventos a un sector';
+    const o0 = el('option', '', 'Todo el teatro'); o0.value = ''; s.appendChild(o0); sec.forEach(x => { const o = el('option', '', x.nombre + ' (' + x.radio + ' km)'); o.value = x.nombre; s.appendChild(o); });
+    s.onchange = () => { selSector = s.value; enfocar(); pintarTablaSismos(); pintarTablaTorm(); pintarTablaEventos(); redibujar(); };
+    l.id = 'lbl-sector-capas'; l.append(document.createTextNode('📍 Ver: '), s); barra.appendChild(l);
+  }
   /* ================= 1) Mostrar solo lo que corresponde al tipo de emergencia ================= */
   function marcar(sel, cierre, clase) { const e = document.querySelector(sel); const x = e && cierre ? e.closest(cierre) : e; if (x) x.classList.add(clase); }
   window.aplicarModulos = function (t) {
@@ -3496,6 +3524,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (tiene('SISMOS')) { montarSismos(); cargarSismos(); timers.push(setInterval(cargarSismos, 10 * 60000)); }
     if (tiene('INCENDIOS')) montarIncendios();
     if (tiene('TORMENTAS')) { montarToggleTormentas(); montarTormentas(); cargarTormentas(); timers.push(setInterval(cargarTormentas, 30 * 60000)); }
+    montarSelectorSector();
     setTimeout(redibujar, 1200);
   };
 
@@ -3514,23 +3543,35 @@ window.addEventListener('DOMContentLoaded', () => {
   const dist = (a, b, c, d) => { const R = 6371, r = x => x * Math.PI / 180, dl = r(c - a), dg = r(d - b), h = Math.sin(dl / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
   async function cargarSismos() {
     if (!T || !tiene('SISMOS')) return;
-    const info = $('sismos-info'); const ini = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-    const url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=' + encodeURIComponent(T.lat) + '&longitude=' + encodeURIComponent(T.lon) +
-      '&maxradiuskm=' + encodeURIComponent(T.radio || 400) + '&starttime=' + ini + '&minmagnitude=2.5&orderby=time&limit=100';
-    const c = new AbortController(), to = setTimeout(() => c.abort(), 20000);
-    try {
-      const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status);
-      const j = await r.json();
-      sismos = (j.features || []).map(f => ({ m: Number(f.properties.mag), lugar: String(f.properties.place || ''), t: Number(f.properties.time), prof: Number((f.geometry.coordinates || [])[2]), lon: Number(f.geometry.coordinates[0]), lat: Number(f.geometry.coordinates[1]) })).filter(s => isFinite(s.lat) && isFinite(s.lon));
-      const fuerte = sismos.filter(s => s.m >= 4.5).length;
-      if (info) { info.textContent = sismos.length + ' sismos dentro de ' + (T.radio || 400) + ' km del centro del teatro' + (fuerte ? ' · ' + fuerte + ' de magnitud ≥ 4.5' : '') + ' · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); info.style.color = fuerte ? '#b91c1c' : '#475569'; }
-      const tb = document.querySelector('#tabla-sismos tbody');
-      if (tb) { tb.innerHTML = ''; sismos.slice(0, 25).forEach(s => { const tr = tb.insertRow(); [new Date(s.t).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), 'M ' + s.m.toFixed(1), isFinite(s.prof) ? s.prof.toFixed(0) + ' km' : '—', s.lugar, dist(T.lat, T.lon, s.lat, s.lon).toFixed(0) + ' km'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#d97706' : 'inherit'; } }); }); if (!sismos.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 5; td.style.cssText = 'text-align:center;color:#64748b'; td.textContent = 'Sin sismos registrados en la zona y el período.'; } }
-      redibujar();
-    } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el USGS (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
-    finally { clearTimeout(to); }
+    const info = $('sismos-info'), ini = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10), zs = zonas();
+    const pedir = async z => {
+      const url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=' + encodeURIComponent(z.lat) + '&longitude=' + encodeURIComponent(z.lon) +
+        '&maxradiuskm=' + encodeURIComponent(z.radio) + '&starttime=' + ini + '&minmagnitude=2.5&orderby=time&limit=100';
+      const c = new AbortController(), to = setTimeout(() => c.abort(), 20000);
+      try { const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return (await r.json()).features || []; } finally { clearTimeout(to); }
+    };
+    const res = await Promise.allSettled(zs.map(pedir)), vistos = {}, lista = []; let fallas = 0, motivo = null;
+    res.forEach(r => {
+      if (r.status !== 'fulfilled') { fallas++; motivo = r.reason; return; }
+      r.value.forEach(f => {
+        const co = (f.geometry && f.geometry.coordinates) || [], s = { m: Number(f.properties.mag), lugar: String(f.properties.place || ''), t: Number(f.properties.time), prof: Number(co[2]), lon: Number(co[0]), lat: Number(co[1]) };
+        if (!isFinite(s.lat) || !isFinite(s.lon)) return; const k = s.t + '|' + s.lat.toFixed(2) + '|' + s.lon.toFixed(2); if (vistos[k]) return; vistos[k] = 1; lista.push(s);
+      });
+    });
+    if (fallas === zs.length) { if (info) { info.textContent = '⚠ No se pudo consultar el USGS (' + (motivo && motivo.name === 'AbortError' ? 'sin respuesta' : (motivo && motivo.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } return; }
+    lista.forEach(s => { let mejor = Infinity, nom = ''; zs.forEach(z => { const d = dist(z.lat, z.lon, s.lat, s.lon); if (d < mejor) { mejor = d; nom = z.nombre; } }); s.d = mejor; s.z = nom; });
+    lista.sort((x, y) => y.t - x.t); sismos = lista; sismosZonas = zs.length; sismosFallas = fallas;
+    pintarTablaSismos(); redibujar();
   }
-
+  let sismosZonas = 1, sismosFallas = 0;
+  const sismosVis = () => sismos.filter(s => enSector(s.lat, s.lon));
+  function pintarTablaSismos() {
+    const info = $('sismos-info'), vis = sismosVis(), fuerte = vis.filter(s => s.m >= 4.5).length, sel = sectorSel();
+    if (info) { info.textContent = vis.length + ' sismos ' + (sel ? 'en el sector ' + sel.nombre + ' (' + sel.radio + ' km)' : sismosZonas > 1 ? 'en ' + sismosZonas + ' zonas (centro del teatro y sectores)' : 'dentro de ' + (T.radio || 400) + ' km del centro del teatro') + (fuerte ? ' · ' + fuerte + ' de magnitud ≥ 4.5' : '') + (sismosFallas ? ' · ⚠ ' + sismosFallas + ' zona(s) sin respuesta' : '') + ' · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); info.style.color = fuerte ? '#b91c1c' : '#475569'; }
+    const tb = document.querySelector('#tabla-sismos tbody'); if (!tb) return; tb.innerHTML = '';
+    vis.slice(0, 25).forEach(s => { const tr = tb.insertRow(); [new Date(s.t).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), 'M ' + s.m.toFixed(1), isFinite(s.prof) ? s.prof.toFixed(0) + ' km' : '—', s.lugar, s.d.toFixed(0) + ' km' + (sismosZonas > 1 ? ' · ' + s.z : '')].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#d97706' : 'inherit'; } }); });
+    if (!vis.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 5; td.style.cssText = 'text-align:center;color:#64748b'; td.textContent = 'Sin sismos registrados en la zona y el período.'; }
+  }
 
   /* ================= 2b) TORMENTAS ELECTRICAS: potencial segun modelo (Open-Meteo, sin clave) =================
      OJO: es un indice de POTENCIAL (energia convectiva CAPE, indice de ascenso, rafagas), no la deteccion de rayos en tiempo real. */
@@ -3555,10 +3596,22 @@ window.addEventListener('DOMContentLoaded', () => {
     const a = el('a', 'font-size:12px', 'Mapa público de rayos en vivo (Blitzortung) ↗'); a.href = 'https://www.blitzortung.org/en/live_lightning_maps.php'; a.target = '_blank'; a.rel = 'noopener'; c.appendChild(a);
     grid.insertBefore(c, grid.firstChild);
   }
+  const tormVis = () => tormentas.filter(p => enSector(p.lat, p.lon));
+  function pintarTablaTorm() {
+      const tb = document.querySelector('#tabla-tormentas tbody');
+      if (tb) { tb.innerHTML = ''; tormVis().slice().sort((a, b) => b.cape - a.cape).forEach(p => { const n = nivelCape(p.cape), tr = tb.insertRow();
+        [p.lat.toFixed(2) + ', ' + p.lon.toFixed(2), (p.cape >= 300 ? '⚡ ' : '') + n[1], Math.round(p.cape) + ' J/kg', p.hora ? p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—', p.li === null ? '—' : p.li.toFixed(1), p.gust === null ? '—' : Math.round(p.gust) + ' km/h', p.lluvia.toFixed(1) + ' mm']
+          .forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = n[2]; } }); }); }
+  }
   async function cargarTormentas() {
     if (!T || !tiene('TORMENTAS')) return;
-    const info = $('torm-info'), R = Math.min(Math.max(T.radio || 300, 50), 600), paso = R * 0.5, dLat = paso / 111, dLon = paso / (111 * Math.max(.2, Math.cos(T.lat * Math.PI / 180)));
-    const pts = []; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) pts.push([+(T.lat + i * dLat).toFixed(3), +(T.lon + j * dLon).toFixed(3)]);
+    const info = $('torm-info'), pts = [];                        // [lat, lon, paso]: el centro del teatro con grilla 3x3 y cada sector con su punto central y 4 alrededor
+    const add = (la, lo, paso) => { la = +la.toFixed(3); lo = +lo.toFixed(3); if (!pts.some(p => Math.abs(p[0] - la) < .02 && Math.abs(p[1] - lo) < .02)) pts.push([la, lo, paso]); };
+    const zs = zonas(), z0 = zs[0], R0 = Math.min(Math.max(z0.radio, 50), 600), paso0 = R0 * 0.5, dLat0 = paso0 / 111, dLon0 = paso0 / (111 * Math.max(.2, Math.cos(z0.lat * Math.PI / 180)));
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) add(z0.lat + i * dLat0, z0.lon + j * dLon0, paso0);
+    zs.slice(1).forEach(z => add(z.lat, z.lon, Math.min(Math.max(z.radio, 50), 600) * 0.9));
+    zs.slice(1).forEach(z => { const R = Math.min(Math.max(z.radio, 50), 600), d = R * 0.6, dl = d / 111, dg = d / (111 * Math.max(.2, Math.cos(z.lat * Math.PI / 180)));
+      [[dl, 0], [-dl, 0], [0, dg], [0, -dg]].forEach(o => { if (pts.length < 60) add(z.lat + o[0], z.lon + o[1], R * 0.9); }); });
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(p => p[0]).join(',') + '&longitude=' + pts.map(p => p[1]).join(',') + '&hourly=cape,lifted_index,wind_gusts_10m,precipitation&forecast_days=2&timezone=auto';
     const c = new AbortController(), to = setTimeout(() => c.abort(), 25000);
     try {
@@ -3570,14 +3623,11 @@ window.addEventListener('DOMContentLoaded', () => {
         const mx = arr => idx.reduce((m, n) => (isFinite(arr && arr[n]) && arr[n] > m.v ? { v: arr[n], n } : m), { v: -Infinity, n: -1 });
         const cape = mx(h.cape), gust = mx(h.wind_gusts_10m), li = idx.reduce((m, n) => (isFinite(h.lifted_index && h.lifted_index[n]) ? Math.min(m, h.lifted_index[n]) : m), Infinity);
         const lluvia = idx.reduce((a, n) => a + (isFinite(h.precipitation && h.precipitation[n]) ? h.precipitation[n] : 0), 0);
-        return { lat: pts[k][0], lon: pts[k][1], cape: isFinite(cape.v) ? cape.v : 0, hora: cape.n >= 0 ? new Date(tt[cape.n]) : null, li: isFinite(li) ? li : null, gust: isFinite(gust.v) ? gust.v : null, lluvia, paso };
+        return { lat: pts[k][0], lon: pts[k][1], cape: isFinite(cape.v) ? cape.v : 0, hora: cape.n >= 0 ? new Date(tt[cape.n]) : null, li: isFinite(li) ? li : null, gust: isFinite(gust.v) ? gust.v : null, lluvia, paso: pts[k][2] };
       });
-      const peor = tormentas.reduce((m, p) => p.cape > m.cape ? p : m, { cape: -1 });
+      const peor = tormVis().reduce((m, p) => p.cape > m.cape ? p : m, { cape: -1 });
       if (info) { const n = peor.cape >= 0 ? nivelCape(peor.cape) : null; info.textContent = n ? 'Potencial máximo en el teatro: ' + n[1] + ' (CAPE ' + Math.round(peor.cape) + ' J/kg) · actualizado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Sin datos del modelo.'; info.style.color = n ? n[2] : '#475569'; info.style.fontWeight = 'bold'; }
-      const tb = document.querySelector('#tabla-tormentas tbody');
-      if (tb) { tb.innerHTML = ''; tormentas.slice().sort((a, b) => b.cape - a.cape).forEach(p => { const n = nivelCape(p.cape), tr = tb.insertRow();
-        [p.lat.toFixed(2) + ', ' + p.lon.toFixed(2), (p.cape >= 300 ? '⚡ ' : '') + n[1], Math.round(p.cape) + ' J/kg', p.hora ? p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—', p.li === null ? '—' : p.li.toFixed(1), p.gust === null ? '—' : Math.round(p.gust) + ' km/h', p.lluvia.toFixed(1) + ' mm']
-          .forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 1) { td.style.fontWeight = 'bold'; td.style.color = n[2]; } }); }); }
+      pintarTablaTorm();
       redibujar();
     } catch (e) { if (info) { info.textContent = '⚠ No se pudo consultar el modelo (' + (e && e.name === 'AbortError' ? 'sin respuesta' : (e && e.message || 'error')) + '). Se reintenta solo.'; info.style.color = '#b91c1c'; } }
     finally { clearTimeout(to); }
@@ -3668,7 +3718,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function pintarTablaEventos() {
     const tb = document.querySelector('#tabla-eventos tbody'); if (!tb) return; tb.innerHTML = '';
-    const abiertos = eventos.filter(e => e.estado !== 'CERRADO').sort((a, b) => b.ts - a.ts), puedeCerrar = String(sesionActiva.rol).toLowerCase() !== 'operador';
+    const abiertos = eventos.filter(e => e.estado !== 'CERRADO' && (!isFinite(e.lat) || !isFinite(e.lon) || enSector(e.lat, e.lon))).sort((a, b) => b.ts - a.ts), puedeCerrar = String(sesionActiva.rol).toLowerCase() !== 'operador';
     abiertos.forEach(e => {
       const tr = tb.insertRow();
       tr.insertCell().textContent = TIPOS[e.tipo] || e.tipo; const n = tr.insertCell(); n.textContent = e.nombre; if (e.notas) n.title = e.notas;
@@ -3686,12 +3736,12 @@ window.addEventListener('DOMContentLoaded', () => {
       if (tiene('INCENDIOS')) capasFuegoEn(map);
       if (tiene('SISMOS')) {
         const gs = g(map, 'sismos'); gs.clearLayers();
-        sismos.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4 + s.m * 2, color: '#fff', weight: 1, fillColor: s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#ea580c' : '#eab308', fillOpacity: .8 }).addTo(gs)
+        sismosVis().forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4 + s.m * 2, color: '#fff', weight: 1, fillColor: s.m >= 4.5 ? '#b91c1c' : s.m >= 3.5 ? '#ea580c' : '#eab308', fillOpacity: .8 }).addTo(gs)
           .bindPopup('<b>M ' + s.m.toFixed(1) + '</b><br>' + String(s.lugar).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) + '<br>' + new Date(s.t).toLocaleString('es-AR')));
       }
       if (tiene('TORMENTAS')) {
         const gt = g(map, 'tormentas'); gt.clearLayers();
-        (verTorm ? tormentas : []).forEach(p => { const n = nivelCape(p.cape);
+        (verTorm ? tormVis() : []).forEach(p => { const n = nivelCape(p.cape);
           if (p.cape >= 300) { const tam = n[1] === 'EXTREMO' ? 40 : n[1] === 'ALTO' ? 34 : 28; L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div class="torm-ico ' + n[1].toLowerCase() + '" style="width:' + tam + 'px;height:' + tam + 'px;background:' + n[2] + ';font-size:' + Math.round(tam * .6) + 'px">⚡</div>', iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] }), zIndexOffset: 500 }).addTo(gt)
             .bindPopup('<b>⚡ Tormentas eléctricas: potencial ' + n[1] + '</b><br>CAPE máx. ' + Math.round(p.cape) + ' J/kg' + (p.hora ? '<br>Pico: ' + p.hora.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (p.gust !== null ? '<br>Ráfaga máx. ' + Math.round(p.gust) + ' km/h' : '') + '<br><small>Modelo; no es detección de rayos</small>'); }
           L.circle([p.lat, p.lon], { radius: p.paso * 500, color: n[2], weight: 1, fillColor: n[2], fillOpacity: p.cape >= 300 ? .28 : .08 }).addTo(gt)
@@ -3699,7 +3749,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) {
         const ge = g(map, 'eventos'); ge.clearLayers();
-        eventos.filter(e => e.estado !== 'CERRADO' && isFinite(e.lat) && isFinite(e.lon)).forEach(e => {
+        eventos.filter(e => e.estado !== 'CERRADO' && isFinite(e.lat) && isFinite(e.lon) && enSector(e.lat, e.lon)).forEach(e => {
           const col = SEV[e.sev] || '#475569', pop = el('div'); pop.append(el('b', '', (TIPOS[e.tipo] || e.tipo) + ' — ' + e.nombre), el('br'), document.createTextNode('Severidad: ' + e.sev + (e.notas ? ' · ' + e.notas : '')));
           if (e.radio > 0) L.circle([e.lat, e.lon], { radius: e.radio * 1000, color: col, weight: 2, fillColor: col, fillOpacity: .18 }).addTo(ge).bindPopup(pop.cloneNode(true));
           L.circleMarker([e.lat, e.lon], { radius: 8, color: '#fff', weight: 2, fillColor: col, fillOpacity: .95 }).addTo(ge).bindPopup(pop);
@@ -3752,7 +3802,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const resultado = (msg, j, cerrar) => { if (j.status === 'success') { msg.style.color = '#4ade80'; msg.textContent = '✅ ' + j.message; setTimeout(() => { cerrar(); cargar(); }, 900); } else { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); } };
 
     function parseSectores(txt) {
-      return String(txt).split('\n').map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(','); const lon = parseFloat(String(p.pop()).replace(',', '.')), lat = parseFloat(String(p.pop()).replace(',', '.')); return { nombre: p.join(',').trim(), lat, lon }; });
+      return String(txt).split('\n').map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(','); const num = x => parseFloat(String(x).replace(',', '.')); let radio = null; if (p.length >= 4 && isFinite(num(p[p.length - 1])) && isFinite(num(p[p.length - 2])) && isFinite(num(p[p.length - 3]))) radio = num(p.pop()); const lon = num(p.pop()), lat = num(p.pop()); return radio === null ? { nombre: p.join(',').trim(), lat, lon } : { nombre: p.join(',').trim(), lat, lon, radio }; });
     }
     function formTeatro(t) {
       const nuevo = !t; t = t || { tipo: 'EJERCICIO', zoom: 7, radio: 300, modulos: ['ZONAS'], activo: true };
@@ -3782,10 +3832,10 @@ window.addEventListener('DOMContentLoaded', () => {
           } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = 'No se pudo buscar. Cargue las coordenadas a mano.'; }
         };
         const fila = el('div', 'display:flex;gap:6px'); const mk = (r, v) => { const w = el('div', 'flex:1'); const i = campo(w, r, 'number', '', v, x => { x.step = 'any'; }); fila.appendChild(w); return i; };
-        const lat = mk('Latitud', t.lat), lon = mk('Longitud', t.lon), zoom = mk('Zoom (4-12)', t.zoom), radio = mk('Alcance km', t.radio); c.appendChild(fila);
+        const lat = mk('Latitud', t.lat), lon = mk('Longitud', t.lon), zoom = mk('Zoom (4-12)', t.zoom), radio = mk('Alcance km del centro', t.radio); c.appendChild(fila);
         bb.onclick = () => buscarLugar(busq.value, 'Usar como centro del teatro', f => { lat.value = f.lat.toFixed(4); lon.value = f.lon.toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Centro cargado: ' + f.nombre + ' (' + f.lat.toFixed(3) + ', ' + f.lon.toFixed(3) + '). Revise que sea el lugar correcto antes de guardar.'; });
-        c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Sectores o zonas de influencia para los informes (uno por línea: Nombre, latitud, longitud). Ej: Barranqueras, -27.49, -58.93'));
-        const sec = el('textarea'); sec.rows = 4; sec.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px;font-family:monospace'; sec.value = (t.sectores || []).map(x => x.nombre + ', ' + x.lat + ', ' + x.lon).join('\n'); c.appendChild(sec);
+        c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Sectores o zonas de influencia (uno por línea: Nombre, latitud, longitud y, si querés, radio en km; sin radio se usan 150 km). Las tormentas, sismos y eventos se muestran para el centro del teatro y para cada sector. Ej: Chubut, -43.30, -65.10, 250'));
+        const sec = el('textarea'); sec.rows = 4; sec.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px;font-family:monospace'; sec.value = (t.sectores || []).map(x => x.nombre + ', ' + x.lat + ', ' + x.lon + (x.radio ? ', ' + x.radio : '')).join('\n'); c.appendChild(sec);
         const bs = el('button', 'margin-top:4px;padding:4px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '🔍 Agregar sector buscando el lugar escrito arriba'); bs.type = 'button'; c.appendChild(bs);
         bs.onclick = () => buscarLugar(busq.value, 'Agregar como sector', f => { sec.value += (sec.value && !sec.value.endsWith('\n') ? '\n' : '') + f.nombre.replace(/,/g, ' ') + ', ' + f.lat.toFixed(4) + ', ' + f.lon.toFixed(4); msg.style.color = '#4ade80'; msg.textContent = 'Sector agregado: ' + f.nombre + ' (' + f.lat.toFixed(3) + ', ' + f.lon.toFixed(3) + ').'; });
         c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Qué emergencia cubre este teatro (módulos):'));
@@ -5035,6 +5085,7 @@ window.addEventListener('DOMContentLoaded', () => {
    Todo texto de usuarios se muestra con textContent (nunca como HTML). */
 (function () {
   'use strict';
+  const bCirc = (c, rm) => { const dLa = rm / 111320, dLo = rm / (111320 * Math.max(.2, Math.cos(c[0] * Math.PI / 180))); return L.latLngBounds([[c[0] - dLa, c[1] - dLo], [c[0] + dLa, c[1] + dLo]]); };   // limites de un circulo sin necesitar que este dibujado en el mapa
   const $ = id => document.getElementById(id);
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const ESTADOS = { PLANIFICADO: ['Planificado', '#94a3b8'], EN_EJECUCION: ['En ejecución', '#f59e0b'], CUMPLIDO: ['Cumplido', '#22c55e'], CANCELADO: ['Cancelado', '#6b7280'] };
@@ -5290,7 +5341,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try { const r = await api('TRAZO_BORRAR', { id: t.id }); if (r.status !== 'success') alert(r.message); await cargar(); } catch (_) { /* sesion */ }
   }
   function centrar(t) {
-    const mp = mapa(); if (!mp) return; try { if (t.tipo === 'PUNTO') mp.setView(t.geom, Math.max(mp.getZoom(), 13)); else mp.fitBounds(L.latLngBounds(t.tipo === 'CIRCULO' ? L.circle(t.geom.c, { radius: t.geom.r }).getBounds() : t.geom), { padding: [40, 40], maxZoom: 14 }); } catch (_) { /* nada */ }
+    const mp = mapa(); if (!mp) return; try { if (t.tipo === 'PUNTO') mp.setView(t.geom, Math.max(mp.getZoom(), 13)); else mp.fitBounds(L.latLngBounds(t.tipo === 'CIRCULO' ? bCirc(t.geom.c, t.geom.r) : t.geom), { padding: [40, 40], maxZoom: 14 }); } catch (_) { /* nada */ }
   }
 
   /* ---------- Panel ---------- */
@@ -5898,6 +5949,7 @@ window.addEventListener('DOMContentLoaded', () => {
    El responsable informa el avance (Recibida / En ejecucion / Cumplida / No cumplida). Todo el teatro ve el tablero. Todo texto con textContent. */
 (function () {
   'use strict';
+  const bCirc = (c, rm) => { const dLa = rm / 111320, dLo = rm / (111320 * Math.max(.2, Math.cos(c[0] * Math.PI / 180))); return L.latLngBounds([[c[0] - dLa, c[1] - dLo], [c[0] + dLa, c[1] + dLo]]); };   // limites de un circulo sin necesitar que este dibujado en el mapa
   const $ = id => document.getElementById(id);
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && /^(administrador|planificador|operador)$/i.test(String(sesionActiva.rol).trim())); } catch (_) { return false; } };
@@ -5943,9 +5995,10 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   async function verTrazo(id) {
     const mp = mapa(); if (!mp) return;
-    try { if (!trazosCache) { const r = await api('TRAZO_LISTAR'); trazosCache = r.status === 'success' ? r.trazos : []; setTimeout(() => { trazosCache = null; }, 30000); }
-      const t = trazosCache.filter(x => x.id === id)[0]; if (!t) { msgPanel = 'Ese trazo ya no existe en el mapa.'; return pintar(); }
-      if (t.tipo === 'PUNTO') mp.setView(t.geom, Math.max(mp.getZoom(), 13), { animate: false }); else mp.fitBounds(L.latLngBounds(t.tipo === 'CIRCULO' ? L.circle(t.geom.c, { radius: t.geom.r }).getBounds() : t.geom), { padding: [50, 50], maxZoom: 14, animate: false });
+    try { const traer = async () => { const r = await api('TRAZO_LISTAR'); trazosCache = r.status === 'success' ? r.trazos : []; setTimeout(() => { trazosCache = null; }, 30000); };
+      if (!trazosCache) await traer();
+      let t = trazosCache.filter(x => x.id === id)[0]; if (!t) { await traer(); t = trazosCache.filter(x => x.id === id)[0]; }       // si es un trazo nuevo, la lista guardada no lo tiene: se vuelve a pedir if (!t) { msgPanel = 'Ese trazo ya no existe en el mapa.'; return pintar(); }
+      if (t.tipo === 'PUNTO') mp.setView(t.geom, Math.max(mp.getZoom(), 13), { animate: false }); else mp.fitBounds(L.latLngBounds(t.tipo === 'CIRCULO' ? bCirc(t.geom.c, t.geom.r) : t.geom), { padding: [50, 50], maxZoom: 14, animate: false });
     } catch (_) { /* nada */ }
   }
   async function cambiar(t, estado, nota) {
@@ -6060,5 +6113,74 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE TAREAS ===== -->
+<!-- ===== INICIO BLOQUE MENUS: pegar ULTIMO, antes de </body>, despues de todos los demas bloques ===== -->
+<style id="menus-css">
+  #ares-menus { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap; flex-shrink: 0; }
+  #top-banner > div:last-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+  #ares-menus .am-grupo { position: relative; display: inline-block; }
+  #ares-menus .am-grupo > .am-toggle { margin: 0; }
+  #ares-menus .am-panel { display: none; position: absolute; right: 0; top: calc(100% + 4px); min-width: 230px; max-width: calc(100vw - 20px); background: #0f172a; border: 1px solid #475569; border-radius: 8px; padding: 6px; z-index: 2147483150; box-shadow: 0 8px 22px rgba(0,0,0,.6); flex-direction: column; gap: 3px; }
+  #ares-menus .am-grupo.abierto > .am-panel { display: flex; }
+  #ares-menus .am-grupo.abierto > .am-toggle { outline: 2px solid #38bdf8; }
+  #ares-menus .am-panel > button { display: block; width: 100%; text-align: left; margin: 0 !important; white-space: nowrap; }
+  #ares-menus .am-vacio { display: none !important; }
+  @media (max-width: 700px) { #ares-menus .am-panel { right: auto; left: 0; } }
+</style>
+<script>
+/* A.R.E.S.: menus agrupados en la barra superior.
+   Los botones los crea cada modulo (Mensajes, Tareas, Trazos, Tiempo, Medios, Meteo, Reporte, Informes, SITREP). Este bloque los junta en desplegables
+   sin tocarlos: siguen siendo los mismos botones (mismos ids y acciones), solo cambian de lugar. Mensajes y Tareas quedan siempre a la vista.
+   Un grupo sin botones visibles para el rol (por ejemplo, Mapa para el Meteorologo) se oculta solo. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const SUELTOS = ['btn-mensajes', 'btn-tareas'];
+  const GRUPOS = [
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios'] },
+    { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-reporte-meteo'] },
+    { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
+  ];
+  let cont = null;
+  const sesion = () => { try { return !!(sesionActiva && sesionActiva.autenticado); } catch (_) { return true; } };
+  const visible = b => { try { return !!b && getComputedStyle(b).display !== 'none'; } catch (_) { return false; } };
+  function cerrarTodos(salvo) { if (!cont) return; cont.querySelectorAll('.am-grupo.abierto').forEach(g => { if (g !== salvo) g.classList.remove('abierto'); }); }
+  function asegurarContenedor() {
+    if (cont && document.body.contains(cont)) return true;
+    const banner = $('top-banner'); if (!banner) return false;
+    const der = banner.querySelector('#sync-status'); const padre = der ? der.parentNode : banner.lastElementChild; if (!padre) return false;
+    cont = document.createElement('span'); cont.id = 'ares-menus';
+    GRUPOS.forEach(g => {
+      const w = document.createElement('span'); w.className = 'am-grupo am-vacio'; w.dataset.k = g.k;
+      const t = document.createElement('button'); t.type = 'button'; t.className = 'btn-pdf am-toggle'; t.textContent = g.txt + ' ▾'; t.setAttribute('aria-haspopup', 'true'); t.setAttribute('aria-expanded', 'false');
+      const p = document.createElement('div'); p.className = 'am-panel'; p.setAttribute('role', 'menu');
+      t.onclick = e => { e.stopPropagation(); const abre = !w.classList.contains('abierto'); cerrarTodos(null); w.classList.toggle('abierto', abre); t.setAttribute('aria-expanded', abre ? 'true' : 'false'); };
+      p.onclick = e => { if (e.target.closest('button')) setTimeout(() => cerrarTodos(null), 0); };            // al elegir una opcion el menu se cierra (la accion del boton ya corrio)
+      w.append(t, p); cont.appendChild(w);
+    });
+    padre.insertBefore(cont, padre.firstChild);
+    return true;
+  }
+  function ordenar(padre, lista, antesDe) {                    // coloca los elementos en el orden dado; solo toca el DOM si hace falta
+    let ref = antesDe || null;
+    for (let i = lista.length - 1; i >= 0; i--) { const e = lista[i]; if (e.parentNode !== padre || e.nextSibling !== ref) padre.insertBefore(e, ref); ref = e; }
+  }
+  function adoptar() {
+    const sit = document.querySelector('#top-banner button[onclick*="generarSITREP"]'); if (sit && !sit.id) sit.id = 'btn-sitrep';
+    if (!asegurarContenedor()) return;
+    const sueltos = SUELTOS.map($).filter(Boolean); ordenar(cont, sueltos, cont.querySelector('.am-grupo'));
+    GRUPOS.forEach(g => {
+      const w = cont.querySelector('.am-grupo[data-k="' + g.k + '"]'), p = w.querySelector('.am-panel'), its = g.items.map($).filter(Boolean);
+      ordenar(p, its, null);
+      its.forEach(b => { if (b.style.marginRight) b.style.marginRight = ''; });
+      const hay = sesion() && its.some(visible); w.classList.toggle('am-vacio', !hay); if (!hay) w.classList.remove('abierto');
+    });
+  }
+  document.addEventListener('click', e => { if (cont && !e.target.closest('#ares-menus')) cerrarTodos(null); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarTodos(null); });
+  setInterval(adoptar, 700); adoptar();
+  window.aresMenus = { abrir: k => { adoptar(); const w = cont && cont.querySelector('.am-grupo[data-k="' + k + '"]'); if (w) { cerrarTodos(null); w.classList.add('abierto'); } }, cerrar: () => cerrarTodos(null) };
+})();
+</script>
+<!-- ===== FIN BLOQUE MENUS ===== -->
 </body>
 </html>
