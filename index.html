@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-03-t</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-04-a</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwLfgTsIsVvtj8YzWZUMJKCMcPLZwqkuP-wyDM4njxXSL1Tffob17uOzLkZMe78PALZDQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbw7GafztWEa2woMzfOyUrEGL0hyhAkaRymNzvFZBFnz9Ma1TvfHGdhgVbvA3rei2XJjyg/exec";
 
 
 ;
@@ -4994,6 +4994,355 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE ROL METEOROLOGO ===== -->
+
+<!-- ===== INICIO BLOQUE TRAZOS TACTICOS: pegar ULTIMO, antes de </body>, despues de bloque-rol-meteo.html ===== -->
+<style id="estilo-trazos">
+  .trazo-lbl { background: #0f172acc; color: #fff; border: 0; font: 11px sans-serif; padding: 1px 5px; box-shadow: none; }
+  .trazo-lbl:before { display: none; }
+  body.rol-meteo #btn-trazos { display: none !important; }
+</style>
+<script>
+/* A.R.E.S.: Trazos tacticos sobre el mapa.
+   Puntos, lineas, areas y circulos con nombre, estado (planificado / en ejecucion / cumplido / cancelado), fase y color; regla de distancias y rumbos;
+   coordenadas en grados decimales, grados-minutos-segundos, UTM y MGRS; exportacion a GeoJSON.
+   Ven los trazos: administrador, planificador y operador. Dibujan, editan y borran: administrador y planificador.
+   El operador solo cambia el estado (confirma en ejecucion / cumplido). El meteorologo y el invitado no acceden.
+   Todo texto de usuarios se muestra con textContent (nunca como HTML). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const ESTADOS = { PLANIFICADO: ['Planificado', '#94a3b8'], EN_EJECUCION: ['En ejecución', '#f59e0b'], CUMPLIDO: ['Cumplido', '#22c55e'], CANCELADO: ['Cancelado', '#6b7280'] };
+  const TIPOS = { PUNTO: ['Punto', '📍'], LINEA: ['Línea', '〰️'], AREA: ['Área', '⬠'], CIRCULO: ['Círculo', '◯'] };
+  const COLORES = ['#ffb300', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#ffffff'];
+  const R_T = 6371008.8, NM = 1852;
+
+  /* ---------- Geodesia y coordenadas ---------- */
+  const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+  function dist(a, b) {
+    const f1 = rad(a[0]), f2 = rad(b[0]), df = f2 - f1, dl = rad(b[1] - a[1]);
+    const h = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2; return 2 * R_T * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function rumbo(a, b) {
+    const f1 = rad(a[0]), f2 = rad(b[0]), dl = rad(b[1] - a[1]);
+    return (deg(Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl))) + 360) % 360;
+  }
+  const largo = pts => pts.reduce((s, p, i) => i ? s + dist(pts[i - 1], p) : 0, 0);
+  function area(pts) {                                         // plano local equirectangular: suficiente para zonas de operaciones
+    const lat0 = pts.reduce((s, p) => s + p[0], 0) / pts.length, kx = R_T * Math.cos(rad(lat0)) * Math.PI / 180, ky = R_T * Math.PI / 180;
+    const xy = pts.map(p => [p[1] * kx, p[0] * ky]); let s = 0;
+    for (let i = 0; i < xy.length; i++) { const j = (i + 1) % xy.length; s += xy[i][0] * xy[j][1] - xy[j][0] * xy[i][1]; }
+    return Math.abs(s) / 2;
+  }
+  const fKm = m => (m / 1000).toFixed(m < 10000 ? 2 : 1) + ' km (' + (m / NM).toFixed(m < 10000 ? 2 : 1) + ' NM)';
+  const fArea = m2 => (m2 / 1e6).toFixed(m2 < 1e7 ? 2 : 1) + ' km² (' + (m2 / 1e4).toFixed(0) + ' ha)';
+  const fRumbo = b => ('00' + Math.round(b % 360)).slice(-3) + '°';
+  const ddm = (v, pos, neg) => { const t = Math.round(Math.abs(v) * 36000) / 10, g = Math.floor(t / 3600), mm = Math.floor((t - g * 3600) / 60), sg = t - g * 3600 - mm * 60; return g + '°' + ('0' + mm).slice(-2) + '\'' + (sg < 10 ? '0' : '') + sg.toFixed(1) + '" ' + (v >= 0 ? pos : neg); };
+  const DD = p => p[0].toFixed(5) + ', ' + p[1].toFixed(5);
+  const DMS = p => ddm(p[0], 'N', 'S') + '  ' + ddm(p[1], 'E', 'O');
+  const BANDAS = 'CDEFGHJKLMNPQRSTUVWX';
+  function aUTM(lat, lon) {                                    // WGS84, series de Transverse Mercator (error < 1 m en latitudes habituales)
+    const K0 = 0.9996, E = 0.00669438, E2 = E * E, E3 = E2 * E, EP2 = E / (1 - E), R = 6378137;
+    const M1 = 1 - E / 4 - 3 * E2 / 64 - 5 * E3 / 256, M2 = 3 * E / 8 + 3 * E2 / 32 + 45 * E3 / 1024, M3 = 15 * E2 / 256 + 45 * E3 / 1024, M4 = 35 * E3 / 3072;
+    if (lat < -80 || lat > 84) return null;
+    const zona = Math.floor((lon + 180) / 6) % 60 + 1, lon0 = rad((zona - 1) * 6 - 180 + 3), la = rad(lat), lo = rad(lon);
+    const s = Math.sin(la), c = Math.cos(la), t = Math.tan(la), t2 = t * t, t4 = t2 * t2, n = R / Math.sqrt(1 - E * s * s), cc = EP2 * c * c, a = c * (lo - lon0), a2 = a * a, a3 = a2 * a, a4 = a3 * a, a5 = a4 * a, a6 = a5 * a;
+    const m = R * (M1 * la - M2 * Math.sin(2 * la) + M3 * Math.sin(4 * la) - M4 * Math.sin(6 * la));
+    const e = K0 * n * (a + a3 / 6 * (1 - t2 + cc) + a5 / 120 * (5 - 18 * t2 + t4 + 72 * cc - 58 * EP2)) + 500000;
+    let nn = K0 * (m + n * t * (a2 / 2 + a4 / 24 * (5 - t2 + 9 * cc + 4 * cc * cc) + a6 / 720 * (61 - 58 * t2 + t4 + 600 * cc - 330 * EP2))); if (lat < 0) nn += 1e7;
+    return { zona: zona, banda: BANDAS[Math.min(19, Math.floor((lat + 80) / 8))], e: e, n: nn };
+  }
+  function deUTM(zona, banda, e, n) {
+    const K0 = 0.9996, E = 0.00669438, E2 = E * E, E3 = E2 * E, E4 = E3 * E, E5 = E4 * E, EP2 = E / (1 - E), R = 6378137, SQ = Math.sqrt(1 - E), _E = (1 - SQ) / (1 + SQ), _E2 = _E * _E, _E3 = _E2 * _E, _E4 = _E3 * _E, _E5 = _E4 * _E;
+    const M1 = 1 - E / 4 - 3 * E2 / 64 - 5 * E3 / 256, P2 = 1.5 * _E - 27 / 32 * _E3 + 269 / 512 * _E5, P3 = 21 / 16 * _E2 - 55 / 32 * _E4, P4 = 151 / 96 * _E3 - 417 / 128 * _E5, P5 = 1097 / 512 * _E4;
+    const norte = BANDAS.indexOf(banda) >= BANDAS.indexOf('N'), x = e - 500000, y = norte ? n : n - 1e7, mu = (y / K0) / (R * M1);
+    const p = mu + P2 * Math.sin(2 * mu) + P3 * Math.sin(4 * mu) + P4 * Math.sin(6 * mu) + P5 * Math.sin(8 * mu);
+    const ps = Math.sin(p), pc = Math.cos(p), pt = Math.tan(p), pt2 = pt * pt, pt4 = pt2 * pt2, eps = 1 - E * ps * ps, n1 = R / Math.sqrt(eps), r = (1 - E) / eps, c = EP2 * pc * pc, c2 = c * c;
+    const d = x / (n1 * K0), d2 = d * d, d3 = d2 * d, d4 = d3 * d, d5 = d4 * d, d6 = d5 * d;
+    const lat = p - (pt / r) * (d2 / 2 - d4 / 24 * (5 + 3 * pt2 + 10 * c - 4 * c2 - 9 * EP2) + d6 / 720 * (61 + 90 * pt2 + 298 * c + 45 * pt4 - 252 * EP2 - 3 * c2));
+    const lon = (d - d3 / 6 * (1 + 2 * pt2 + c) + d5 / 120 * (5 - 2 * c + 28 * pt2 - 3 * c2 + 8 * EP2 + 24 * pt4)) / pc;
+    return [deg(lat), deg(lon) + (zona - 1) * 6 - 180 + 3];
+  }
+  const z0 = (v, n) => ('00000' + Math.floor(v)).slice(-n);
+  const UTM = p => { const u = aUTM(p[0], p[1]); return u ? u.zona + u.banda + ' ' + Math.floor(u.e) + ' E ' + Math.floor(u.n) + ' N' : 'fuera de UTM'; };
+  function MGRS(p) {
+    const u = aUTM(p[0], p[1]); if (!u) return 'fuera de MGRS';
+    const col = 'ABCDEFGH JKLMNPQR STUVWXYZ'.split(' ')[(u.zona - 1) % 3][(Math.floor(u.e / 1e5) - 1) % 8], fila = 'ABCDEFGHJKLMNPQRSTUV'[(Math.floor(u.n / 1e5) + (u.zona % 2 === 0 ? 5 : 0)) % 20];
+    return u.zona + u.banda + ' ' + col + fila + ' ' + z0(u.e % 1e5, 5) + ' ' + z0(u.n % 1e5, 5);
+  }
+  function leerCoord(txt) {                                    // "-27.45 -58.9", "27°27'S 58°54'O", "21J 312227 6962286"
+    const t = String(txt || '').trim().toUpperCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+    let m = t.match(/^(\d{1,2})\s?([C-X])\s+(\d{5,7})\s?E?\s+(\d{6,8})\s?N?$/);
+    if (m && 'IO'.indexOf(m[2]) < 0) { const r = deUTM(+m[1], m[2], +m[3], +m[4]); return isFinite(r[0]) && isFinite(r[1]) && Math.abs(r[0]) <= 90 ? r : null; }
+    m = t.match(/^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/);
+    if (m) { const la = +m[1], lo = +m[2]; return Math.abs(la) <= 90 && Math.abs(lo) <= 180 ? [la, lo] : null; }
+    const p = t.match(/(\d+(?:\.\d+)?)\s*[°º ]\s*(?:(\d+(?:\.\d+)?)\s*['′ ]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]?\s*)?([NSEWO])/g);
+    if (p && p.length === 2) {
+      const v = p.map(s => { const q = s.match(/(\d+(?:\.\d+)?)\s*[°º ]\s*(?:(\d+(?:\.\d+)?)\s*['′ ]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]?\s*)?([NSEWO])/); const x = (+q[1]) + (+(q[2] || 0)) / 60 + (+(q[3] || 0)) / 3600; return [q[4], 'SWO'.indexOf(q[4]) >= 0 ? -x : x]; });
+      const la = v.filter(x => 'NS'.indexOf(x[0]) >= 0)[0], lo = v.filter(x => 'EWO'.indexOf(x[0]) >= 0)[0];
+      if (la && lo && Math.abs(la[1]) <= 90 && Math.abs(lo[1]) <= 180) return [la[1], lo[1]];
+    }
+    return null;
+  }
+
+  /* ---------- Estado ---------- */
+  let trazos = [], puedeEditar = false, capa = null, panel = null, modo = null, draft = null, cargado = false, ocupado = false;
+  let pref = { mostrar: true, ocultar: false, etiquetas: true };
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && /^(administrador|planificador|operador)$/i.test(String(sesionActiva.rol).trim())); } catch (_) { return false; } };
+  const clavePref = () => 'ares_trazos_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
+  function leerPref() { try { const j = JSON.parse(localStorage.getItem(clavePref()) || 'null'); if (j && typeof j === 'object') pref = Object.assign(pref, j); } catch (_) { /* sin almacenamiento */ } }
+  function guardarPref() { try { localStorage.setItem(clavePref(), JSON.stringify(pref)); } catch (_) { /* sin almacenamiento */ } }
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const quitar = c => { if (c) { try { c.remove(); } catch (_) { /* ya no esta */ } } return null; };
+
+  /* ---------- Dibujo de los trazos guardados ---------- */
+  const visibles = () => trazos.filter(t => !(pref.ocultar && (t.estado === 'CUMPLIDO' || t.estado === 'CANCELADO')));
+  function estilo(t) {
+    const e = t.estado, base = { color: t.color || '#ffb300', weight: e === 'EN_EJECUCION' ? 5 : 3, opacity: e === 'CUMPLIDO' ? .45 : (e === 'CANCELADO' ? .5 : .95), fillOpacity: e === 'CUMPLIDO' ? .08 : .2, dashArray: e === 'PLANIFICADO' ? '8 6' : (e === 'CANCELADO' ? '2 6' : null) };
+    if (e === 'CANCELADO') base.color = '#6b7280'; return base;
+  }
+  function centroDe(t) {
+    if (t.tipo === 'PUNTO') return t.geom; if (t.tipo === 'CIRCULO') return t.geom.c;
+    const n = t.geom.length; return [t.geom.reduce((s, p) => s + p[0], 0) / n, t.geom.reduce((s, p) => s + p[1], 0) / n];
+  }
+  function medidas(t) {
+    if (t.tipo === 'LINEA') return 'Largo: ' + fKm(largo(t.geom));
+    if (t.tipo === 'AREA') return 'Superficie: ' + fArea(area(t.geom)) + ' · Perímetro: ' + fKm(largo(t.geom.concat([t.geom[0]])));
+    if (t.tipo === 'CIRCULO') return 'Radio: ' + fKm(t.geom.r) + ' · Superficie: ' + fArea(Math.PI * t.geom.r * t.geom.r);
+    return '';
+  }
+  function crearCapa(t) {
+    const st = estilo(t); let l;
+    if (t.tipo === 'PUNTO') l = L.circleMarker(t.geom, Object.assign({ radius: 9, fillColor: st.color, fillOpacity: .85 }, st, { dashArray: null }));
+    else if (t.tipo === 'LINEA') l = L.polyline(t.geom, st);
+    else if (t.tipo === 'AREA') l = L.polygon(t.geom, Object.assign({ fillColor: st.color }, st));
+    else l = L.circle(t.geom.c, Object.assign({ radius: t.geom.r, fillColor: st.color }, st));
+    l.bindPopup(() => popupTrazo(t), { maxWidth: 300 });
+    if (pref.etiquetas) l.bindTooltip(el('span', '', t.nombre + (t.fase ? ' · ' + t.fase : '')), { permanent: true, direction: t.tipo === 'PUNTO' ? 'top' : 'center', className: 'trazo-lbl', opacity: .9 });
+    return l;
+  }
+  function dibujar() {
+    capa = quitar(capa); const mp = mapa(); if (!mp || !pref.mostrar) return;
+    capa = L.layerGroup(); visibles().forEach(t => { try { crearCapa(t).addTo(capa); } catch (_) { /* trazo daniado */ } }); capa.addTo(mp);
+  }
+  function popupTrazo(t) {
+    const d = el('div', 'font:12px sans-serif;min-width:200px'), c = centroDe(t);
+    d.appendChild(el('b', 'font-size:14px', TIPOS[t.tipo][1] + ' ' + t.nombre));
+    d.appendChild(el('div', 'color:#475569;margin:2px 0', TIPOS[t.tipo][0] + (t.fase ? ' · Fase ' + t.fase : '') + ' · ' + (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado)));
+    if (medidas(t)) d.appendChild(el('div', '', medidas(t)));
+    d.appendChild(el('div', 'margin-top:3px', DD(c))); d.appendChild(el('div', 'color:#475569', UTM(c) + ' · ' + MGRS(c)));
+    if (t.notas) d.appendChild(el('div', 'margin-top:4px;white-space:pre-wrap', t.notas));
+    if (t.autor) d.appendChild(el('div', 'margin-top:4px;color:#64748b;font-size:11px', 'Autor: ' + t.autor));
+    d.appendChild(selEstado(t)); return d;
+  }
+  function selEstado(t) {
+    const s = el('select', 'margin-top:6px;width:100%;padding:3px'), lista = Object.keys(ESTADOS).filter(k => k !== 'CANCELADO' || puedeEditar);
+    lista.forEach(k => { const o = el('option', '', ESTADOS[k][0]); o.value = k; s.appendChild(o); }); s.value = lista.indexOf(t.estado) >= 0 ? t.estado : 'PLANIFICADO';
+    if (t.estado === 'CANCELADO' && !puedeEditar) s.disabled = true;
+    s.onchange = async () => { try { const r = await api('TRAZO_ESTADO', { id: t.id, estado: s.value }); if (r.status !== 'success') alert(r.message); await cargar(); } catch (_) { /* sesion */ } };
+    return s;
+  }
+
+  /* ---------- Carga ---------- */
+  async function cargar() {
+    if (ocupado) return; ocupado = true;
+    try {
+      const r = await api('TRAZO_LISTAR'); if (r.status !== 'success') throw new Error(r.message || 'No se pudieron leer los trazos');
+      trazos = r.trazos || []; puedeEditar = !!r.puedeEditar; cargado = true; dibujar(); badge(); if (panel && !draft) pintarLista();
+    } finally { ocupado = false; }
+  }
+  function badge() { const b = $('btn-trazos'); if (b) b.textContent = '✏️ Trazos' + (trazos.length ? ' (' + trazos.length + ')' : ''); }
+
+  /* ---------- Herramientas de dibujo y medicion ---------- */
+  function limpiarBorrador() {
+    if (draft) { draft.capas.forEach(quitar); }
+    draft = null; const mp = mapa(); if (mp) { mp.off('click', alClick); mp.off('mousemove', alMover); mp.off('dblclick', alDoble); try { mp.doubleClickZoom.enable(); } catch (_) { /* nada */ } }
+    modo = null; document.removeEventListener('keydown', alTecla);
+  }
+  function iniciar(m, edit) {
+    const mp = mapa(); if (!mp) return; limpiarBorrador(); modo = m;
+    draft = { pts: [], capas: [], centro: null, edit: edit || null, radio: 0, linea: null };
+    mp.on('click', alClick); mp.on('mousemove', alMover); mp.on('dblclick', alDoble); try { mp.doubleClickZoom.disable(); } catch (_) { /* nada */ }
+    document.addEventListener('keydown', alTecla); pintarPanel();
+  }
+  const pista = () => ({ punto: 'Haga clic en el mapa para ubicar el punto.', linea: 'Haga clic para agregar vértices. Doble clic o Enter para terminar; Esc cancela.', area: 'Haga clic para agregar vértices (mínimo 3). Doble clic o Enter para terminar; Esc cancela.', circulo: 'Clic en el centro; mueva el cursor y haga clic de nuevo para fijar el radio.', regla: 'Haga clic para medir. Muestra distancia total y rumbo de cada tramo. No se guarda.', coord: 'Haga clic en el mapa para ver y copiar las coordenadas.' }[modo] || '');
+  function info(t) { const i = $('tz-info'); if (i) i.textContent = t; }
+  function actualizarBorrador(cursor) {
+    const mp = mapa(); if (!mp || !draft) return; const pts = draft.pts.slice(); if (cursor) pts.push(cursor);
+    if (modo === 'linea' || modo === 'regla') {
+      if (!draft.linea) { draft.linea = L.polyline([], { color: modo === 'regla' ? '#38bdf8' : '#ffb300', weight: 3, dashArray: '6 6' }).addTo(mp); draft.capas.push(draft.linea); } draft.linea.setLatLngs(pts);
+      if (pts.length > 1) { const u = pts[pts.length - 1], a = pts[pts.length - 2]; info('Total ' + fKm(largo(pts)) + ' · último tramo ' + fKm(dist(a, u)) + ' · rumbo ' + fRumbo(rumbo(a, u))); } else info(pista());
+    } else if (modo === 'area') {
+      if (!draft.linea) { draft.linea = L.polygon([], { color: '#ffb300', weight: 3, dashArray: '6 6', fillOpacity: .15 }).addTo(mp); draft.capas.push(draft.linea); } draft.linea.setLatLngs(pts);
+      info(pts.length > 2 ? 'Superficie ' + fArea(area(pts)) + ' · perímetro ' + fKm(largo(pts.concat([pts[0]]))) : pista());
+    } else if (modo === 'circulo' && draft.centro) {
+      draft.radio = dist(draft.centro, cursor || draft.centro); if (!draft.linea) { draft.linea = L.circle(draft.centro, { radius: 1, color: '#ffb300', weight: 3, dashArray: '6 6', fillOpacity: .12 }).addTo(mp); draft.capas.push(draft.linea); } draft.linea.setRadius(Math.max(1, draft.radio)); info('Radio ' + fKm(draft.radio));
+    }
+  }
+  function alMover(e) {
+    const p = [e.latlng.lat, e.latlng.lng], c = $('tz-cursor'); if (c) c.textContent = DD(p) + ' · ' + MGRS(p);
+    if (draft && (modo === 'linea' || modo === 'area' || modo === 'regla' || (modo === 'circulo' && draft.centro && !draft.fijado)) && !draft.form) actualizarBorrador(p);
+  }
+  function vertice(p) { const mp = mapa(); const v = L.circleMarker(p, { radius: 5, color: '#fff', weight: 2, fillColor: modo === 'regla' ? '#38bdf8' : '#ffb300', fillOpacity: 1 }).addTo(mp); draft.capas.push(v); }
+  function alClick(e) {
+    if (!draft || draft.form) return; const p = [e.latlng.lat, e.latlng.lng];
+    if (modo === 'punto') { draft.pts = [p]; vertice(p); return formulario({ tipo: 'PUNTO', geom: p }); }
+    if (modo === 'coord') { draft.capas.forEach(quitar); draft.capas = []; vertice(p); return mostrarCoord(p); }
+    if (modo === 'circulo') {
+      if (!draft.centro) { draft.centro = p; vertice(p); info('Mueva el cursor y haga clic para fijar el radio.'); return; }
+      draft.radio = dist(draft.centro, p); draft.fijado = true; if (draft.radio < 1) { draft.fijado = false; return; } return formulario({ tipo: 'CIRCULO', geom: { c: draft.centro, r: Math.round(draft.radio) } });
+    }
+    draft.pts.push(p); vertice(p); actualizarBorrador(null);
+  }
+  function alDoble(e) { if (draft && (modo === 'linea' || modo === 'area') && !draft.form) { if (draft.pts.length > 1) draft.pts.pop(); terminar(); } }   // el doble clic suma un vertice repetido: se descarta
+  function alTecla(e) {
+    if (e.key === 'Escape') { e.preventDefault(); cancelar(); }
+    else if (e.key === 'Enter' && draft && (modo === 'linea' || modo === 'area') && !draft.form) { e.preventDefault(); terminar(); }
+  }
+  function terminar() {
+    if (!draft) return; const n = draft.pts.length;
+    if (modo === 'linea' && n < 2) return info('La línea necesita al menos 2 vértices.');
+    if (modo === 'area' && n < 3) return info('El área necesita al menos 3 vértices.');
+    if (modo === 'regla') return;
+    formulario({ tipo: modo === 'linea' ? 'LINEA' : 'AREA', geom: draft.pts.slice() });
+  }
+  function cancelar() { limpiarBorrador(); if (panel) pintarPanel(); }
+  function mostrarCoord(p) {
+    const caja = $('tz-form'); if (!caja) return; caja.textContent = '';
+    [['Decimal', DD(p)], ['Grados', DMS(p)], ['UTM', UTM(p)], ['MGRS', MGRS(p)]].forEach(f => {
+      const fila = el('div', 'display:flex;gap:6px;align-items:center;margin:3px 0'); fila.appendChild(el('span', 'width:58px;color:#94a3b8;font-size:11px', f[0])); fila.appendChild(el('span', 'flex:1;font:12px monospace;word-break:break-all', f[1]));
+      const b = el('button', 'padding:1px 6px', 'Copiar'); b.onclick = () => { try { navigator.clipboard.writeText(f[1]); b.textContent = '✓'; setTimeout(() => { b.textContent = 'Copiar'; }, 1200); } catch (_) { /* sin portapapeles */ } }; fila.appendChild(b); caja.appendChild(fila);
+    });
+  }
+
+  /* ---------- Formulario de alta y edicion ---------- */
+  function formulario(base) {
+    draft.form = true; const caja = $('tz-form'); if (!caja) return; caja.textContent = ''; const ed = draft.edit, v = Object.assign({ nombre: '', estado: 'PLANIFICADO', fase: '', color: COLORES[0], notas: '' }, ed || {});
+    const campo = (t, x) => { const l = el('label', 'display:block;margin:5px 0;font-size:11px;color:#94a3b8', t); l.appendChild(x); return l; };
+    const css = 'display:block;width:100%;box-sizing:border-box;padding:4px;margin-top:2px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:13px sans-serif';
+    const nom = el('input', css); nom.maxLength = 60; nom.value = v.nombre; nom.placeholder = 'Ej.: Ruta Alfa, Zona de espera';
+    const est = el('select', css); Object.keys(ESTADOS).forEach(k => { const o = el('option', '', ESTADOS[k][0]); o.value = k; est.appendChild(o); }); est.value = v.estado;
+    const fase = el('input', css); fase.maxLength = 20; fase.value = v.fase; fase.placeholder = 'Ej.: H+2, Fase 1';
+    const col = el('input', 'width:34px;height:26px;padding:0;border:0;background:none'); col.type = 'color'; col.value = /^#[0-9a-f]{6}$/i.test(v.color) ? v.color : COLORES[0];
+    const sw = el('div', 'display:flex;gap:5px;align-items:center;margin-top:3px'); COLORES.forEach(c => { const b = el('button', 'width:20px;height:20px;border-radius:50%;border:2px solid #475569;padding:0;background:' + c); b.type = 'button'; b.onclick = () => { col.value = c; }; sw.appendChild(b); }); sw.appendChild(col);
+    const nt = el('textarea', css + ';height:54px'); nt.maxLength = 300; nt.value = v.notas;
+    let rad_ = null; const g = base.geom;
+    if (base.tipo === 'CIRCULO') { rad_ = el('input', css); rad_.type = 'number'; rad_.min = '0.01'; rad_.step = '0.1'; rad_.value = (g.r / 1000).toFixed(2); }
+    const msg = el('div', 'font-size:12px;color:#fca5a5;min-height:16px'), bs = el('div', 'display:flex;gap:6px;margin-top:6px');
+    const ok = el('button', 'flex:1;padding:6px;font-weight:bold', ed ? 'Guardar cambios' : 'Guardar trazo'), no = el('button', 'padding:6px', 'Cancelar'); ok.type = no.type = 'button';
+    no.onclick = cancelar;
+    ok.onclick = async () => {
+      const geom = base.tipo === 'CIRCULO' ? { c: g.c, r: Math.round(Number(rad_.value) * 1000) } : g;
+      if (!nom.value.trim()) { msg.textContent = 'Ponga un nombre.'; return; } if (base.tipo === 'CIRCULO' && !(geom.r > 0)) { msg.textContent = 'Radio inválido.'; return; }
+      ok.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+      try {
+        const r = await api('TRAZO_GUARDAR', { id: ed ? ed.id : '', tipo: base.tipo, nombre: nom.value, estado: est.value, fase: fase.value, color: col.value, notas: nt.value, geom: geom });
+        if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = r.message || 'No se pudo guardar.'; ok.disabled = false; return; }
+        limpiarBorrador(); await cargar(); pintarPanel();
+      } catch (_) { ok.disabled = false; msg.textContent = 'Sin conexión.'; }
+    };
+    caja.append(el('b', 'font-size:13px', (ed ? 'Editar ' : 'Nuevo ') + TIPOS[base.tipo][0].toLowerCase()), campo('Nombre', nom), campo('Estado', est), campo('Fase', fase), campo('Color', sw), ...(rad_ ? [campo('Radio (km)', rad_)] : []), campo('Notas', nt), msg, bs); bs.append(ok, no);
+    if (base.tipo !== 'PUNTO' && base.tipo !== 'CIRCULO') info(medidas({ tipo: base.tipo, geom: g }));
+  }
+  function editar(t) {                              // edita los datos; para cambiar la forma use "Redibujar"
+    if (!puedeEditar) return; limpiarBorrador(); modo = 'editar'; draft = { pts: [], capas: [], edit: t }; pintarPanel(); formulario({ tipo: t.tipo, geom: t.geom });
+    const caja = $('tz-form'); if (caja) { const b = el('button', 'margin-top:6px;width:100%;padding:5px', '↺ Redibujar la forma'); b.type = 'button'; b.onclick = () => iniciar(t.tipo === 'PUNTO' ? 'punto' : t.tipo.toLowerCase(), t); caja.appendChild(b); }
+  }
+  async function borrar(t) {
+    if (!puedeEditar || !confirm('¿Borrar el trazo "' + t.nombre + '"? No se puede deshacer.')) return;
+    try { const r = await api('TRAZO_BORRAR', { id: t.id }); if (r.status !== 'success') alert(r.message); await cargar(); } catch (_) { /* sesion */ }
+  }
+  function centrar(t) {
+    const mp = mapa(); if (!mp) return; try { if (t.tipo === 'PUNTO') mp.setView(t.geom, Math.max(mp.getZoom(), 13)); else mp.fitBounds(L.latLngBounds(t.tipo === 'CIRCULO' ? L.circle(t.geom.c, { radius: t.geom.r }).getBounds() : t.geom), { padding: [40, 40], maxZoom: 14 }); } catch (_) { /* nada */ }
+  }
+
+  /* ---------- Panel ---------- */
+  const BTN = 'padding:5px 8px;margin:2px;cursor:pointer';
+  function pintarPanel() {
+    if (!panel) return; panel.textContent = '';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '✏️ Trazos tácticos'));
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = abrir; cab.appendChild(x); panel.appendChild(cab);
+    const herr = el('div', 'margin-top:6px'); const mk = (m, t) => { const b = el('button', BTN + (modo === m ? ';outline:2px solid #38bdf8' : ''), t); b.type = 'button'; b.onclick = () => iniciar(m); herr.appendChild(b); };
+    if (puedeEditar) { mk('punto', '📍 Punto'); mk('linea', '〰️ Línea'); mk('area', '⬠ Área'); mk('circulo', '◯ Círculo'); }
+    mk('regla', '📏 Regla'); mk('coord', '🧭 Coordenada'); panel.appendChild(herr);
+    if (modo) {
+      panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', modo === 'editar' ? 'Edite los datos del trazo.' : pista()));
+      const bs = el('div', 'margin-top:4px');
+      if (draft && (modo === 'linea' || modo === 'area')) {
+        const f = el('button', BTN, '✔ Terminar'), u = el('button', BTN, '↶ Deshacer vértice'); f.type = u.type = 'button'; f.onclick = terminar;
+        u.onclick = () => { if (draft && draft.pts.length && !draft.form) { draft.pts.pop(); const v = draft.capas.filter(c => c !== draft.linea); if (v.length) quitar(v[v.length - 1]), draft.capas.splice(draft.capas.indexOf(v[v.length - 1]), 1); actualizarBorrador(null); } }; bs.append(f, u);
+      }
+      if (modo === 'regla') { const l = el('button', BTN, '🧹 Limpiar medición'); l.type = 'button'; l.onclick = () => iniciar('regla'); bs.appendChild(l); }
+      const c = el('button', BTN, 'Salir de la herramienta'); c.type = 'button'; c.onclick = cancelar; bs.appendChild(c); panel.appendChild(bs);
+    }
+    panel.appendChild(el('div', 'margin-top:6px;padding:5px;background:#1e293b;border-radius:4px;font:12px monospace;min-height:16px;color:#38bdf8', '')); panel.lastChild.id = 'tz-info';
+    panel.appendChild(el('div', 'margin-top:4px;font:11px monospace;color:#94a3b8', 'Mueva el cursor sobre el mapa')); panel.lastChild.id = 'tz-cursor';
+    const fo = el('div', 'margin-top:6px'); fo.id = 'tz-form'; panel.appendChild(fo);
+    const ir = el('div', 'display:flex;gap:4px;margin-top:8px'), inp = el('input', 'flex:1;padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:12px sans-serif'); inp.placeholder = 'Ir a: -27.45 -58.9 · 27°27\'S 58°54\'O · 21J 312227 6962286'; inp.id = 'tz-ir';
+    const bi = el('button', BTN, 'Ir'); bi.type = 'button';
+    const ir_ = () => { const p = leerCoord(inp.value), mp = mapa(); if (!p) { info('No entiendo esa coordenada. Use decimal, grados-minutos o UTM.'); return; } if (mp) { mp.setView(p, Math.max(mp.getZoom(), 13)); const m = L.circleMarker(p, { radius: 8, color: '#38bdf8', weight: 3, fillOpacity: .2 }).addTo(mp); setTimeout(() => quitar(m), 8000); } info(DD(p) + ' · ' + MGRS(p)); };
+    bi.onclick = ir_; inp.onkeydown = e => { if (e.key === 'Enter') ir_(); }; ir.append(inp, bi); panel.appendChild(ir);
+    const opc = el('div', 'margin-top:8px;font-size:12px'); [['mostrar', 'Mostrar trazos en el mapa'], ['etiquetas', 'Mostrar nombres'], ['ocultar', 'Ocultar cumplidos y cancelados']].forEach(o => {
+      const l = el('label', 'display:block;margin:2px 0'), c = el('input'); c.type = 'checkbox'; c.checked = !!pref[o[0]]; c.onchange = () => { pref[o[0]] = c.checked; guardarPref(); dibujar(); pintarLista(); }; l.append(c, document.createTextNode(' ' + o[1])); opc.appendChild(l);
+    }); panel.appendChild(opc);
+    const lst = el('div', 'margin-top:8px'); lst.id = 'tz-lista'; panel.appendChild(lst); pintarLista();
+    const ex = el('button', BTN + ';width:100%', '⬇ Exportar GeoJSON'); ex.type = 'button'; ex.onclick = exportar; panel.appendChild(ex);
+  }
+  function pintarLista() {
+    const c = $('tz-lista'); if (!c) return; c.textContent = ''; const l = visibles().slice().sort((a, b) => (a.fase || '~').localeCompare(b.fase || '~') || a.nombre.localeCompare(b.nombre));
+    c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:3px', l.length ? l.length + ' trazo(s)' + (pref.ocultar && trazos.length > l.length ? ' (' + (trazos.length - l.length) + ' ocultos)' : '') : 'Todavía no hay trazos.'));
+    l.forEach(t => {
+      const f = el('div', 'display:flex;gap:5px;align-items:center;margin:3px 0;padding:4px;background:#1e293b;border-radius:4px;border-left:4px solid ' + (t.color || '#ffb300')), tx = el('div', 'flex:1;min-width:0');
+      tx.appendChild(el('div', 'font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', TIPOS[t.tipo][1] + ' ' + t.nombre + (t.fase ? ' · ' + t.fase : ''))); tx.appendChild(el('div', 'font-size:10px;color:' + (ESTADOS[t.estado] ? ESTADOS[t.estado][1] : '#94a3b8'), (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado) + (medidas(t) ? ' · ' + medidas(t).split(' · ')[0] : '')));
+      f.appendChild(tx); const s = selEstado(t); s.style.cssText = 'width:98px;padding:2px;font-size:11px'; f.appendChild(s);
+      const b1 = el('button', 'padding:2px 5px', '🎯'); b1.type = 'button'; b1.title = 'Centrar'; b1.onclick = () => centrar(t); f.appendChild(b1);
+      if (puedeEditar) { const b2 = el('button', 'padding:2px 5px', '✏️'), b3 = el('button', 'padding:2px 5px', '🗑'); b2.type = b3.type = 'button'; b2.title = 'Editar'; b3.title = 'Borrar'; b2.onclick = () => editar(t); b3.onclick = () => borrar(t); f.append(b2, b3); }
+      c.appendChild(f);
+    });
+  }
+  function exportar() {
+    const gj = { type: 'FeatureCollection', features: trazos.map(t => {
+      const p = { id: t.id, nombre: t.nombre, tipo: t.tipo, estado: t.estado, fase: t.fase, color: t.color, notas: t.notas, autor: t.autor }, ll = q => [q[1], q[0]];
+      let g; if (t.tipo === 'PUNTO') g = { type: 'Point', coordinates: ll(t.geom) }; else if (t.tipo === 'LINEA') g = { type: 'LineString', coordinates: t.geom.map(ll) };
+      else if (t.tipo === 'AREA') g = { type: 'Polygon', coordinates: [t.geom.concat([t.geom[0]]).map(ll)] }; else { g = { type: 'Point', coordinates: ll(t.geom.c) }; p.radio_m = t.geom.r; }
+      return { type: 'Feature', properties: p, geometry: g };
+    }) };
+    try { const u = URL.createObjectURL(new Blob([JSON.stringify(gj)], { type: 'application/geo+json' })), a = el('a'); a.href = u; a.download = 'trazos_' + (((window.ARES_TEATRO || {}).id) || 'teatro') + '_' + new Date().toISOString().slice(0, 10) + '.geojson'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 3000); } catch (_) { alert('No se pudo exportar.'); }
+  }
+  function abrir() {
+    if (panel) { limpiarBorrador(); panel.remove(); panel = null; return; }
+    panel = el('div', 'position:fixed;right:' + (window.innerWidth > 900 && $('meteo-panel') ? '420px' : '10px') + ';top:56px;width:min(360px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3050;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'trazos-panel';
+    document.body.appendChild(panel); pintarPanel(); cargar().catch(() => null);
+  }
+
+  /* ---------- Boton y arranque ---------- */
+  function boton() {
+    if (!activa()) { const x = $('btn-trazos'); if (x) x.remove(); return false; }
+    if ($('btn-trazos')) return true;
+    const ref = $('btn-meteo') || $('btn-medios') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '✏️ Trazos'); b.id = 'btn-trazos'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref); badge(); return true;
+  }
+  let iniciado = false, ultimoTeatro = '';
+  setInterval(() => {
+    if (!activa()) { if ($('btn-trazos')) boton(); if (panel) { limpiarBorrador(); panel.remove(); panel = null; } capa = quitar(capa); iniciado = false; cargado = false; trazos = []; return; }
+    if (!boton()) return;
+    const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
+    if (!iniciado || tid !== ultimoTeatro) {
+      iniciado = true; ultimoTeatro = tid; trazos = []; cargado = false; capa = quitar(capa); limpiarBorrador(); leerPref();
+      if (panel) { panel.remove(); panel = null; }
+      cargar().catch(() => { iniciado = false; });
+    }
+  }, 2000);
+  setInterval(() => { if (activa() && iniciado && !draft) cargar().catch(() => null); }, 60000);
+  window.aresTrazos = { abrir: abrir, recargar: cargar, utm: UTM, mgrs: MGRS, leerCoord: leerCoord, dist: dist, rumbo: rumbo, area: area };
+})();
+</script>
+<!-- ===== FIN BLOQUE TRAZOS TACTICOS ===== -->
 
 </body>
 </html>
