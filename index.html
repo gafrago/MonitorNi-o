@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-04-a</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-a</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbw7GafztWEa2woMzfOyUrEGL0hyhAkaRymNzvFZBFnz9Ma1TvfHGdhgVbvA3rei2XJjyg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbx-cuX7u81SZx5TjhnUzaiezwyxIthRINGCNvEznkR5QuQpvyrP53Kh4MAJn1Xi7xgg/exec";
 
 
 ;
@@ -4080,6 +4080,8 @@ window.addEventListener('DOMContentLoaded', () => {
     fila.append(ok, env, no); c.appendChild(fila); f.appendChild(c); document.body.appendChild(f);
   };
 
+  window.aresInformeMeteo = { traer: traer, analizar: analizar, centro: centro, txtCod: txtCod, cardinal: cardinal, f0: f0, f1: f1, hayMod: hayMod, estacionesCerca: estacionesCerca };   // lo usa el armado de reportes con imagenes
+
   /* ---------- Boton en la barra superior ---------- */
   function boton() {
     if ($('btn-informe-meteo')) return;
@@ -4194,6 +4196,12 @@ window.addEventListener('DOMContentLoaded', () => {
       tarj.appendChild(el('div', 'white-space:pre-wrap;word-break:break-word;margin-top:5px;font-size:14px', m.texto));
       const pie = el('div', 'display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11px;color:#64748b');
       pie.appendChild(el('span', '', 'se borra el ' + new Date(m.vence).toLocaleDateString('es-AR')));
+      if (m.adjunto && m.adjunto.tipo === 'PAQUETE_METEO') {
+        const fa = el('div', 'margin-top:6px;padding:6px 8px;background:#0f3d2e;border:1px solid #16a34a;border-radius:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center');
+        fa.appendChild(el('span', 'flex:1;min-width:160px;font-size:12px;color:#d1fae5', '📎 ' + (m.adjunto.titulo || 'Reporte meteorológico') + ' · ' + m.adjunto.nSec + ' tabla(s), ' + m.adjunto.nImg + ' imagen(es)'));
+        const bv = el('button', 'background:#14532d;border:1px solid #16a34a;color:#d1fae5;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px', '👁 Ver'), bp = el('button', 'background:#14532d;border:1px solid #16a34a;color:#d1fae5;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px', '⬇ PDF'); bv.type = bp.type = 'button';
+        bv.onclick = () => { if (window.aresReporteMeteo) window.aresReporteMeteo.ver(m.id); }; bp.onclick = () => { if (window.aresReporteMeteo) window.aresReporteMeteo.pdf(m.id, bp); }; fa.append(bv, bp); tarj.appendChild(fa);
+      }
       if (m.adjunto && m.adjunto.tipo === 'INFORME_METEO') {
         const ab = el('button', 'margin-top:6px;background:#0f3d2e;border:1px solid #16a34a;color:#d1fae5;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;display:block', '📎 Informe meteorológico' + (m.adjunto.sectores.length ? ' · ' + m.adjunto.sectores.join(', ') : '') + ' — abrir con datos actuales'); ab.type = 'button';
         ab.onclick = () => { cerrar(); if (typeof window.abrirInformeMeteo === 'function') window.abrirInformeMeteo({ sectores: m.adjunto.sectores, general: m.adjunto.general }); }; tarj.appendChild(ab);
@@ -5101,7 +5109,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const quitar = c => { if (c) { try { c.remove(); } catch (_) { /* ya no esta */ } } return null; };
 
   /* ---------- Dibujo de los trazos guardados ---------- */
-  const visibles = () => trazos.filter(t => !(pref.ocultar && (t.estado === 'CUMPLIDO' || t.estado === 'CANCELADO')));
+  let filtroExt = null;                                      // la linea de tiempo (bloque de fases) puede ocultar los trazos que no corresponden a la hora elegida
+  const fasesLista = () => { try { return (window.aresFases && window.aresFases.lista()) || []; } catch (_) { return []; } };
+  const nombreFase = t => { const f = t.faseId ? fasesLista().filter(x => x.id === t.faseId)[0] : null; return f ? f.nombre : (t.fase || ''); };
+  const visibles = () => trazos.filter(t => !(pref.ocultar && (t.estado === 'CUMPLIDO' || t.estado === 'CANCELADO')) && (!filtroExt || filtroExt(t)));
   function estilo(t) {
     const e = t.estado, base = { color: t.color || '#ffb300', weight: e === 'EN_EJECUCION' ? 5 : 3, opacity: e === 'CUMPLIDO' ? .45 : (e === 'CANCELADO' ? .5 : .95), fillOpacity: e === 'CUMPLIDO' ? .08 : .2, dashArray: e === 'PLANIFICADO' ? '8 6' : (e === 'CANCELADO' ? '2 6' : null) };
     if (e === 'CANCELADO') base.color = '#6b7280'; return base;
@@ -5123,7 +5134,7 @@ window.addEventListener('DOMContentLoaded', () => {
     else if (t.tipo === 'AREA') l = L.polygon(t.geom, Object.assign({ fillColor: st.color }, st));
     else l = L.circle(t.geom.c, Object.assign({ radius: t.geom.r, fillColor: st.color }, st));
     l.bindPopup(() => popupTrazo(t), { maxWidth: 300 });
-    if (pref.etiquetas) l.bindTooltip(el('span', '', t.nombre + (t.fase ? ' · ' + t.fase : '')), { permanent: true, direction: t.tipo === 'PUNTO' ? 'top' : 'center', className: 'trazo-lbl', opacity: .9 });
+    if (pref.etiquetas) l.bindTooltip(el('span', '', t.nombre + (nombreFase(t) ? ' · ' + nombreFase(t) : '')), { permanent: true, direction: t.tipo === 'PUNTO' ? 'top' : 'center', className: 'trazo-lbl', opacity: .9 });
     return l;
   }
   function dibujar() {
@@ -5133,7 +5144,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function popupTrazo(t) {
     const d = el('div', 'font:12px sans-serif;min-width:200px'), c = centroDe(t);
     d.appendChild(el('b', 'font-size:14px', TIPOS[t.tipo][1] + ' ' + t.nombre));
-    d.appendChild(el('div', 'color:#475569;margin:2px 0', TIPOS[t.tipo][0] + (t.fase ? ' · Fase ' + t.fase : '') + ' · ' + (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado)));
+    d.appendChild(el('div', 'color:#475569;margin:2px 0', TIPOS[t.tipo][0] + (nombreFase(t) ? ' · Fase ' + nombreFase(t) : '') + ' · ' + (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado)));
     if (medidas(t)) d.appendChild(el('div', '', medidas(t)));
     d.appendChild(el('div', 'margin-top:3px', DD(c))); d.appendChild(el('div', 'color:#475569', UTM(c) + ' · ' + MGRS(c)));
     if (t.notas) d.appendChild(el('div', 'margin-top:4px;white-space:pre-wrap', t.notas));
@@ -5227,7 +5238,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const css = 'display:block;width:100%;box-sizing:border-box;padding:4px;margin-top:2px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:13px sans-serif';
     const nom = el('input', css); nom.maxLength = 60; nom.value = v.nombre; nom.placeholder = 'Ej.: Ruta Alfa, Zona de espera';
     const est = el('select', css); Object.keys(ESTADOS).forEach(k => { const o = el('option', '', ESTADOS[k][0]); o.value = k; est.appendChild(o); }); est.value = v.estado;
-    const fase = el('input', css); fase.maxLength = 20; fase.value = v.fase; fase.placeholder = 'Ej.: H+2, Fase 1';
+    const fl = fasesLista(); let fase;
+    if (fl.length) {                                          // con fases definidas en la linea de tiempo, se elige de la lista
+      fase = el('select', css); const o0 = el('option', '', '— sin fase (siempre visible) —'); o0.value = ''; fase.appendChild(o0);
+      fl.forEach(f => { const o = el('option', '', f.nombre); o.value = f.id; fase.appendChild(o); }); fase.value = v.faseId && fl.some(f => f.id === v.faseId) ? v.faseId : '';
+    } else { fase = el('input', css); fase.maxLength = 20; fase.value = v.fase; fase.placeholder = 'Ej.: H+2, Fase 1'; }
     const col = el('input', 'width:34px;height:26px;padding:0;border:0;background:none'); col.type = 'color'; col.value = /^#[0-9a-f]{6}$/i.test(v.color) ? v.color : COLORES[0];
     const sw = el('div', 'display:flex;gap:5px;align-items:center;margin-top:3px'); COLORES.forEach(c => { const b = el('button', 'width:20px;height:20px;border-radius:50%;border:2px solid #475569;padding:0;background:' + c); b.type = 'button'; b.onclick = () => { col.value = c; }; sw.appendChild(b); }); sw.appendChild(col);
     const nt = el('textarea', css + ';height:54px'); nt.maxLength = 300; nt.value = v.notas;
@@ -5241,7 +5256,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (!nom.value.trim()) { msg.textContent = 'Ponga un nombre.'; return; } if (base.tipo === 'CIRCULO' && !(geom.r > 0)) { msg.textContent = 'Radio inválido.'; return; }
       ok.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
       try {
-        const r = await api('TRAZO_GUARDAR', { id: ed ? ed.id : '', tipo: base.tipo, nombre: nom.value, estado: est.value, fase: fase.value, color: col.value, notas: nt.value, geom: geom });
+        const r = await api('TRAZO_GUARDAR', { id: ed ? ed.id : '', tipo: base.tipo, nombre: nom.value, estado: est.value, fase: fl.length ? (fl.filter(f => f.id === fase.value)[0] || { nombre: '' }).nombre : fase.value, faseId: fl.length ? fase.value : '', color: col.value, notas: nt.value, geom: geom });
         if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = r.message || 'No se pudo guardar.'; ok.disabled = false; return; }
         limpiarBorrador(); await cargar(); pintarPanel();
       } catch (_) { ok.disabled = false; msg.textContent = 'Sin conexión.'; }
@@ -5294,11 +5309,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const ex = el('button', BTN + ';width:100%', '⬇ Exportar GeoJSON'); ex.type = 'button'; ex.onclick = exportar; panel.appendChild(ex);
   }
   function pintarLista() {
-    const c = $('tz-lista'); if (!c) return; c.textContent = ''; const l = visibles().slice().sort((a, b) => (a.fase || '~').localeCompare(b.fase || '~') || a.nombre.localeCompare(b.nombre));
+    const c = $('tz-lista'); if (!c) return; c.textContent = ''; const l = visibles().slice().sort((a, b) => (nombreFase(a) || '~').localeCompare(nombreFase(b) || '~') || a.nombre.localeCompare(b.nombre));
     c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:3px', l.length ? l.length + ' trazo(s)' + (pref.ocultar && trazos.length > l.length ? ' (' + (trazos.length - l.length) + ' ocultos)' : '') : 'Todavía no hay trazos.'));
     l.forEach(t => {
       const f = el('div', 'display:flex;gap:5px;align-items:center;margin:3px 0;padding:4px;background:#1e293b;border-radius:4px;border-left:4px solid ' + (t.color || '#ffb300')), tx = el('div', 'flex:1;min-width:0');
-      tx.appendChild(el('div', 'font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', TIPOS[t.tipo][1] + ' ' + t.nombre + (t.fase ? ' · ' + t.fase : ''))); tx.appendChild(el('div', 'font-size:10px;color:' + (ESTADOS[t.estado] ? ESTADOS[t.estado][1] : '#94a3b8'), (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado) + (medidas(t) ? ' · ' + medidas(t).split(' · ')[0] : '')));
+      tx.appendChild(el('div', 'font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', TIPOS[t.tipo][1] + ' ' + t.nombre + (nombreFase(t) ? ' · ' + nombreFase(t) : ''))); tx.appendChild(el('div', 'font-size:10px;color:' + (ESTADOS[t.estado] ? ESTADOS[t.estado][1] : '#94a3b8'), (ESTADOS[t.estado] ? ESTADOS[t.estado][0] : t.estado) + (medidas(t) ? ' · ' + medidas(t).split(' · ')[0] : '')));
       f.appendChild(tx); const s = selEstado(t); s.style.cssText = 'width:98px;padding:2px;font-size:11px'; f.appendChild(s);
       const b1 = el('button', 'padding:2px 5px', '🎯'); b1.type = 'button'; b1.title = 'Centrar'; b1.onclick = () => centrar(t); f.appendChild(b1);
       if (puedeEditar) { const b2 = el('button', 'padding:2px 5px', '✏️'), b3 = el('button', 'padding:2px 5px', '🗑'); b2.type = b3.type = 'button'; b2.title = 'Editar'; b3.title = 'Borrar'; b2.onclick = () => editar(t); b3.onclick = () => borrar(t); f.append(b2, b3); }
@@ -5307,7 +5322,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function exportar() {
     const gj = { type: 'FeatureCollection', features: trazos.map(t => {
-      const p = { id: t.id, nombre: t.nombre, tipo: t.tipo, estado: t.estado, fase: t.fase, color: t.color, notas: t.notas, autor: t.autor }, ll = q => [q[1], q[0]];
+      const p = { id: t.id, nombre: t.nombre, tipo: t.tipo, estado: t.estado, fase: nombreFase(t), color: t.color, notas: t.notas, autor: t.autor }, ll = q => [q[1], q[0]];
       let g; if (t.tipo === 'PUNTO') g = { type: 'Point', coordinates: ll(t.geom) }; else if (t.tipo === 'LINEA') g = { type: 'LineString', coordinates: t.geom.map(ll) };
       else if (t.tipo === 'AREA') g = { type: 'Polygon', coordinates: [t.geom.concat([t.geom[0]]).map(ll)] }; else { g = { type: 'Point', coordinates: ll(t.geom.c) }; p.radio_m = t.geom.r; }
       return { type: 'Feature', properties: p, geometry: g };
@@ -5339,10 +5354,522 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado && !draft) cargar().catch(() => null); }, 60000);
-  window.aresTrazos = { abrir: abrir, recargar: cargar, utm: UTM, mgrs: MGRS, leerCoord: leerCoord, dist: dist, rumbo: rumbo, area: area };
+  window.aresTrazos = { setFiltro: f => { filtroExt = typeof f === 'function' ? f : null; dibujar(); if (panel && !draft) pintarLista(); }, abrir: abrir, recargar: cargar, utm: UTM, mgrs: MGRS, leerCoord: leerCoord, dist: dist, rumbo: rumbo, area: area };
 })();
 </script>
 <!-- ===== FIN BLOQUE TRAZOS TACTICOS ===== -->
 
+<!-- ===== INICIO BLOQUE LINEA DE TIEMPO: pegar ULTIMO, antes de </body>, despues de bloque-trazos.html ===== -->
+<script>
+/* A.R.E.S.: Linea de tiempo por fases.
+   H-hora del teatro y fases definidas respecto de H (por ejemplo "Alistamiento H-03:00 a H+00:00"). La barra de tiempo del mapa deja ver
+   que trazos corresponden a cada momento: un trazo ligado a una fase solo se muestra mientras la hora elegida cae dentro de ella.
+   Ven la barra: administrador, planificador y operador. Fijan H-hora y editan fases: administrador y planificador.
+   Todo texto de usuarios se muestra con textContent (nunca como HTML). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const p2 = n => ('0' + n).slice(-2);
+  const fmtOff = m => 'H' + (m < 0 ? '-' : '+') + p2(Math.floor(Math.abs(m) / 60)) + ':' + p2(Math.abs(m) % 60);
+  function leerOff(txt) {                                    // "H+2:30", "-1:00", "2h30", "+3h", "90" (minutos), "H"
+    const t = String(txt || '').trim().toLowerCase().replace(/^h\s*/, '').replace(/\s+/g, ''); if (t === '') return 0;
+    const m = t.match(/^([+-])?(\d+)(?::(\d{1,2})|h(\d{1,2})?)?$/); if (!m) return null;
+    const signo = m[1] === '-' ? -1 : 1, a = Number(m[2]), mm = m[3] !== undefined ? Number(m[3]) : (m[4] !== undefined ? Number(m[4]) : 0), horas = m[3] !== undefined || /h/.test(t);
+    if (mm > 59) return null; return signo * (horas ? a * 60 + mm : a);
+  }
+  const fechaHora = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const aLocalInput = ms => { const d = new Date(ms); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()); };
+
+  /* ---------- Estado ---------- */
+  let hhora = null, fases = [], puedeEditar = false, T = 0, barra = null, abierta = false, filtrar = true, jugando = null, velocidad = 15, cargado = false, ocupado = false, editor = null;
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && /^(administrador|planificador|operador)$/i.test(String(sesionActiva.rol).trim())); } catch (_) { return false; } };
+  const clavePref = () => 'ares_fases_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
+  function leerPref() { try { const j = JSON.parse(localStorage.getItem(clavePref()) || 'null'); if (j && typeof j === 'object') { abierta = !!j.abierta; filtrar = j.filtrar !== false; } } catch (_) { /* sin almacenamiento */ } }
+  function guardarPref() { try { localStorage.setItem(clavePref(), JSON.stringify({ abierta: abierta, filtrar: filtrar })); } catch (_) { /* sin almacenamiento */ } }
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const rango = () => { const mn = fases.length ? Math.min.apply(null, fases.map(f => f.desde)) : -60, mx = fases.length ? Math.max.apply(null, fases.map(f => f.hasta)) : 60; return [Math.floor(Math.min(mn, 0) / 30) * 30, Math.ceil(Math.max(mx, 0) / 30) * 30]; };
+  const activas = () => fases.filter(f => T >= f.desde && T < f.hasta);
+  const clampT = () => { const r = rango(); T = Math.max(r[0], Math.min(r[1], Math.round(T / 5) * 5)); };
+  function filtro(t) {                                       // trazo sin fase (o con fase ya borrada) = siempre visible
+    if (!filtrar || !abierta) return true; if (!t.faseId) return true; const f = fases.filter(x => x.id === t.faseId)[0]; if (!f) return true;
+    const mx = rango()[1]; return T >= f.desde && (T < f.hasta || (T === mx && f.hasta === mx));
+  }
+  function aplicar() { try { if (window.aresTrazos && window.aresTrazos.setFiltro) window.aresTrazos.setFiltro(abierta && filtrar ? filtro : null); } catch (_) { /* nada */ } }
+
+  /* ---------- Carga ---------- */
+  async function cargar() {
+    if (ocupado) return; ocupado = true;
+    try {
+      const r = await api('FASE_LISTAR'); if (r.status !== 'success') throw new Error(r.message || 'No se pudo leer la línea de tiempo');
+      const primera = !cargado; hhora = r.hhora; fases = r.fases || []; puedeEditar = !!r.puedeEditar; cargado = true;
+      if (primera) T = hhora ? Math.round((Date.now() - hhora) / 60000) : 0; clampT(); aplicar(); if (barra) pintarBarra(); if (editor) pintarEditor();
+    } finally { ocupado = false; }
+  }
+
+  /* ---------- Barra de tiempo ---------- */
+  function posicionar() {
+    if (!barra) return; const m = $('map-tactico'), v = $('vista-tactica'), r = m ? m.getBoundingClientRect() : null;
+    const visible = !!(r && r.width > 200 && r.height > 120 && (!v || getComputedStyle(v).display !== 'none'));
+    barra.style.display = visible ? 'block' : 'none'; if (!visible) return;
+    barra.style.left = Math.round(r.left + 10) + 'px'; barra.style.width = Math.max(260, Math.round(r.width - 20)) + 'px'; barra.style.bottom = Math.round(window.innerHeight - r.bottom + 24) + 'px';
+  }
+  function pintarBarra() {
+    if (!barra) return; barra.textContent = ''; const r = rango(), BTN = 'padding:3px 8px;cursor:pointer;margin-right:3px';
+    const f1 = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:center');
+    f1.appendChild(el('b', 'font-size:13px', '⏱ Línea de tiempo'));
+    const h = el('span', 'font-size:12px;color:#94a3b8', hhora ? 'H-hora: ' + fechaHora(hhora) : 'H-hora sin fijar (tiempos relativos)'); f1.appendChild(h);
+    if (puedeEditar) { const b = el('button', BTN, hhora ? '✎ Cambiar H' : '📌 Fijar H-hora'); b.type = 'button'; b.onclick = editarH; f1.appendChild(b); }
+    const sp = el('span', 'flex:1'); f1.appendChild(sp);
+    const lab = el('label', 'font-size:12px'), ck = el('input'); ck.type = 'checkbox'; ck.checked = filtrar; ck.onchange = () => { filtrar = ck.checked; guardarPref(); aplicar(); }; lab.append(ck, document.createTextNode(' Mostrar solo lo de este momento')); f1.appendChild(lab);
+    if (puedeEditar) { const e = el('button', BTN, '✎ Fases'); e.type = 'button'; e.onclick = abrirEditor; f1.appendChild(e); }
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:16px;cursor:pointer', '✕'); x.type = 'button'; x.title = 'Cerrar'; x.onclick = alternar; f1.appendChild(x);
+    barra.appendChild(f1);
+    const f2 = el('div', 'display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap');
+    const mk = (t, fn, title) => { const b = el('button', BTN, t); b.type = 'button'; if (title) b.title = title; b.onclick = fn; f2.appendChild(b); return b; };
+    mk('⏮', () => { T = r[0]; parar(); mover(); }, 'Al inicio'); mk('◀', () => { T -= 15; parar(); mover(); }, 'Retroceder 15 min');
+    const pl = mk(jugando ? '⏸' : '▶', () => { if (jugando) parar(); else reproducir(); pintarBarra(); }, 'Reproducir'); pl.id = 'tl-play';
+    mk('▶▶', () => { T += 15; parar(); mover(); }, 'Avanzar 15 min'); mk('⏭', () => { T = r[1]; parar(); mover(); }, 'Al final');
+    const ve = el('select', 'padding:2px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px'); [[5, '5 min/s'], [15, '15 min/s'], [60, '1 h/s']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; ve.appendChild(op); }); ve.value = String(velocidad); ve.onchange = () => { velocidad = Number(ve.value); }; f2.appendChild(ve);
+    const ah = mk('Ahora', () => { if (hhora) { T = Math.round((Date.now() - hhora) / 60000); parar(); mover(); } }, 'Hora actual respecto de H'); if (!hhora) { ah.disabled = true; ah.title = 'Fije la H-hora para usar esta función'; }
+    const lt = el('b', 'font-size:14px;color:#38bdf8;margin-left:6px'); lt.id = 'tl-t'; f2.appendChild(lt);
+    const la = el('span', 'font-size:12px;color:#cbd5e1'); la.id = 'tl-activas'; f2.appendChild(la); barra.appendChild(f2);
+    // pista: tramos de color por fase + deslizador
+    const pista = el('div', 'position:relative;height:30px;margin-top:6px;background:#1e293b;border-radius:4px'), span = r[1] - r[0] || 1, pc = v => ((v - r[0]) / span * 100) + '%';
+    fases.forEach(f => { const s = el('div', 'position:absolute;top:2px;height:26px;border-radius:3px;overflow:hidden;white-space:nowrap;font-size:10px;line-height:26px;padding:0 4px;box-sizing:border-box;cursor:pointer;color:#fff;text-shadow:0 0 3px #000;background:' + f.color + ';opacity:.8;left:' + pc(f.desde) + ';width:' + ((f.hasta - f.desde) / span * 100) + '%', f.nombre); s.title = f.nombre + ' · ' + fmtOff(f.desde) + ' a ' + fmtOff(f.hasta) + (f.notas ? ' · ' + f.notas : ''); s.onclick = () => { T = f.desde; parar(); mover(); }; pista.appendChild(s); });
+    pista.style.cursor = 'pointer'; pista.style.touchAction = 'none'; pista.onpointerdown = e => { arrastrando(e, pista, r); }; const mc = el('div', 'position:absolute;top:0;width:2px;height:30px;background:#38bdf8;box-shadow:0 0 4px #38bdf8;pointer-events:none;left:' + pc(T)); mc.id = 'tl-marca'; pista.appendChild(mc);
+    if (hhora !== null || true) { const h0 = el('div', 'position:absolute;top:0;width:1px;height:30px;background:#fff;opacity:.6;pointer-events:none;left:' + pc(0)); pista.appendChild(h0); }
+    barra.appendChild(pista); const esc = el('div', 'display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:1px'); esc.append(el('span', '', fmtOff(r[0])), el('span', '', 'H'), el('span', '', fmtOff(r[1]))); barra.appendChild(esc);
+    mover(true);
+  }
+  function arrastrando(e, pista, r) {
+    const fijar = ev => { const b = pista.getBoundingClientRect(); const q = Math.max(0, Math.min(1, (ev.clientX - b.left) / (b.width || 1))); T = r[0] + q * (r[1] - r[0]); parar(); mover(); };
+    fijar(e); const mv = ev => fijar(ev), up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+  }
+  function mover(solo) {
+    clampT(); const lt = $('tl-t'), la = $('tl-activas'), mc = $('tl-marca'), r = rango();
+    if (lt) lt.textContent = fmtOff(T) + (hhora ? ' · ' + fechaHora(hhora + T * 60000) : '');
+    if (la) { const a = activas(); la.textContent = a.length ? 'Fase: ' + a.map(f => f.nombre).join(' + ') : (fases.length ? 'Fuera de las fases definidas' : 'Sin fases definidas'); }
+    if (mc) mc.style.left = ((T - r[0]) / ((r[1] - r[0]) || 1) * 100) + '%';
+    if (!solo) aplicar();
+  }
+  function reproducir() { parar(); jugando = setInterval(() => { const r = rango(); if (T >= r[1]) { parar(); pintarBarra(); return; } T += velocidad; mover(); }, 1000); }
+  function parar() { if (jugando) { clearInterval(jugando); jugando = null; const b = $('tl-play'); if (b) b.textContent = '▶'; } }
+  function alternar() {
+    abierta = !abierta; guardarPref(); parar();
+    if (abierta) { if (!barra) { barra = el('div', 'position:fixed;z-index:2900;background:#0f172ae6;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:8px 12px;font:13px sans-serif;box-shadow:0 6px 18px #000a;box-sizing:border-box'); barra.id = 'linea-tiempo'; document.body.appendChild(barra); } pintarBarra(); posicionar(); }
+    else if (barra) { barra.remove(); barra = null; }
+    aplicar(); const b = $('btn-fases'); if (b) b.style.outline = abierta ? '2px solid #38bdf8' : '';
+  }
+
+  /* ---------- H-hora ---------- */
+  function editarH() {
+    const f = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.8);display:flex;align-items:center;justify-content:center;padding:10px'), c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:16px;width:min(380px,96vw);color:#f8fafc;font:13px sans-serif'); f.id = 'fases-hhora';
+    c.appendChild(el('h3', 'margin:0 0 6px;font-size:15px', '📌 H-hora del teatro')); c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-bottom:8px', 'Momento de referencia de la operación. Las fases se definen respecto de esta hora (H-03:00, H+02:00, …).'));
+    const i = el('input', 'display:block;width:100%;box-sizing:border-box;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:13px sans-serif'); i.type = 'datetime-local'; i.value = aLocalInput(hhora || Date.now() + 3600000); c.appendChild(i);
+    const msg = el('div', 'min-height:16px;font-size:12px;color:#fca5a5;margin:6px 0'), bs = el('div', 'display:flex;gap:6px'), ok = el('button', 'flex:1;padding:6px;font-weight:bold', 'Guardar'), q = el('button', 'padding:6px', 'Quitar H-hora'), no = el('button', 'padding:6px', 'Cancelar'); ok.type = q.type = no.type = 'button';
+    const enviar = async ts => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; try { const r = await api('FASE_HHORA', { ts: ts }); if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = r.message || 'No se pudo guardar.'; return; } f.remove(); cargarForzado(); } catch (_) { msg.textContent = 'Sin conexión.'; } };
+    ok.onclick = () => { const ms = new Date(i.value).getTime(); if (!isFinite(ms)) { msg.textContent = 'Fecha inválida.'; return; } enviar(ms); }; q.onclick = () => enviar(null); no.onclick = () => f.remove(); bs.append(ok, q, no); c.append(msg, bs); f.appendChild(c); document.body.appendChild(f);
+  }
+  const cargarForzado = () => { cargado = true; return cargar(); };
+
+  /* ---------- Editor de fases ---------- */
+  function abrirEditor() { if (editor) return; editor = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.8);display:flex;align-items:center;justify-content:center;padding:10px'); editor.id = 'fases-editor'; document.body.appendChild(editor); pintarEditor(); }
+  function cerrarEditor() { if (editor) { editor.remove(); editor = null; } }
+  function pintarEditor() {
+    if (!editor) return; editor.textContent = ''; const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:16px;width:min(720px,96vw);max-height:92vh;overflow:auto;color:#f8fafc;font:13px sans-serif');
+    const cab = el('div', 'display:flex;align-items:center'); cab.appendChild(el('h3', 'margin:0;flex:1;font-size:16px', '✎ Fases de la operación')); const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = cerrarEditor; cab.appendChild(x); c.appendChild(cab);
+    c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin:4px 0 8px', 'Escriba el inicio y el fin respecto de H: "H-03:00", "H+2:30", "-1h30", "90" (minutos). Un trazo ligado a una fase solo se ve durante esa fase.'));
+    const css = 'padding:4px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:12px sans-serif;box-sizing:border-box';
+    const fila = f => {
+      const d = el('div', 'display:grid;grid-template-columns:1.4fr .8fr .8fr 34px 1.4fr auto;gap:5px;align-items:center;margin:5px 0;padding:6px;background:#0f172a;border-radius:6px');
+      const n = el('input', css); n.maxLength = 40; n.value = f.nombre; n.placeholder = 'Nombre';
+      const a = el('input', css); a.value = fmtOff(f.desde); const b = el('input', css); b.value = fmtOff(f.hasta);
+      const col = el('input', 'width:32px;height:26px;padding:0;border:0;background:none'); col.type = 'color'; col.value = /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : '#3b82f6';
+      const nt = el('input', css); nt.maxLength = 200; nt.value = f.notas || ''; nt.placeholder = 'Notas';
+      const bs = el('div', 'display:flex;gap:3px'), g = el('button', 'padding:3px 7px', '💾'), bo = el('button', 'padding:3px 7px', '🗑'); g.type = bo.type = 'button'; g.title = 'Guardar'; bo.title = 'Borrar'; if (!f.id) bo.style.display = 'none';
+      const msg = el('div', 'grid-column:1/-1;font-size:11px;color:#fca5a5;min-height:0');
+      g.onclick = async () => {
+        const de = leerOff(a.value), ha = leerOff(b.value); if (de === null || ha === null) { msg.textContent = 'Horario no entendido. Ejemplos: H-03:00, H+2:30, 90.'; return; }
+        g.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+        try { const r = await api('FASE_GUARDAR', { id: f.id || '', nombre: n.value, desde: de, hasta: ha, color: col.value, notas: nt.value }); if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = r.message || 'No se pudo guardar.'; g.disabled = false; return; } await cargarForzado(); } catch (_) { g.disabled = false; msg.textContent = 'Sin conexión.'; }
+      };
+      bo.onclick = async () => { if (!confirm('¿Borrar la fase "' + f.nombre + '"? Sus trazos quedarán sin fase (siempre visibles).')) return; try { const r = await api('FASE_BORRAR', { id: f.id }); if (r.status !== 'success') { alert(r.message); return; } await cargarForzado(); try { if (window.aresTrazos) window.aresTrazos.recargar(); } catch (_) { /* nada */ } } catch (_) { /* sesion */ } };
+      bs.append(g, bo); d.append(n, a, b, col, nt, bs, msg); return d;
+    };
+    const enc = el('div', 'display:grid;grid-template-columns:1.4fr .8fr .8fr 34px 1.4fr auto;gap:5px;font-size:11px;color:#94a3b8;margin-top:6px'); ['Nombre', 'Desde', 'Hasta', '', 'Notas', ''].forEach(t => enc.appendChild(el('span', '', t))); c.appendChild(enc);
+    fases.forEach(f => c.appendChild(fila(f)));
+    const nueva = el('div'); const add = el('button', 'padding:6px 10px;margin-top:6px', '➕ Agregar fase'); add.type = 'button'; add.onclick = () => { const ult = fases.length ? Math.max.apply(null, fases.map(f => f.hasta)) : 0; nueva.appendChild(fila({ id: '', nombre: '', desde: ult, hasta: ult + 120, color: ['#3b82f6', '#f59e0b', '#22c55e', '#a855f7', '#ef4444', '#14b8a6'][fases.length % 6], notas: '' })); add.style.display = 'none'; }; c.append(nueva, add);
+    editor.appendChild(c);
+  }
+
+  /* ---------- Boton y arranque ---------- */
+  function boton() {
+    if (!activa()) { const x = $('btn-fases'); if (x) x.remove(); return false; }
+    if ($('btn-fases')) return true;
+    const ref = $('btn-trazos') || $('btn-meteo') || $('btn-medios') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '⏱ Tiempo'); b.id = 'btn-fases'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.title = 'Línea de tiempo por fases'; b.onclick = alternar; ref.parentNode.insertBefore(b, ref); if (abierta) b.style.outline = '2px solid #38bdf8'; return true;
+  }
+  let iniciado = false, ultimoTeatro = '';
+  function limpiar() { parar(); cerrarEditor(); if (barra) { barra.remove(); barra = null; } try { if (window.aresTrazos && window.aresTrazos.setFiltro) window.aresTrazos.setFiltro(null); } catch (_) { /* nada */ } hhora = null; fases = []; cargado = false; }
+  setInterval(() => {
+    if (!activa()) { if ($('btn-fases')) boton(); if (iniciado) { limpiar(); iniciado = false; abierta = false; } return; }
+    if (!boton()) return;
+    const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
+    if (!iniciado || tid !== ultimoTeatro) {
+      limpiar(); iniciado = true; ultimoTeatro = tid; leerPref();
+      cargar().then(() => { if (abierta) { abierta = false; alternar(); } }).catch(() => { iniciado = false; });
+    }
+    posicionar();
+  }, 1500);
+  setInterval(() => { if (activa() && iniciado && !editor) cargar().catch(() => null); }, 60000);
+  window.aresFases = { lista: () => fases.slice(), hhora: () => hhora, alternar: alternar, recargar: cargarForzado, tiempo: () => T, fijarTiempo: m => { T = Number(m) || 0; mover(); }, leerOff: leerOff, fmtOff: fmtOff };
+})();
+</script>
+<!-- ===== FIN BLOQUE LINEA DE TIEMPO ===== -->
+<!-- ===== INICIO BLOQUE REPORTE METEO: pegar ULTIMO, antes de </body>, despues de bloque-fases.html ===== -->
+<script>
+/* A.R.E.S.: Reporte meteorologico con datos e imagenes.
+   El Meteorologo elige a que sectores llega, que datos incluir (resumen, pronostico, METAR, rios, partes vigentes...) y que imagenes
+   (satelite GOES, viento / lluvia / nubosidad del modelo GFS, mapa de METAR, o una imagen propia). Se envia como mensaje cifrado con el
+   reporte adjunto: quien lo recibe lo mira en pantalla o lo descarga en PDF. Todo texto se muestra con textContent (nunca como HTML);
+   las imagenes solo se aceptan como data:image/jpeg|png generadas por la app o redimensionadas desde un archivo del usuario. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const esMeteo = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && String(sesionActiva.rol).trim().toLowerCase() === 'meteorologo'); } catch (_) { return false; } };
+  const autenticado = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const teatro = () => window.ARES_TEATRO || null;
+  const IM = () => window.aresInformeMeteo;
+  const MAX_IMG = 4, MAX_CHARS = 88000, RE_IMG = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+\/=]+$/;
+  const limpio = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+  const hhmm = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const latin = s => String(s === null || s === undefined ? '' : s).replace(/[–—]/g, '-').replace(/…/g, '...').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\u0000-ÿ]/g, '?');   // jsPDF usa fuentes Latin-1
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+
+  /* =====================  PDF del reporte (lo usa el que arma y el que recibe)  ===================== */
+  function construirPDF(p, de) {
+    if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error('No se cargó el generador de PDF. Revise la conexión y recargue.');
+    const doc = new window.jspdf.jsPDF(), t = teatro(), tn = t ? t.nombre : 'Teatro';
+    doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text('A.R.E.S. C4I - REPORTE METEOROLOGICO', 14, 15);
+    doc.setFontSize(11); doc.text(latin(p.titulo), 14, 22, { maxWidth: 182 });
+    doc.setFontSize(8.5); doc.setTextColor(71, 85, 105);
+    doc.text(latin('Teatro: ' + tn + '   |   Emision: ' + new Date(p.generado).toLocaleString('es-AR') + (de ? '   |   Elaboro: ' + de : '')), 14, 28, { maxWidth: 182 });
+    let y = 33; if (p.zonas && p.zonas.length) { const l = doc.splitTextToSize(latin('Zonas: ' + p.zonas.join(', ')), 182); doc.text(l, 14, y); y += l.length * 4 + 1; }
+    if (t && t.tipo === 'EJERCICIO') { doc.setTextColor(180, 83, 9); doc.text('EJERCICIO / SIMULACION - DATOS DE PRACTICA, NO ES UN OPERATIVO REAL', 14, y); y += 5; }
+    const salto = h => { if (y + h > 280) { doc.addPage(); y = 16; } };
+    if (p.nota && p.nota.trim()) { doc.setFontSize(10.5); doc.setTextColor(192, 57, 43); doc.text('Nota del meteorologo', 14, y + 3); y += 7; doc.setFontSize(9); doc.setTextColor(30, 41, 59); const l = doc.splitTextToSize(latin(p.nota), 182); l.forEach(x => { salto(5); doc.text(x, 14, y); y += 4.2; }); y += 3; }
+    (p.secciones || []).forEach((s, i) => {
+      salto(24); doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text(latin((i + 1) + '. ' + s.titulo), 14, y + 3); y += 6;
+      if (s.texto && s.texto.trim()) { doc.setFontSize(9); doc.setTextColor(30, 41, 59); doc.splitTextToSize(latin(s.texto), 182).forEach(x => { salto(5); doc.text(x, 14, y + 2); y += 4.2; }); y += 2; }
+      if (s.cols && s.cols.length && s.filas && s.filas.length) {
+        doc.autoTable({ startY: y, head: [s.cols.map(latin)], body: s.filas.map(f => f.map(latin)), styles: { fontSize: 7.5 }, headStyles: { fillColor: [41, 128, 185] }, margin: { left: 14, right: 14 } });
+        y = doc.lastAutoTable.finalY + 6;
+      }
+    });
+    (p.imagenes || []).forEach((m, i) => {
+      if (!RE_IMG.test(m.dataUrl)) return; const ancho = 182, alto = Math.min(185, ancho * (m.h || 480) / (m.w || 720)), aw = alto * (m.w || 720) / (m.h || 480);
+      if (y + alto + 16 > 285) { doc.addPage(); y = 16; } doc.setFontSize(10.5); doc.setTextColor(30, 41, 59); doc.text(latin('Imagen ' + (i + 1) + ': ' + m.titulo), 14, y + 3); y += 6;
+      try { doc.addImage(m.dataUrl, /image\/png/.test(m.dataUrl) ? 'PNG' : 'JPEG', 14, y, aw, alto); } catch (_) { doc.setFontSize(9); doc.text('(no se pudo incluir la imagen)', 14, y + 5); }
+      y += alto + 3; doc.setFontSize(7.5); doc.setTextColor(100, 116, 139); if (m.fuente) doc.text(latin('Fuente: ' + m.fuente), 14, y + 1); y += 8;
+    });
+    const n = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+      doc.text('Producto de apoyo a la decision: no reemplaza los avisos oficiales del Servicio Meteorologico Nacional. Datos de modelos y de observaciones de fuentes abiertas.', 14, 288, { maxWidth: 182 });
+      doc.text(latin('A.R.E.S. C4I - ' + tn + ' - pagina ' + i + ' de ' + n), 14, 293); }
+    return doc;
+  }
+  const nombrePDF = p => 'Reporte_Meteo_' + limpio((teatro() && teatro().id) || 'teatro') + '_' + limpio(p.titulo).slice(0, 24) + '_' + new Date(p.generado).toISOString().slice(0, 10) + '.pdf';
+
+  /* =====================  Capturas: mapa base + capas dibujadas en un canvas  ===================== */
+  const W = 720, H = 480, GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+  const CAPAS = {
+    sat: { nombre: 'Satélite GOES (color natural)', url: GIBS + '/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png', maxZ: 7, fuente: 'NASA GIBS · GOES-East ABI GeoColor', satelite: true },
+    ir: { nombre: 'Satélite GOES (infrarrojo, topes nubosos)', url: GIBS + '/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png', maxZ: 6, fuente: 'NASA GIBS · GOES-East ABI Banda 13 (IR limpio)', satelite: true },
+    viento: { nombre: 'Viento a 10 m (modelo GFS)', base: true, fuente: 'Modelo GFS vía Open-Meteo · mapa base © OpenStreetMap' },
+    lluvia: { nombre: 'Lluvia acumulada 24 h (modelo GFS)', base: true, fuente: 'Modelo GFS vía Open-Meteo · mapa base © OpenStreetMap' },
+    nubes: { nombre: 'Nubosidad (modelo GFS)', base: true, fuente: 'Modelo GFS vía Open-Meteo · mapa base © OpenStreetMap' },
+    metar: { nombre: 'METAR: categoría de vuelo y viento', base: true, fuente: 'NOAA Aviation Weather Center · mapa base © OpenStreetMap' }
+  };
+  const OSM = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZ: 10 };
+  const merc = lat => { const s = Math.sin(Math.max(-85, Math.min(85, lat)) * Math.PI / 180); return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI); };
+  function proyeccion(bb) {                                  // bb = [sur, oeste, norte, este]
+    const ancho = (bb[3] - bb[1]) / 360, alto = merc(bb[0]) - merc(bb[2]), z = Math.min(Math.log2(W / (256 * ancho)), Math.log2(H / (256 * alto))), k = 256 * Math.pow(2, z), cx = ((bb[1] + bb[3]) / 2 + 180) / 360, cy = (merc(bb[0]) + merc(bb[2])) / 2;
+    return { z: z, k: k, cx: cx, cy: cy, X: lon => ((lon + 180) / 360 - cx) * k + W / 2, Y: lat => (merc(lat) - cy) * k + H / 2 };
+  }
+  function cargarImg(url) { return new Promise(res => { const i = new Image(); const to = setTimeout(() => res(null), 15000); i.crossOrigin = 'anonymous'; i.onload = () => { clearTimeout(to); res(i); }; i.onerror = () => { clearTimeout(to); res(null); }; i.src = url; }); }
+  async function dibujarTiles(ctx, pr, capa) {
+    let zt = Math.min(capa.maxZ, Math.max(0, Math.ceil(pr.z))), lista;
+    for (;;) {
+      const n = Math.pow(2, zt), x0 = Math.max(0, Math.floor((pr.cx - W / 2 / pr.k) * n)), x1 = Math.min(n - 1, Math.floor((pr.cx + W / 2 / pr.k) * n)), y0 = Math.max(0, Math.floor((pr.cy - H / 2 / pr.k) * n)), y1 = Math.min(n - 1, Math.floor((pr.cy + H / 2 / pr.k) * n));
+      lista = []; for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) lista.push([x, y]); if (lista.length <= 36 || zt <= 0) break; zt--;
+    }
+    const n = Math.pow(2, zt), ok = await Promise.all(lista.map(async t => {
+      const img = await cargarImg(capa.url.replace('{z}', zt).replace('{x}', t[0]).replace('{y}', t[1])); if (!img) return false;
+      ctx.drawImage(img, (t[0] / n - pr.cx) * pr.k + W / 2, (t[1] / n - pr.cy) * pr.k + H / 2, pr.k / n + 0.6, pr.k / n + 0.6); return true;
+    }));
+    return { ok: ok.filter(x => x).length, total: lista.length };
+  }
+  function reticula(ctx, pr, bb) {
+    const span = bb[3] - bb[1], paso = span > 14 ? 5 : span > 6 ? 2 : span > 3 ? 1 : 0.5; ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1; ctx.font = '10px sans-serif'; ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
+    for (let lo = Math.ceil(bb[1] / paso) * paso; lo <= bb[3]; lo += paso) { const x = pr.X(lo); ctx.beginPath(); ctx.moveTo(x, 26); ctx.lineTo(x, H - 18); ctx.stroke(); ctx.fillText(Math.abs(lo).toFixed(paso < 1 ? 1 : 0) + '°' + (lo < 0 ? 'O' : 'E'), x + 2, H - 22); }
+    for (let la = Math.ceil(bb[0] / paso) * paso; la <= bb[2]; la += paso) { const y = pr.Y(la); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(Math.abs(la).toFixed(paso < 1 ? 1 : 0) + '°' + (la < 0 ? 'S' : 'N'), 3, y - 2); }
+    ctx.restore();
+  }
+  function sectoresEnMapa(ctx, pr, bb) {
+    const t = teatro(); if (!t || !t.sectores) return; ctx.save(); ctx.font = 'bold 11px sans-serif';
+    t.sectores.forEach(s => { if (!isFinite(s.lat) || !isFinite(s.lon) || s.lat < bb[0] || s.lat > bb[2] || s.lon < bb[1] || s.lon > bb[3]) return; const x = pr.X(s.lon), y = pr.Y(s.lat);
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#0f172a'; ctx.stroke(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,.9)'; ctx.strokeText(s.nombre, x + 8, y + 4); ctx.fillStyle = '#fff'; ctx.fillText(s.nombre, x + 8, y + 4); });
+    ctx.restore();
+  }
+  function marco(ctx, titulo, valido, fuente) {
+    ctx.save(); ctx.fillStyle = 'rgba(15,23,42,.85)'; ctx.fillRect(0, 0, W, 24); ctx.fillRect(0, H - 16, W, 16); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.fillText(titulo, 8, 16);
+    if (valido) { ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#7dd3fc'; ctx.fillText(valido, W - 8, 16); ctx.textAlign = 'left'; }
+    ctx.font = '9.5px sans-serif'; ctx.fillStyle = '#cbd5e1'; ctx.fillText(fuente + ' · A.R.E.S. C4I · generado ' + hhmm(Date.now()), 8, H - 5); ctx.restore();
+  }
+  const COL_V = v => v >= 45 ? '#dc2626' : v >= 30 ? '#f97316' : v >= 20 ? '#eab308' : v >= 10 ? '#22c55e' : '#38bdf8';
+  const COL_LL = mm => mm >= 50 ? '#7f1d1d' : mm >= 25 ? '#dc2626' : mm >= 10 ? '#f97316' : mm >= 2 ? '#2563eb' : mm >= 0.2 ? '#7dd3fc' : null;
+  function leyenda(ctx, filas) {
+    ctx.save(); const h = 8 + filas.length * 15; ctx.fillStyle = 'rgba(15,23,42,.8)'; ctx.fillRect(6, H - 22 - h, 130, h); ctx.font = '10px sans-serif';
+    filas.forEach((f, i) => { ctx.fillStyle = f[0]; ctx.fillRect(12, H - 22 - h + 6 + i * 15, 12, 10); ctx.fillStyle = '#fff'; ctx.fillText(f[1], 30, H - 22 - h + 15 + i * 15); }); ctx.restore();
+  }
+  async function modelo(bb, horas) {                         // grilla 7 x 5 de GFS en una sola consulta
+    const nx = 7, ny = 5, la = [], lo = [];
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { la.push((bb[2] - (bb[2] - bb[0]) * (j + .5) / ny).toFixed(3)); lo.push((bb[1] + (bb[3] - bb[1]) * (i + .5) / nx).toFixed(3)); }
+    const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + la.join(',') + '&longitude=' + lo.join(',') + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover&models=gfs_seamless&forecast_days=3&timezone=UTC&wind_speed_unit=kmh';
+    const c = new AbortController(), to = setTimeout(() => c.abort(), 30000);
+    try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); const arr = Array.isArray(j) ? j : [j]; return arr.map((d, k) => ({ lat: Number(la[k]), lon: Number(lo[k]), h: d.hourly || {} })); }
+    catch (e) { throw new Error(e && e.name === 'AbortError' ? 'el modelo meteorológico no respondió' : (e && e.message) || 'modelo no disponible'); } finally { clearTimeout(to); }
+  }
+  const indiceHora = (h, ms) => { const tt = (h.time || []).map(x => Date.parse(x + 'Z')); let b = 0, d = Infinity; tt.forEach((t, i) => { if (Math.abs(t - ms) < d) { d = Math.abs(t - ms); b = i; } }); return { i: b, t: tt[b], tt: tt }; };
+  function flecha(ctx, x, y, desde, largo, color) {
+    const a = (desde + 180) * Math.PI / 180, dx = Math.sin(a) * largo / 2, dy = -Math.cos(a) * largo / 2; ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.6; ctx.shadowColor = '#000'; ctx.shadowBlur = 2;
+    ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x + dx, y + dy); ctx.stroke(); const hx = x + dx, hy = y + dy, b = 7; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - Math.sin(a - .45) * b, hy + Math.cos(a - .45) * b); ctx.lineTo(hx - Math.sin(a + .45) * b, hy + Math.cos(a + .45) * b); ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  const FCOL = { VFR: '#16a34a', MVFR: '#2563eb', IFR: '#dc2626', LIFR: '#a21caf' };
+  async function capturar(tipo, bb, horas, nombreZona) {
+    const capa = CAPAS[tipo], cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d'), pr = proyeccion(bb); let valido = '', nota = '';
+    ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, W, H);
+    if (capa.satelite) {
+      const r = await dibujarTiles(ctx, pr, capa); if (!r.ok) throw new Error('no se pudo descargar la imagen satelital (' + r.total + ' mosaicos sin respuesta). Pruebe de nuevo en unos minutos o suba una imagen propia.');
+      if (r.ok < r.total) nota = ' (parcial)'; valido = 'más reciente disponible';
+    } else {
+      const r = await dibujarTiles(ctx, pr, Object.assign({}, OSM)); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(0, 0, W, H); if (!r.ok) nota = ' (sin mapa base)';
+      if (tipo === 'metar') {
+        const m = await api('MET_METAR'); if (m.status !== 'success') throw new Error(m.message || 'METAR no disponible');
+        const en = (m.estaciones || []).filter(e => e.la >= bb[0] && e.la <= bb[2] && e.lo >= bb[1] && e.lo <= bb[3]); if (!en.length) throw new Error('no hay estaciones METAR en esa zona.');
+        ctx.font = 'bold 10.5px sans-serif'; en.forEach(e => { const x = pr.X(e.lo), y = pr.Y(e.la); ctx.beginPath(); ctx.arc(x, y, 8, 0, 6.3); ctx.fillStyle = FCOL[e.fc] || '#64748b'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+          if (typeof e.wd === 'number' && e.ws) flecha(ctx, x, y - 22, e.wd, 22, '#111827');
+          const t1 = e.id, t2 = (e.wd === 'VRB' ? 'VRB' : (e.wd === null ? '--' : ('00' + e.wd).slice(-3))) + '/' + (e.ws === null ? '--' : e.ws) + (e.wg ? 'G' + e.wg : '') + 'kt'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeText(t1, x + 11, y - 1); ctx.strokeText(t2, x + 11, y + 11); ctx.fillStyle = '#0f172a'; ctx.fillText(t1, x + 11, y - 1); ctx.font = '10px sans-serif'; ctx.fillText(t2, x + 11, y + 11); ctx.font = 'bold 10.5px sans-serif'; });
+        leyenda(ctx, [['#16a34a', 'VFR'], ['#2563eb', 'MVFR'], ['#dc2626', 'IFR'], ['#a21caf', 'LIFR']]); valido = 'observaciones recientes';
+      } else {
+        const g = await modelo(bb), ahora = Date.now(), objetivo = ahora + (horas || 0) * 3600000;
+        const ref = indiceHora(g[0].h, objetivo); valido = 'válido ' + hhmm(ref.t) + (tipo === 'lluvia' ? ' (acum. 24 h previas)' : '');
+        if (tipo === 'viento') {
+          g.forEach(p => { const k = indiceHora(p.h, objetivo).i, v = Number(p.h.wind_speed_10m && p.h.wind_speed_10m[k]), d = Number(p.h.wind_direction_10m && p.h.wind_direction_10m[k]); if (!isFinite(v) || !isFinite(d)) return; const x = pr.X(p.lon), y = pr.Y(p.lat); flecha(ctx, x, y, d, 30, COL_V(v)); ctx.font = 'bold 11px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(Math.round(v), x + 5, y + 20); ctx.fillStyle = '#0f172a'; ctx.fillText(Math.round(v), x + 5, y + 20); });
+          leyenda(ctx, [['#38bdf8', '< 10 km/h'], ['#22c55e', '10 - 20'], ['#eab308', '20 - 30'], ['#f97316', '30 - 45'], ['#dc2626', '>= 45']]);
+        } else if (tipo === 'lluvia') {
+          const k0 = indiceHora(g[0].h, objetivo).i; g.forEach(p => { let s = 0; for (let i = Math.max(0, k0 - 23); i <= k0; i++) { const v = Number(p.h.precipitation && p.h.precipitation[i]); if (isFinite(v)) s += v; } const col = COL_LL(s), x = pr.X(p.lon), y = pr.Y(p.lat); if (col) { ctx.beginPath(); ctx.arc(x, y, 10 + Math.min(22, s / 3), 0, 6.3); ctx.fillStyle = col; ctx.globalAlpha = .55; ctx.fill(); ctx.globalAlpha = 1; }
+            ctx.font = 'bold 11px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(s.toFixed(s < 10 ? 1 : 0), x - 8, y + 4); ctx.fillStyle = '#0f172a'; ctx.fillText(s.toFixed(s < 10 ? 1 : 0), x - 8, y + 4); });
+          leyenda(ctx, [['#7dd3fc', '0.2 - 2 mm'], ['#2563eb', '2 - 10'], ['#f97316', '10 - 25'], ['#dc2626', '25 - 50'], ['#7f1d1d', '> 50 mm']]);
+        } else {
+          g.forEach(p => { const k = indiceHora(p.h, objetivo).i, c = Number(p.h.cloud_cover && p.h.cloud_cover[k]); if (!isFinite(c)) return; const x = pr.X(p.lon), y = pr.Y(p.lat); ctx.beginPath(); ctx.arc(x, y, 22, 0, 6.3); ctx.fillStyle = 'rgba(71,85,105,' + (0.12 + c / 100 * 0.6) + ')'; ctx.fill(); ctx.font = 'bold 11px sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(Math.round(c) + '%', x - 9, y + 4); ctx.fillStyle = '#0f172a'; ctx.fillText(Math.round(c) + '%', x - 9, y + 4); });
+          leyenda(ctx, [['rgba(71,85,105,.2)', 'despejado'], ['rgba(71,85,105,.5)', 'parcial'], ['rgba(71,85,105,.75)', 'cubierto']]);
+        }
+      }
+    }
+    reticula(ctx, pr, bb); sectoresEnMapa(ctx, pr, bb);
+    const titulo = capa.nombre + (horas ? ' · +' + horas + ' h' : '') + (nombreZona ? ' · ' + nombreZona : '') + nota; marco(ctx, titulo, valido, capa.fuente);
+    return { canvas: cv, titulo: titulo, fuente: capa.fuente };
+  }
+  function comprimir(cv) {                                   // JPEG con la calidad y el tamano que hagan falta para entrar en el limite
+    let c = cv; for (let ancho = cv.width; ancho >= 420; ancho = Math.round(ancho * 0.8)) {
+      if (ancho !== c.width) { const c2 = document.createElement('canvas'); c2.width = ancho; c2.height = Math.round(cv.height * ancho / cv.width); c2.getContext('2d').drawImage(cv, 0, 0, c2.width, c2.height); c = c2; }
+      for (let q = 0.78; q >= 0.3; q -= 0.12) { const d = c.toDataURL('image/jpeg', q); if (d.length <= MAX_CHARS && RE_IMG.test(d)) return { dataUrl: d, w: c.width, h: c.height }; }
+    }
+    throw new Error('la imagen es demasiado pesada aun comprimida; use una zona menos detallada.');
+  }
+  function archivoAImagen(file) {
+    return new Promise((res, rej) => {
+      if (!file || !/^image\/(jpeg|png|webp|gif|bmp)$/.test(file.type)) return rej(new Error('Elija un archivo de imagen (JPG o PNG).'));
+      if (file.size > 12e6) return rej(new Error('El archivo es muy grande (máximo 12 MB).'));
+      const fr = new FileReader(); fr.onerror = () => rej(new Error('No se pudo leer el archivo.'));
+      fr.onload = () => { const i = new Image(); i.onerror = () => rej(new Error('No se pudo abrir la imagen.')); i.onload = () => { const k = Math.min(1, 900 / i.width), cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(i.width * k)); cv.height = Math.max(1, Math.round(i.height * k)); const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height); x.drawImage(i, 0, 0, cv.width, cv.height); try { res(comprimir(cv)); } catch (e) { rej(e); } }; i.src = fr.result; };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  /* =====================  Datos: tablas ya calculadas  ===================== */
+  async function armarSecciones(opc, zonas) {
+    const I = IM(), sec = [], f0 = I.f0, f1 = I.f1, hoy = Date.now(), c0 = I.centro();
+    const necesitaModelo = opc.resumen || opc.dias || opc.bloques || opc.obs; let ambitos = [];
+    if (necesitaModelo && zonas.length) { const datos = await I.traer(zonas); ambitos = zonas.map((z, i) => ({ z: z, r: I.analizar(datos[i], hoy) })); }
+    const conInc = I.hayMod('INCENDIOS'), conHid = I.hayMod('HIDRICO');
+    if (opc.resumen && ambitos.length) {
+      const cols = ['Zona', 'Condición', 'T máx/mín hoy', 'Lluvia 24/48/72 h (mm)', 'Ráfaga máx. 48 h', 'Tormentas']; if (conInc) cols.push('Riesgo incendio');
+      sec.push({ titulo: 'Resumen para las próximas 24 / 48 / 72 horas', cols: cols, filas: ambitos.map(a => { const d0 = a.r.dias[0] || {}; const f = [a.z.nombre, I.txtCod(a.r.cond), f0(d0.tmax) + ' / ' + f0(d0.tmin) + ' °C', f0(a.r.lluvia24) + ' / ' + f0(a.r.lluvia48) + ' / ' + f0(a.r.lluvia72), f0(a.r.rafaga48) + ' km/h', a.r.nivelTorm + (a.r.horaPicoCape ? ' (pico ' + a.r.horaPicoCape.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ')' : '')]; if (conInc) f.push(a.r.incendio); return f; }) });
+    }
+    if (opc.obs && ambitos.length) sec.push({ titulo: 'Observaciones y alertas calculadas', texto: ambitos.map(a => a.z.nombre + ':\n' + a.r.obs.map(o => ' - ' + o).join('\n')).join('\n\n'), cols: [], filas: [] });
+    if (opc.dias && ambitos.length) {
+      const filas = []; ambitos.forEach(a => a.r.dias.forEach(d => filas.push([a.z.nombre, new Date(d.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' }), I.txtCod(d.cod), f0(d.tmax) + ' °C', f0(d.tmin) + ' °C', f1(d.lluvia), f0(d.prob) + ' %', f0(d.viento) + ' / ' + f0(d.rafaga)])));
+      sec.push({ titulo: 'Pronóstico por día', cols: ['Zona', 'Fecha', 'Condición', 'Máx.', 'Mín.', 'Lluvia (mm)', 'Prob.', 'Viento / ráfaga (km/h)'], filas: filas.slice(0, 60) });
+    }
+    if (opc.bloques && ambitos.length) {
+      const filas = []; ambitos.forEach(a => a.r.bloques.forEach(b => filas.push([a.z.nombre, b.desde.toLocaleString('es-AR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }), I.txtCod(b.cod), f0(b.t) + ' °C', f1(b.lluvia), f0(b.prob) + ' %', I.cardinal(b.dir) + ' ' + f0(b.viento) + ' km/h', f0(b.rafaga) + ' km/h'])));
+      sec.push({ titulo: 'Próximas 48 horas (bloques de 6 h)', cols: ['Zona', 'Desde', 'Condición', 'Temp.', 'Lluvia (mm)', 'Prob.', 'Viento', 'Ráfaga'], filas: filas.slice(0, 60) });
+    }
+    if (opc.metar) {
+      const m = await api('MET_METAR'); if (m.status !== 'success') throw new Error(m.message || 'METAR no disponible');
+      const en = (m.estaciones || []).filter(e => e.pri || zonas.some(z => Math.abs(e.la - z.lat) <= 1 && Math.abs(e.lo - z.lon) <= 1.5)).slice(0, 40);
+      sec.push({ titulo: 'METAR (observaciones de aeródromos)', cols: ['OACI', 'Estación', 'Cat.', 'Viento (kt)', 'Vis. (km)', 'Techo (ft)', 'T/Td (°C)', 'QNH', 'Observado'], filas: en.map(e => [e.id, e.n || '', e.fc, (e.wd === 'VRB' ? 'VRB' : e.wd === null ? '-' : ('00' + e.wd).slice(-3)) + '/' + (e.ws === null ? '-' : e.ws) + (e.wg ? 'G' + e.wg : ''), e.v === null ? '-' : e.v, e.h === null ? 'sin techo' : e.h, (e.t === null ? '-' : e.t) + '/' + (e.d === null ? '-' : e.d), e.p === null ? '-' : Math.round(e.p), e.ot ? hhmm(e.ot * 1000) : '-']) });
+    }
+    if (opc.hidro && conHid) {
+      let l = []; try { l = (estacionesHidro || []).filter(h => isFinite(h.actual)); } catch (_) { /* nada */ }
+      if (l.length) sec.push({ titulo: 'Niveles de ríos (hidrometría)', cols: ['Estación', 'Río', 'Altura (m)', 'Alerta (m)', 'Evacuación (m)', 'Estado'], filas: l.slice(0, 40).map(h => [h.estacion, h.rio, f1(Number(h.actual)), f1(Number(h.alerta)), f1(Number(h.evacuacion)), String(h.estado || h.estadoPNA || '')]) });
+    }
+    if (opc.partes) {
+      const r = await api('MET_PARTES'); if (r.status !== 'success') throw new Error(r.message || 'No se pudieron leer los partes');
+      if ((r.partes || []).length) sec.push({ titulo: 'Partes meteorológicos vigentes', cols: ['Sector', 'Severidad', 'Título', 'Texto', 'Vigente hasta'], filas: r.partes.slice(0, 40).map(p => [p.sector === 'TODOS' ? 'Todos' : p.sector, p.sev, p.titulo, p.texto, hhmm(p.vence)]) });
+    }
+    return sec;
+  }
+
+  /* =====================  Ventana del Meteorologo: armar y enviar  ===================== */
+  let ventana = null;
+  const bboxTeatro = () => { const t = teatro() || {}, lat = isFinite(t.lat) ? t.lat : -27.5, lon = isFinite(t.lon) ? t.lon : -59, r = (isFinite(t.radio) && t.radio > 0 ? t.radio : 400) / 111; return [lat - r, lon - r * 1.5 / Math.cos(lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180), lat + r, lon + r * 1.5]; };
+  const bboxSector = s => [s.lat - 0.9, s.lon - 1.35, s.lat + 0.9, s.lon + 1.35];
+  function bboxMapa() { try { const b = mapTactico.getBounds(), la = (b.getSouth() + b.getNorth()) / 2, lo = (b.getWest() + b.getEast()) / 2; let h = b.getNorth() - b.getSouth(), w = b.getEast() - b.getWest(); if (w / h < 1.5) w = h * 1.5; else h = w / 1.5; return [la - h / 2, lo - w / 2, la + h / 2, lo + w / 2]; } catch (_) { return bboxTeatro(); } }
+  async function abrir() {
+    if (!esMeteo()) return; if (ventana) return; if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.'); if (!IM()) return alert('Falta el módulo de informes meteorológicos.');
+    let info; try { info = await api('MET_PARTES'); } catch (_) { return; } if (info.status !== 'success') return alert(info.message || 'No se pudo leer el teatro.');
+    const sectores = info.sectores || [], porSector = info.porSector || {}, imgs = [], t = teatro() || {};
+    ventana = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:10px'); ventana.id = 'reporte-meteo';
+    const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:16px 18px;width:min(640px,97vw);max-height:94vh;overflow:auto;color:#f8fafc;font:13px sans-serif');
+    const css = 'display:block;width:100%;box-sizing:border-box;padding:5px;margin-top:2px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font:13px sans-serif';
+    const tit = (txt) => el('div', 'margin:12px 0 4px;font-weight:bold;color:#7dd3fc;font-size:13px', txt), cerrar = () => { if (ventana) { ventana.remove(); ventana = null; } };
+    const cab = el('div', 'display:flex;align-items:center'); cab.appendChild(el('h3', 'margin:0;flex:1;font-size:16px', '📤 Reporte meteorológico con datos e imágenes')); const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = cerrar; cab.appendChild(x); c.appendChild(cab);
+    c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin:3px 0', 'Elija a quién le llega, qué datos y qué imágenes incluir. Quien lo reciba lo ve en pantalla y lo descarga en PDF. Es una foto del momento: no se actualiza.'));
+    const ti = el('input', css); ti.maxLength = 80; ti.value = 'Reporte meteorológico ' + hhmm(Date.now()); c.append(tit('Título'), ti);
+    // destinatarios
+    c.appendChild(tit('1. Para quién'));
+    const cs = {}; const caja = el('div', 'display:flex;flex-direction:column;gap:3px');
+    sectores.forEach(n => { const l = el('label', 'display:flex;gap:8px;align-items:center'), k = el('input'); k.type = 'checkbox'; const q = Number(porSector[n]) || 0; if (!q) k.disabled = true; l.append(k, document.createTextNode(n + ' — ' + (q ? q + ' persona(s)' : 'nadie asignado'))); if (!q) l.style.opacity = '.55'; cs[n] = k; caja.appendChild(l); });
+    if (!sectores.length) caja.appendChild(el('div', 'color:#fca5a5;font-size:12px', 'Este teatro no tiene sectores definidos. El administrador puede agregarlos desde el Panel de mando.'));
+    const ls = el('label', 'display:flex;gap:8px;align-items:center;margin-top:4px'), ks = el('input'); ks.type = 'checkbox'; ls.append(ks, document.createTextNode('Incluir también a Administrador y Planificador')); c.append(caja, ls);
+    const ba = el('div', 'display:flex;gap:6px;margin-top:4px'); const bt = el('button', 'font-size:11px;padding:2px 8px', 'Todos los sectores'); bt.type = 'button'; bt.onclick = () => sectores.forEach(n => { if (!cs[n].disabled) cs[n].checked = true; }); ba.appendChild(bt); c.appendChild(ba);
+    // datos
+    c.appendChild(tit('2. Qué datos incluir (de las zonas elegidas)'));
+    const OPC = [['resumen', 'Resumen 24 / 48 / 72 h (lluvia, ráfagas, tormentas)', true], ['obs', 'Observaciones y alertas calculadas', true], ['dias', 'Pronóstico por día', false], ['bloques', 'Próximas 48 h en bloques de 6 h', false], ['metar', 'METAR de las estaciones de la zona y las prioritarias', true], ['hidro', 'Niveles de ríos (hidrometría)', false], ['partes', 'Partes meteorológicos vigentes del teatro', false]];
+    const ck = {}; OPC.forEach(o => { const l = el('label', 'display:flex;gap:8px;align-items:center;margin:2px 0'), k = el('input'); k.type = 'checkbox'; k.checked = o[2]; l.append(k, document.createTextNode(o[1])); ck[o[0]] = k; c.appendChild(l); });
+    const lg = el('label', 'display:flex;gap:8px;align-items:center;margin-top:4px'), kg = el('input'); kg.type = 'checkbox'; lg.append(kg, document.createTextNode('Incluir también la zona completa del teatro')); c.appendChild(lg);
+    // imagenes
+    c.appendChild(tit('3. Imágenes y capturas (hasta ' + MAX_IMG + ')'));
+    const lista = el('div', 'display:flex;flex-direction:column;gap:6px;margin-bottom:6px');
+    const fila = el('div', 'display:flex;flex-wrap:wrap;gap:6px;align-items:end');
+    const sel = (opts, w) => { const s = el('select', css + ';width:' + (w || 'auto') + ';display:inline-block'); opts.forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; s.appendChild(op); }); return s; };
+    const sTipo = sel(Object.keys(CAPAS).map(k => [k, CAPAS[k].nombre]), '260px'), sZona = sel([['teatro', 'Teatro completo'], ['mapa', 'Lo que veo en el mapa ahora']].concat(sectores.map(n => ['S:' + n, 'Sector ' + n])), '200px'), sHora = sel([['0', 'ahora'], ['6', '+6 h'], ['12', '+12 h'], ['24', '+24 h'], ['48', '+48 h']], '90px');
+    const lt = el('label', 'font-size:11px;color:#94a3b8', 'Producto'), lz = el('label', 'font-size:11px;color:#94a3b8', 'Zona'), lh = el('label', 'font-size:11px;color:#94a3b8', 'Pronóstico a');
+    lt.appendChild(el('br')); lt.appendChild(sTipo); lz.appendChild(el('br')); lz.appendChild(sZona); lh.appendChild(el('br')); lh.appendChild(sHora);
+    const msgI = el('div', 'min-height:16px;font-size:12px;margin:4px 0;color:#94a3b8');
+    const habil = () => { const k = sTipo.value; sHora.disabled = !(k === 'viento' || k === 'lluvia' || k === 'nubes'); sHora.style.opacity = sHora.disabled ? '.4' : '1'; }; sTipo.onchange = habil; habil();
+    const bCap = el('button', 'padding:6px 10px', '📷 Generar captura'), bSub = el('button', 'padding:6px 10px', '🖼 Subir imagen propia'), fi = el('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.style.display = 'none'; bCap.type = bSub.type = 'button';
+    function pintarImgs() {
+      lista.textContent = ''; imgs.forEach((m, i) => {
+        const f = el('div', 'display:flex;gap:8px;align-items:center;background:#0f172a;padding:5px;border-radius:6px'), im = el('img', 'width:96px;height:64px;object-fit:cover;border-radius:4px;cursor:zoom-in'); if (RE_IMG.test(m.dataUrl)) im.src = m.dataUrl; im.onclick = () => zoom(m);
+        const ci = el('input', css + ';flex:1'); ci.maxLength = 80; ci.value = m.titulo; ci.oninput = () => { m.titulo = ci.value; }; const q = el('div', 'font-size:10px;color:#64748b;width:62px', Math.round(m.dataUrl.length * 0.75 / 1000) + ' KB');
+        const b = el('button', 'padding:3px 7px', '🗑'); b.type = 'button'; b.onclick = () => { imgs.splice(i, 1); pintarImgs(); }; f.append(im, ci, q, b); lista.appendChild(f);
+      });
+      bCap.disabled = bSub.disabled = imgs.length >= MAX_IMG; if (imgs.length >= MAX_IMG) msgI.textContent = 'Llegó al máximo de ' + MAX_IMG + ' imágenes.';
+    }
+    bCap.onclick = async () => {
+      if (imgs.length >= MAX_IMG) return; bCap.disabled = true; msgI.style.color = '#94a3b8'; msgI.textContent = 'Generando captura… (descarga de mapa, satélite y modelo)';
+      try {
+        const z = sZona.value, sc = z.indexOf('S:') === 0 ? (teatro().sectores || []).filter(s => s.nombre === z.slice(2))[0] : null, bb = z === 'mapa' ? bboxMapa() : sc ? bboxSector(sc) : bboxTeatro();
+        const r = await capturar(sTipo.value, bb, Number(sHora.value) || 0, sc ? sc.nombre : (z === 'mapa' ? 'vista del mapa' : (t.nombre || 'teatro'))), j = comprimir(r.canvas);
+        imgs.push({ titulo: r.titulo, fuente: r.fuente, w: j.w, h: j.h, dataUrl: j.dataUrl }); msgI.style.color = '#4ade80'; msgI.textContent = '✅ Captura agregada.'; pintarImgs();
+      } catch (e) { msgI.style.color = '#fca5a5'; msgI.textContent = '⚠ ' + (e && e.message || 'No se pudo generar la captura.'); }
+      finally { bCap.disabled = imgs.length >= MAX_IMG; }
+    };
+    bSub.onclick = () => fi.click(); fi.onchange = async () => { const f = fi.files && fi.files[0]; fi.value = ''; if (!f) return; try { const j = await archivoAImagen(f); imgs.push({ titulo: f.name.replace(/\.[^.]+$/, '').slice(0, 60), fuente: 'Imagen aportada por el meteorólogo', w: j.w, h: j.h, dataUrl: j.dataUrl }); msgI.style.color = '#4ade80'; msgI.textContent = '✅ Imagen agregada (puede cambiarle el título).'; pintarImgs(); } catch (e) { msgI.style.color = '#fca5a5'; msgI.textContent = '⚠ ' + e.message; } };
+    fila.append(lt, lz, lh, bCap, bSub, fi); c.append(lista, fila, msgI);
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Satélite y mapas son de fuentes abiertas (NASA, NOAA, OpenStreetMap, modelo GFS). Para radar del SMN u otras fuentes, guarde la imagen y súbala acá.'));
+    // nota y mensaje
+    c.appendChild(tit('4. Nota del meteorólogo (va dentro del reporte)'));
+    const nota = el('textarea', css + ';height:70px'); nota.maxLength = 1000; nota.placeholder = 'Ej.: Frente frío con tormentas fuertes entre las 15 y las 20 h. Se recomienda restringir vuelos y trabajos en altura.'; c.appendChild(nota);
+    c.appendChild(tit('Mensaje que verán en la bandeja'));
+    const ms = el('textarea', css + ';height:50px'); ms.maxLength = 500; ms.value = 'Reporte meteorológico adjunto. Ábralo para ver datos e imágenes y descárguelo en PDF.'; c.appendChild(ms);
+    const res = el('div', 'min-height:18px;margin:10px 0 4px;font-size:12.5px'), bs = el('div', 'display:flex;gap:8px;flex-wrap:wrap');
+    const bp = el('button', 'padding:9px 12px', '⬇ PDF de prueba'), be = el('button', 'flex:1;padding:9px;font-weight:bold;background:#15803d;color:#fff;border:0;border-radius:4px;cursor:pointer', '✉️ Enviar reporte'), bn = el('button', 'padding:9px 12px', 'Cancelar'); bp.type = be.type = bn.type = 'button'; bn.onclick = cerrar; bs.append(bp, be, bn); c.append(res, bs);
+    pintarImgs();
+    async function armar() {
+      const elegidos = sectores.filter(n => cs[n].checked), zonas = []; const sc = teatro() && teatro().sectores ? teatro().sectores : [];
+      elegidos.forEach(n => { const s = sc.filter(x => x.nombre === n && isFinite(x.lat) && isFinite(x.lon))[0]; if (s) zonas.push({ nombre: s.nombre, lat: s.lat, lon: s.lon }); });
+      if (kg.checked) { const c0 = IM().centro(); zonas.unshift({ nombre: 'Zona completa - ' + (c0.nombre || 'teatro'), lat: c0.lat, lon: c0.lon, esGeneral: true }); }
+      const opc = {}; Object.keys(ck).forEach(k => { opc[k] = ck[k].checked; });
+      const secciones = await armarSecciones(opc, zonas);
+      return { elegidos: elegidos, paquete: { titulo: ti.value.trim(), nota: nota.value, zonas: zonas.map(z => z.nombre), secciones: secciones, imagenes: imgs.map(m => ({ titulo: m.titulo || 'Imagen', fuente: m.fuente, w: m.w, h: m.h, dataUrl: m.dataUrl })) } };
+    }
+    bp.onclick = async () => { bp.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Armando el PDF de prueba…'; try { const a = await armar(); a.paquete.generado = Date.now(); construirPDF(a.paquete, (sesionActiva && sesionActiva.nombre) || '').save(nombrePDF(a.paquete)); res.style.color = '#4ade80'; res.textContent = '✅ PDF de prueba descargado (no se envió nada).'; } catch (e) { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (e && e.message || 'No se pudo armar.'); } finally { bp.disabled = false; } };
+    be.onclick = async () => {
+      const elegidos = sectores.filter(n => cs[n].checked); if (!elegidos.length) { res.style.color = '#fca5a5'; res.textContent = 'Elija al menos un sector destinatario.'; return; } if (!ti.value.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Ponga un título.'; return; }
+      be.disabled = bp.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Armando y enviando el reporte…';
+      try {
+        const a = await armar(), r = await api('MSG_ENVIAR', { tipo: 'MENSAJE', tema: 'METEOROLOGICO', prioridad: 'NORMAL', texto: ms.value.trim() || 'Reporte meteorológico adjunto.', sectores: a.elegidos, superiores: ks.checked, paquete: a.paquete });
+        if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (r.message || 'No se pudo enviar.'); be.disabled = bp.disabled = false; return; }
+        res.style.color = '#4ade80'; res.textContent = '✅ Reporte enviado a los sectores elegidos.'; try { if (typeof logEvento === 'function') logEvento('Envió reporte meteorológico: ' + a.paquete.titulo.slice(0, 80)); } catch (_) { /* nada */ }
+        setTimeout(cerrar, 1400);
+      } catch (e) { res.style.color = '#fca5a5'; res.textContent = '⚠ ' + (e && e.message || 'No se pudo enviar.'); be.disabled = bp.disabled = false; }
+    };
+    ventana.appendChild(c); document.body.appendChild(ventana);
+  }
+  function zoom(m) { if (!RE_IMG.test(m.dataUrl)) return; const f = el('div', 'position:fixed;inset:0;z-index:2147483400;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;padding:10px;cursor:zoom-out'), i = el('img', 'max-width:96vw;max-height:92vh;border-radius:6px'); i.src = m.dataUrl; f.appendChild(i); f.onclick = () => f.remove(); document.body.appendChild(f); }
+
+  /* =====================  Quien recibe: ver y descargar en PDF  ===================== */
+  async function traerPaquete(idMsg) { const r = await api('MSG_ADJUNTO', { id: idMsg }); if (r.status !== 'success') throw new Error(r.message || 'No se pudo abrir el reporte.'); return r; }
+  async function ver(idMsg) {
+    if (!autenticado()) return; if ($('reporte-ver')) $('reporte-ver').remove();
+    const f = el('div', 'position:fixed;inset:0;z-index:2147483300;background:rgba(2,6,23,.88);display:flex;align-items:center;justify-content:center;padding:10px'); f.id = 'reporte-ver';
+    const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:16px 18px;width:min(760px,97vw);max-height:94vh;overflow:auto;color:#f8fafc;font:13px sans-serif'); c.appendChild(el('div', 'color:#94a3b8', 'Abriendo el reporte…')); f.appendChild(c); f.onclick = e => { if (e.target === f) f.remove(); }; document.body.appendChild(f);
+    let r; try { r = await traerPaquete(idMsg); } catch (e) { c.textContent = ''; c.appendChild(el('div', 'color:#fca5a5', '⚠ ' + (e && e.message || 'No se pudo abrir.'))); const b = el('button', 'margin-top:10px;padding:6px 12px', 'Cerrar'); b.onclick = () => f.remove(); c.appendChild(b); return; }
+    const p = r.paquete; c.textContent = '';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('h3', 'margin:0;flex:1;font-size:16px', '🌦 ' + p.titulo)); const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = () => f.remove(); cab.appendChild(x); c.appendChild(cab);
+    c.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin:2px 0 8px', 'Emitido ' + new Date(p.generado).toLocaleString('es-AR') + (r.de ? ' por ' + r.de : '') + (p.zonas && p.zonas.length ? ' · Zonas: ' + p.zonas.join(', ') : '')));
+    const bpdf = el('button', 'padding:7px 14px;font-weight:bold;background:#15803d;color:#fff;border:0;border-radius:4px;cursor:pointer', '⬇ Descargar PDF'); bpdf.type = 'button'; bpdf.onclick = () => { try { construirPDF(p, r.de).save(nombrePDF(p)); } catch (e) { alert(e.message); } }; c.appendChild(bpdf);
+    if (p.nota && p.nota.trim()) { c.appendChild(el('div', 'margin-top:10px;font-weight:bold;color:#fca5a5', 'Nota del meteorólogo')); c.appendChild(el('div', 'white-space:pre-wrap;word-break:break-word;background:#0f172a;border-radius:6px;padding:8px;margin-top:3px', p.nota)); }
+    (p.secciones || []).forEach(s => {
+      c.appendChild(el('div', 'margin-top:12px;font-weight:bold;color:#7dd3fc', s.titulo)); if (s.texto) c.appendChild(el('div', 'white-space:pre-wrap;word-break:break-word;margin-top:3px;font-size:12.5px', s.texto));
+      if (s.cols && s.cols.length && s.filas && s.filas.length) { const w = el('div', 'overflow-x:auto;margin-top:4px'), tb = el('table', 'border-collapse:collapse;font-size:11.5px;width:100%'), th = el('tr'); s.cols.forEach(h => th.appendChild(el('th', 'text-align:left;padding:3px 6px;background:#334155;border:1px solid #475569;white-space:nowrap', h))); tb.appendChild(th);
+        s.filas.forEach(fl => { const tr = el('tr'); fl.forEach(v => tr.appendChild(el('td', 'padding:3px 6px;border:1px solid #334155;vertical-align:top', v))); tb.appendChild(tr); }); w.appendChild(tb); c.appendChild(w); }
+    });
+    (p.imagenes || []).forEach(m => { if (!RE_IMG.test(m.dataUrl)) return; c.appendChild(el('div', 'margin-top:12px;font-weight:bold;color:#7dd3fc', m.titulo)); const im = el('img', 'max-width:100%;border-radius:6px;margin-top:3px;cursor:zoom-in'); im.src = m.dataUrl; im.alt = m.titulo; im.onclick = () => zoom(m); c.appendChild(im); if (m.fuente) c.appendChild(el('div', 'font-size:10.5px;color:#64748b', 'Fuente: ' + m.fuente)); });
+    c.appendChild(el('div', 'margin-top:12px;font-size:11px;color:#64748b', 'Producto de apoyo a la decisión: no reemplaza los avisos oficiales del Servicio Meteorológico Nacional. Es una foto del momento de la emisión.'));
+  }
+  async function pdf(idMsg, boton) {
+    if (!autenticado()) return; const t0 = boton ? boton.textContent : ''; if (boton) { boton.disabled = true; boton.textContent = '…'; }
+    try { const r = await traerPaquete(idMsg); construirPDF(r.paquete, r.de).save(nombrePDF(r.paquete)); } catch (e) { alert(e && e.message || 'No se pudo descargar.'); }
+    finally { if (boton) { boton.disabled = false; boton.textContent = t0; } }
+  }
+
+  /* =====================  Boton del Meteorologo  ===================== */
+  function boton() {
+    if (!esMeteo()) { const x = $('btn-reporte-meteo'); if (x) x.remove(); return; }
+    if ($('btn-reporte-meteo')) return; const ref = $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const b = el('button', 'margin-right:6px', '📤 Reporte'); b.id = 'btn-reporte-meteo'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.title = 'Armar y enviar un reporte meteorológico con datos e imágenes'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref);
+  }
+  setInterval(() => { boton(); if (!autenticado() && ventana) { ventana.remove(); ventana = null; } }, 2000);
+  window.aresReporteMeteo = { abrir: abrir, ver: ver, pdf: pdf, capturar: capturar, comprimir: comprimir, construirPDF: construirPDF, proyeccion: proyeccion };
+})();
+</script>
+<!-- ===== FIN BLOQUE REPORTE METEO ===== -->
 </body>
 </html>
