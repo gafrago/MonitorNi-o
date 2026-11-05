@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-i</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-j</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbw537uzM-EpwNozk6hsWk8If5koDVmbdmh2Ic9l2DVSeWoGimgbAw7GKptN7pxa88v_dg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXWPyo71FV_CyQtOjDpobrOaM2sC0gPjV37Bu7pJpvXL2_BByTpjX7mIJEShw-aHJvgg/exec";
 
 
 ;
@@ -1279,14 +1279,19 @@ function inicializarMapaRadar() {
   cargarRadar(); setInterval(cargarRadar, 600000); radarCargado = true;
 }
 
-function generarSITREP() {
+async function generarSITREP() {
+  /* Antes de armar el parte se refrescan tareas, fases, meteorologia y manchas (hasta 5 s); si el servidor no responde se usa lo ya cargado */
+  try {
+    const w = window, tareas = [w.aresTareas && w.aresTareas.recargar, w.aresFases && w.aresFases.recargar, w.aresMeteo && w.aresMeteo.recargar, w.aresMancha && w.aresMancha.actualizar].filter(f => typeof f === 'function');
+    await Promise.race([Promise.all(tareas.map(f => Promise.resolve().then(() => f()).catch(() => null))), new Promise(r => setTimeout(r, 5000))]);
+  } catch (_) { /* se sigue con los datos que ya estan en pantalla */ }
   const { jsPDF } = window.jspdf, doc = new jsPDF();
   const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
-  doc.setFontSize(15); doc.setTextColor(30, 41, 59); const tn = String((window.ARES_TEATRO && window.ARES_TEATRO.nombre) || '').trim(); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP" + (tn ? " - " + tn.toUpperCase() : "") + ")", 14, 18);
+  doc.setFontSize(15); doc.setTextColor(30, 41, 59); const tn = String((window.ARES_TEATRO && window.ARES_TEATRO.nombre) || '').trim(); const ttlS = "PARTE DIARIO OPERATIVO CONJUNTO (SITREP" + (tn ? " - " + tn.toUpperCase() : "") + ")"; let fsT = 15; if (typeof doc.getTextWidth === 'function') { while (fsT > 8 && doc.getTextWidth(ttlS) > 182) { fsT -= 0.5; doc.setFontSize(fsT); } } doc.text(ttlS, 14, 18);
   doc.setFontSize(9.5); doc.text(`Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
   doc.text(`Operador a cargo: ${sesionActiva.nombre || 'N/A'}`, 14, 31);
   if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 37); }
-  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometria y caudales (carga manual PNA/INA + GloFAS)", 14, 44);
+  doc.setFontSize(11); doc.setTextColor(41, 128, 185); doc.text("1. Hidrometría y caudales (carga manual PNA/INA + GloFAS)", 14, 44);
   doc.autoTable({ startY: 47, head: [['Estacion', 'Rio', 'Altura', 'Alerta', 'Evac.', 'Estado', 'Carga', 'Q (INA / GloFAS)']],
     body: estacionesHidro.map(h => [h.estacion, h.rio, `${Number(h.actual).toFixed(2)} m`, `${Number(h.alerta).toFixed(2)}`, `${Number(h.evacuacion).toFixed(2)}`, estadoHidro(h).txt, h.ejemplo ? 'EJEMPLO' : edadTxt(h.ts), textoQ(h).replace(/[▲▼▬🛡️🛰️]/g, '').trim()]),
     headStyles: { fillColor: [41, 128, 185] }, styles: { fontSize: 8 } });
@@ -1295,8 +1300,57 @@ function generarSITREP() {
   const recursosActivos = recursos.filter(r => String(r.estado).toUpperCase() !== 'BAJA');
   doc.autoTable({ startY: y + 3, head: [['Org.', 'Detalle', 'Sector', 'Estado', 'Fuente', 'Antiguedad']], body: recursosActivos.map(r => [r.inst, r.nombre, r.sector, r.estado, r.operador || 'S/D', edadTxt(r.timestamp)]), headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 8 } });
   
-  y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitacora (ultimos eventos)", 14, y);
+  y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitácora (últimos eventos)", 14, y);
   doc.autoTable({ startY: y + 3, head: [['Hora', 'Evento']], body: bitacora.slice(0, 10).map(b => [fmtFecha(b.ts), b.t]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } });
+  /* ---------- 4. Tareas, 5. Línea de tiempo y fases, 6. Meteorología ---------- */
+  const W = window, ahora = Date.now(), p2 = n => ('0' + n).slice(-2);
+  const tit = (txt, rgb) => { y = doc.lastAutoTable.finalY + 8; if (y > 262) { doc.addPage(); y = 18; } doc.setFontSize(11); doc.setTextColor(rgb[0], rgb[1], rgb[2]); doc.text(txt, 14, y); doc.setFontSize(9); doc.setTextColor(60, 60, 60); };
+  const nota = (txt) => { const l = doc.splitTextToSize(txt, 182); doc.text(l, 14, y + 6); doc.lastAutoTable = { finalY: y + 6 + l.length * 4 }; };
+  const fHora = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const fOff = m => 'H' + (m < 0 ? '-' : '+') + p2(Math.floor(Math.abs(m) / 60)) + ':' + p2(Math.abs(m) % 60);
+  const corta = (t, n) => { t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  const T_EST = { PENDIENTE: 'Pendiente', RECIBIDA: 'Recibida', EN_EJECUCION: 'En ejecución', CUMPLIDA: 'Cumplida', NO_CUMPLIDA: 'No cumplida', CANCELADA: 'Cancelada' };
+  const PESO = { URGENTE: 3, ALTA: 2, NORMAL: 1, BAJA: 0 }, ACT = ['PENDIENTE', 'RECIBIDA', 'EN_EJECUCION'];
+  let tareasL = null, fasesL = null, hh = null, partesL = null, zonasL = null, manchasL = null;
+  try { tareasL = W.aresTareas ? W.aresTareas.lista() : null; } catch (_) { tareasL = null; }
+  try { fasesL = W.aresFases ? W.aresFases.lista() : null; hh = W.aresFases ? W.aresFases.hhora() : null; } catch (_) { fasesL = null; }
+  try { partesL = W.aresMeteo && W.aresMeteo.partes ? W.aresMeteo.partes() : null; zonasL = W.aresMeteo && W.aresMeteo.zonas ? W.aresMeteo.zonas() : null; } catch (_) { partesL = null; }
+  try { manchasL = W.aresMancha ? W.aresMancha.lista() : null; } catch (_) { manchasL = null; }
+
+  if (tareasL) {
+    const activas = tareasL.filter(t => ACT.indexOf(t.estado) >= 0), venc = activas.filter(t => t.vence && t.vence < ahora), cuenta = e => tareasL.filter(t => t.estado === e).length;
+    tit('4. Tareas asignadas', [124, 58, 237]);
+    nota('Total ' + tareasL.length + ' · Activas ' + activas.length + ' (pendientes ' + cuenta('PENDIENTE') + ', recibidas ' + cuenta('RECIBIDA') + ', en ejecución ' + cuenta('EN_EJECUCION') + ') · Cumplidas ' + cuenta('CUMPLIDA') + ' · No cumplidas ' + cuenta('NO_CUMPLIDA') + ' · Canceladas ' + cuenta('CANCELADA') + (venc.length ? ' · VENCIDAS sin cerrar: ' + venc.length : '') + '.');
+    if (activas.length) {
+      const orden = activas.slice().sort((x, y) => (PESO[y.prioridad] || 0) - (PESO[x.prioridad] || 0) || (x.vence || 9e15) - (y.vence || 9e15)), MAXF = 35;
+      doc.autoTable({ startY: doc.lastAutoTable.finalY + 2, head: [['Prio.', 'Tarea', 'Unidad', 'Responsable', 'Fase', 'Estado', 'Vence']],
+        body: orden.slice(0, MAXF).map(t => [t.prioridad, corta(t.titulo, 60), corta(t.unidad || '-', 28), corta(t.responsable || 'Sin asignar', 26), corta(t.fase || '-', 20), T_EST[t.estado] || t.estado, t.vence ? fHora(t.vence) + (t.vence < ahora ? ' VENCIDA' : '') : '-']),
+        headStyles: { fillColor: [124, 58, 237] }, styles: { fontSize: 8 }, didParseCell: d => { if (d.section === 'body' && /VENCIDA/.test(String(d.row.raw[6])) ) d.cell.styles.textColor = [192, 57, 43]; } });
+      if (orden.length > MAXF) nota('… y ' + (orden.length - MAXF) + ' tarea(s) activa(s) más en el tablero de Tareas.');
+    } else nota('No hay tareas activas.');
+  }
+  if (fasesL && (fasesL.length || hh)) {
+    tit('5. Línea de tiempo por fases', [8, 145, 178]);
+    const off = hh ? Math.round((ahora - hh) / 60000) : null, cur = fasesL.filter(f => off !== null && off >= f.desde && off < f.hasta);
+    nota(hh ? ('H-hora: ' + fHora(hh) + ' · Ahora: ' + fOff(off) + ' · Fase en curso: ' + (cur.length ? cur.map(f => f.nombre).join(', ') : 'ninguna')) : 'H-hora sin fijar: las fases se muestran solo como referencia.');
+    if (fasesL.length) doc.autoTable({ startY: doc.lastAutoTable.finalY + 2, head: [['Fase', 'Desde', 'Hasta', 'Situación', 'Tareas activas']],
+      body: fasesL.map(f => [corta(f.nombre, 40), fOff(f.desde), fOff(f.hasta), off === null ? '-' : (off >= f.hasta ? 'Concluida' : (off >= f.desde ? 'EN CURSO' : 'Próxima')), tareasL ? tareasL.filter(t => t.faseId === f.id && ACT.indexOf(t.estado) >= 0).length : '-']),
+      headStyles: { fillColor: [8, 145, 178] }, styles: { fontSize: 8 }, didParseCell: d => { if (d.section === 'body' && d.row.raw[3] === 'EN CURSO') d.cell.styles.fontStyle = 'bold'; } });
+  }
+  if (partesL || (zonasL && zonasL.length) || (manchasL && manchasL.length)) {
+    tit('6. Situación meteorológica', [3, 105, 161]);
+    const SEV = { INFO: 0, PRECAUCION: 1, ALERTA: 2, CRITICA: 3 };
+    const vig = (partesL || []).filter(p => !p.vence || p.vence > ahora).sort((x, y) => (SEV[String(y.sev).toUpperCase()] || 0) - (SEV[String(x.sev).toUpperCase()] || 0) || y.ts - x.ts);
+    const sobre = estacionesHidro.filter(h => isFinite(h.actual) && ((isFinite(h.evacuacion) && h.actual >= h.evacuacion) || (isFinite(h.alerta) && h.actual >= h.alerta)));
+    nota('Partes meteorológicos vigentes: ' + vig.length + ' · Estaciones hidrométricas en alerta o evacuación: ' + sobre.length + (sobre.length ? ' (' + sobre.map(h => h.estacion).join(', ') + ')' : '') + '.');
+    if (vig.length) doc.autoTable({ startY: doc.lastAutoTable.finalY + 2, head: [['Severidad', 'Alcance', 'Parte', 'Emitido', 'Vence']],
+      body: vig.slice(0, 15).map(p => [String(p.sev || '-').toUpperCase(), corta(p.zona || p.sector || 'Todo el teatro', 28), corta(p.titulo + ' — ' + p.texto, 220), fHora(p.ts), p.vence ? fHora(p.vence) : '-']),
+      headStyles: { fillColor: [3, 105, 161] }, styles: { fontSize: 8 }, columnStyles: { 2: { cellWidth: 80 } } });
+    if (zonasL && zonasL.length) { tit('Zonas de seguimiento del Meteorólogo', [3, 105, 161]); doc.autoTable({ startY: y + 3, head: [['Zona', 'Radio', 'Notas']], body: zonasL.map(z => [corta(z.nombre, 40), z.radio + ' km', corta(z.notas || '-', 90)]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } }); }
+    if (manchasL && manchasL.length) { tit('Manchas de inundación compartidas', [220, 38, 38]); doc.autoTable({ startY: y + 3, head: [['Mancha', 'Fuente', 'Cargada por', 'Fecha']], body: manchasL.map(m => [corta(m.nombre, 50), corta(m.fuente || '-', 30), corta(m.autor || '-', 30), fHora(m.ts)]), headStyles: { fillColor: [220, 38, 38] }, styles: { fontSize: 8 } }); }
+  }
+  const nPag = doc.getNumberOfPages();
+  for (let i = 1; i <= nPag; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120, 120, 120); doc.text('A.R.E.S. C4I' + (tn ? ' · ' + tn : '') + ' · Emitido ' + fHora(ahora) + ' · Página ' + i + ' de ' + nPag, 14, 290); }
   doc.save(`SITREP_${(tn || 'COP').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'COP'}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
@@ -5148,7 +5202,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { abrir: abrir, recargar: cargarPartes, zonas: zonas, selectorDestino: selectorDestino, estiloSel: estiloSel };
+  window.aresMeteo = { abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
@@ -6556,5 +6610,210 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE VISTAS ===== -->
+<!-- ===== INICIO BLOQUE MANCHA: pegar DESPUES de bloque-rios (o en cualquier lugar antes de </body>); el ensamblador lo ubica solo ===== -->
+<style id="mancha-css">
+  .mancha-lista { margin: 6px 0; font-size: 12px; color: #1e293b; }
+  .mancha-lista .mancha-fila { display: flex; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px solid #e2e8f0; }
+  .mancha-lista .mancha-fila > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .mancha-lista small { color: #64748b; display: block; }
+  .mancha-lista button { font-size: 11px; padding: 2px 7px; border: 1px solid #94a3b8; border-radius: 4px; background: #f1f5f9; color: #1e293b; cursor: pointer; }
+</style>
+<script>
+/* A.R.E.S.: mancha de inundacion COMPARTIDA con todo el teatro.
+   - La cargan (.geojson) el Meteorologo y el Administrador; la ven todos los usuarios del teatro en su mapa tactico.
+   - Antes de subir, el archivo se simplifica en el navegador (solo poligonos, 5 decimales, menos vertices) para que entre en la planilla.
+   - El servidor vuelve a validar y reconstruye la geometria; hasta 5 manchas por teatro; las borra su autor o el Administrador.
+   - Se guarda una copia en el navegador: sin conexion sigue viendose la ultima mancha recibida. Todo texto con textContent. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
+  const auth = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const rol = () => { try { return String(sesionActiva.rol || '').trim().toLowerCase(); } catch (_) { return ''; } };
+  const miMail = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  const teatroId = () => { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } };
+  const puedeCargar = () => auth() && (rol() === 'meteorologo' || rol() === 'administrador');
+  const mapa = () => { try { return mapTactico || null; } catch (_) { return null; } };
+  const aviso = t => { try { if (window.toast) window.toast(t); else alert(t); } catch (_) { /* nada */ } };
+  const fh = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const LIM_BYTES = 400000, LIM_VERT = 25000;
+
+  /* ---------- Simplificacion en el navegador ---------- */
+  function poligonos(g, acc, cnt) {                   // junta los poligonos de cualquier GeoJSON; cuenta lo que se descarta
+    if (!g || typeof g !== 'object') return;
+    if (g.type === 'Polygon' && Array.isArray(g.coordinates)) acc.push(g.coordinates);
+    else if (g.type === 'MultiPolygon' && Array.isArray(g.coordinates)) g.coordinates.forEach(p => acc.push(p));
+    else if (g.type === 'Feature') poligonos(g.geometry, acc, cnt);
+    else if (g.type === 'FeatureCollection' && Array.isArray(g.features)) g.features.forEach(f => poligonos(f, acc, cnt));
+    else if (g.type === 'GeometryCollection' && Array.isArray(g.geometries)) g.geometries.forEach(x => poligonos(x, acc, cnt));
+    else if (g.type) cnt.otros++;
+  }
+  function dp(pts, eps) {                             // Douglas-Peucker iterativo (sin recursion: soporta anillos enormes)
+    if (eps <= 0 || pts.length < 5) return pts.slice();
+    const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+    const pila = [[0, pts.length - 1]];
+    while (pila.length) {
+      const [a, b] = pila.pop(); let mx = 0, ix = -1;
+      const ax = pts[a][0], ay = pts[a][1], dx = pts[b][0] - ax, dy = pts[b][1] - ay, l2 = dx * dx + dy * dy;
+      for (let i = a + 1; i < b; i++) {
+        let d;
+        if (l2 === 0) d = Math.hypot(pts[i][0] - ax, pts[i][1] - ay);
+        else { const t = Math.max(0, Math.min(1, ((pts[i][0] - ax) * dx + (pts[i][1] - ay) * dy) / l2)); d = Math.hypot(pts[i][0] - (ax + t * dx), pts[i][1] - (ay + t * dy)); }
+        if (d > mx) { mx = d; ix = i; }
+      }
+      if (ix > 0 && mx > eps) { keep[ix] = 1; pila.push([a, ix], [ix, b]); }
+    }
+    return pts.filter((_, i) => keep[i]);
+  }
+  function simplificar(polis, eps) {
+    const R = v => Math.round(v * 1e5) / 1e5; let vert = 0; const salida = [];
+    polis.forEach(p => {
+      const anillos = [];
+      p.forEach(r => {
+        if (!Array.isArray(r)) return;
+        let q = r.filter(c => Array.isArray(c) && isFinite(c[0]) && isFinite(c[1])).map(c => [R(+c[0]), R(+c[1])]);
+        q = q.filter((c, i) => i === 0 || c[0] !== q[i - 1][0] || c[1] !== q[i - 1][1]);
+        if (q.length > 1 && (q[0][0] !== q[q.length - 1][0] || q[0][1] !== q[q.length - 1][1])) q.push(q[0].slice());
+        q = dp(q, eps);
+        if (q.length >= 4) { anillos.push(q); vert += q.length; }
+      });
+      if (anillos.length) salida.push(anillos);
+    });
+    return { polis: salida, vert: vert };
+  }
+  function preparar(gj) {
+    const acc = [], cnt = { otros: 0 }; poligonos(gj, acc, cnt);
+    if (!acc.length) throw new Error('El archivo no contiene polígonos de agua (solo se comparten polígonos; los puntos y líneas se ignoran).');
+    let usada = 0, res = null, txt = '';
+    for (const eps of [0, 0.00005, 0.0001, 0.0002, 0.0004, 0.0008, 0.0015, 0.003, 0.006, 0.012]) {
+      res = simplificar(acc, eps); usada = eps;
+      if (!res.polis.length) continue;
+      txt = JSON.stringify({ type: 'MultiPolygon', coordinates: res.polis });
+      if (res.vert <= LIM_VERT && txt.length <= LIM_BYTES) break;
+      txt = '';
+    }
+    if (!txt) throw new Error('El polígono es demasiado complejo incluso simplificado. Reduzca el archivo (por ejemplo con mapshaper.org).');
+    return { texto: txt, vertices: res.vert, poligonos: res.polis.length, eps: usada, ignorados: cnt.otros, original: acc.reduce((s, p) => s + p.reduce((t, r) => t + (Array.isArray(r) ? r.length : 0), 0), 0) };
+  }
+
+  /* ---------- Estado, copia local y dibujo ---------- */
+  let lista = [], capas = {}, cargas = {}, grupo = null, ultimoTeatro = '', primera = true, puedeEd = false, cont = null;
+  const LS = () => 'ares_manchas_v1_' + teatroId();
+  function guardarLocal() { try { const o = {}; Object.keys(cargas).forEach(id => { o[id] = cargas[id]; }); const s = JSON.stringify({ lista: lista, datos: o }); if (s.length < 3500000) localStorage.setItem(LS(), s); } catch (_) { /* sin almacenamiento: solo se pierde la copia sin conexion */ } }
+  function leerLocal() { try { const o = JSON.parse(localStorage.getItem(LS())); if (o && Array.isArray(o.lista)) { lista = o.lista; cargas = o.datos || {}; return true; } } catch (_) { /* nada */ } return false; }
+  function limpiar() { Object.keys(capas).forEach(id => { try { capas[id].remove(); } catch (_) { /* nada */ } }); capas = {}; cargas = {}; lista = []; if (grupo) { try { grupo.remove(); } catch (_) { /* nada */ } grupo = null; } }
+  function visible() { const c = $('chk-inundaciones'); return !document.body.classList.contains('mod-no-hidrico') && (!c || c.checked); }
+  function dibujar(m) {
+    const mp = mapa(); if (!mp || !cargas[m.id]) return;
+    if (!grupo) grupo = L.layerGroup();
+    if (capas[m.id]) { try { grupo.removeLayer(capas[m.id]); } catch (_) { /* nada */ } }
+    const l = L.geoJSON(cargas[m.id].geojson, { style: () => ({ color: '#dc2626', weight: 2, fillColor: '#ef4444', fillOpacity: 0.4 }), interactive: true });
+    const pop = el('div', 'font-size:12px;min-width:190px');
+    pop.appendChild(el('b', 'color:#dc2626', '🌊🟥 ' + m.nombre)); pop.appendChild(el('br'));
+    pop.appendChild(el('small', 'color:#475569', 'Mancha de inundación compartida' + (m.fuente ? ' · fuente: ' + m.fuente : ''))); pop.appendChild(el('br'));
+    pop.appendChild(el('small', 'color:#475569', 'Cargada por ' + (m.autor || 's/d') + ' · ' + fh(m.ts)));
+    l.bindPopup(pop); capas[m.id] = l; grupo.addLayer(l);
+  }
+  function sincVisibilidad() {
+    const mp = mapa(); if (!mp || !grupo) return;
+    const v = visible(), puesto = mp.hasLayer(grupo);
+    if (v && !puesto) grupo.addTo(mp); else if (!v && puesto) mp.removeLayer(grupo);
+  }
+  let ocupado = false;
+  async function actualizar() {
+    if (!auth() || ocupado) return; ocupado = true;
+    try {
+      const r = await api('MET_MANCHA_LISTAR'); if (r.status !== 'success') throw new Error(r.message || 'sin datos');
+      puedeEd = !!r.puedeEditar;
+      const ids = {};
+      for (const m of r.manchas) {
+        ids[m.id] = 1;
+        if (!cargas[m.id] || cargas[m.id].ts !== m.ts) {
+          const d = await api('MET_MANCHA_LEER', { id: m.id });
+          if (d.status === 'success') { cargas[m.id] = { ts: m.ts, geojson: d.geojson }; dibujar(m); }
+        } else if (!capas[m.id]) dibujar(m);
+      }
+      Object.keys(capas).forEach(id => { if (!ids[id]) { try { grupo.removeLayer(capas[id]); } catch (_) { /* nada */ } delete capas[id]; delete cargas[id]; } });
+      const previas = {}; lista.forEach(x => { previas[x.id] = 1; });
+      lista = r.manchas; if (!primera) lista.forEach(x => { if (!previas[x.id] && cargas[x.id]) aviso('🌊 Nueva mancha de inundación compartida: ' + x.nombre); });
+      primera = false; guardarLocal(); pintarListas(); sincVisibilidad();
+    } catch (e) {
+      if (primera && !lista.length && leerLocal()) { lista.forEach(dibujar); pintarListas(); sincVisibilidad(); }   // sin conexion: ultima copia conocida
+    } finally { ocupado = false; }
+  }
+
+  /* ---------- Lista y borrado ---------- */
+  function puedeBorrar(m) { return auth() && (rol() === 'administrador' || (rol() === 'meteorologo' && m.autorEmail === miMail())); }
+  function ver(m) { const mp = mapa(); if (!mp || !capas[m.id]) return; const c = $('chk-inundaciones'); if (c && !c.checked) { c.checked = true; try { c.onchange && c.onchange(); } catch (_) { /* nada */ } } sincVisibilidad(); try { const b = capas[m.id].getBounds(); if (b.isValid()) mp.fitBounds(b, { padding: [30, 30], animate: false }); } catch (_) { /* nada */ } }
+  async function borrar(m) {
+    if (!confirm('¿Borrar la mancha "' + m.nombre + '" para todo el teatro?')) return;
+    try { const r = await api('MET_MANCHA_BORRAR', { id: m.id }); if (r.status !== 'success') return alert(r.message || 'No se pudo borrar.'); await actualizar(); aviso('Mancha borrada.'); } catch (_) { alert('Sin conexión con el servidor.'); }
+  }
+  function pintarUna(c) {
+    c.textContent = '';
+    c.appendChild(el('div', 'font-weight:bold;margin-bottom:2px', '🌊 Manchas compartidas con el teatro (' + lista.length + ')'));
+    if (!lista.length) { c.appendChild(el('div', 'color:#64748b', 'No hay manchas cargadas.')); return; }
+    lista.forEach(m => {
+      const f = el('div'); f.className = 'mancha-fila';
+      const t = el('span', '', m.nombre); t.appendChild(el('small', '', (m.autor || 's/d') + ' · ' + fh(m.ts) + (m.fuente ? ' · ' + m.fuente : '')));
+      const b1 = el('button', '', '🎯 Ver'); b1.type = 'button'; b1.onclick = () => ver(m); f.append(t, b1);
+      if (puedeBorrar(m)) { const b2 = el('button', 'color:#b91c1c', '🗑'); b2.type = 'button'; b2.title = 'Borrar para todos'; b2.onclick = () => borrar(m); f.appendChild(b2); }
+      c.appendChild(f);
+    });
+  }
+  function pintarListas() { document.querySelectorAll('.mancha-lista').forEach(pintarUna); }
+  function instalarListas() {
+    const sitios = [];
+    const rp = $('rios-panel'); if (rp) rp.querySelectorAll('details').forEach(d => { const s = d.querySelector('summary'); if (s && /Mancha de inundaci/.test(s.textContent)) sitios.push(d.lastElementChild || d); });
+    const pa = $('panel-auto-inundaciones'); if (pa) sitios.push(pa);
+    sitios.forEach(host => {
+      if (host.querySelector(':scope > .mancha-lista, :scope .mancha-lista')) return;
+      const c = el('div'); c.className = 'mancha-lista'; host.appendChild(c); pintarUna(c);
+    });
+    if (rp) rp.querySelectorAll('div').forEach(d => { if (d.children.length === 0 && /Solo se ve en su propia pantalla/.test(d.textContent)) d.textContent = 'Cargue el polígono de agua (CONAE, IGN, etc.): se simplifica y se comparte con todo el teatro (máx. 5 manchas).'; });
+  }
+
+  /* ---------- Carga de archivo (reemplaza la carga local de .geojson) ---------- */
+  function envolver() {
+    const previa = window.cargarArchivoInundacionOCortes; if (typeof previa !== 'function' || previa.__mancha) return;
+    const g = async function (ev) {
+      const f = ev && ev.target && ev.target.files && ev.target.files[0]; if (!f) return;
+      if (!/\.(geojson|json)$/i.test(f.name)) return previa.apply(this, arguments);        // .csv / .txt: cortes viales, como siempre
+      const entrada = ev.target;
+      try {
+        if (!puedeCargar()) { alert('Solo el Meteorólogo o el Administrador cargan la mancha de inundación.'); return; }
+        let gj; try { gj = JSON.parse(await f.text()); } catch (_) { alert('El archivo no es un GeoJSON válido.'); return; }
+        let p; try { p = preparar(gj); } catch (e) { alert(e.message); return; }
+        const base = f.name.replace(/\.(geojson|json)$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 60);
+        const nombre = prompt('Nombre de la mancha (se comparte con todo el teatro).\n' + p.poligonos + ' polígono(s), ' + p.vertices + ' vértices' + (p.original > p.vertices ? ' (de ' + p.original + ' originales)' : '') + (p.ignorados ? '. Se ignoraron ' + p.ignorados + ' elemento(s) que no son polígonos.' : '') + '.', base);
+        if (nombre === null) return; if (!nombre.trim()) { alert('Escriba un nombre.'); return; }
+        const r = await api('MET_MANCHA_GUARDAR', { nombre: nombre.trim(), fuente: f.name.slice(0, 60), geojson: p.texto });
+        if (r.status !== 'success') { alert(r.message || 'El servidor no aceptó la mancha.'); return; }
+        await actualizar();
+        const m = lista.filter(x => x.id === r.id)[0]; if (m) ver(m);
+        aviso('✅ Mancha "' + nombre.trim() + '" compartida con todo el teatro.');
+      } catch (e) { if (String(e && e.message) !== 'sesion') alert('No se pudo subir la mancha: ' + ((e && e.message) || 'sin conexión.')); }
+      finally { try { entrada.value = ''; } catch (_) { /* nada */ } }
+    };
+    g.__mancha = true; g.__previa = previa; window.cargarArchivoInundacionOCortes = g;
+  }
+
+  setInterval(() => {
+    try {
+      if (!auth()) { if (ultimoTeatro) { limpiar(); ultimoTeatro = ''; primera = true; } pintarListas(); return; }
+      const t = teatroId(); if (t !== ultimoTeatro) { limpiar(); ultimoTeatro = t; primera = true; leerLocal(); lista.forEach(dibujar); actualizar(); }
+      envolver(); instalarListas(); sincVisibilidad();
+    } catch (_) { /* un fallo visual no debe frenar la app */ }
+  }, 1000);
+  setInterval(() => { if (auth()) actualizar(); }, 90000);
+  window.aresMancha = { actualizar: actualizar, lista: () => lista.slice(), preparar: preparar, visible: visible };
+})();
+</script>
+<!-- ===== FIN BLOQUE MANCHA ===== -->
 </body>
 </html>
