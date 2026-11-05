@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-g</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-h</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -331,7 +331,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbx3D3ztkmj-qC_428t0_yofm9LudaBDqglDclniOcyN8OYVCoHu6uxDSj8npcH4zzeFIQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyHvJbFnEMg6xKGPHoJaZn3-icQaG2mMLI7i1F3awdZ8rVt7fYpsDqfc3auAWy5STFNRg/exec";
 
 
 ;
@@ -6255,6 +6255,312 @@ window.addEventListener('DOMContentLoaded', () => {
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  const SUELTOS = ['btn-mensajes', 'btn-tareas'];
+  const GRUPOS = [
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios'] },
+    { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-reporte-meteo', 'btn-rios'] },
+    { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
+  ];
+  let cont = null;
+  const sesion = () => { try { return !!(sesionActiva && sesionActiva.autenticado); } catch (_) { return true; } };
+  const visible = b => { try { return !!b && getComputedStyle(b).display !== 'none'; } catch (_) { return false; } };
+  function cerrarTodos(salvo) { if (!cont) return; cont.querySelectorAll('.am-grupo.abierto').forEach(g => { if (g !== salvo) g.classList.remove('abierto'); }); }
+  function asegurarContenedor() {
+    if (cont && document.body.contains(cont)) return true;
+    const banner = $('top-banner'); if (!banner) return false;
+    const der = banner.querySelector('#sync-status'); const padre = der ? der.parentNode : banner.lastElementChild; if (!padre) return false;
+    cont = document.createElement('span'); cont.id = 'ares-menus';
+    GRUPOS.forEach(g => {
+      const w = document.createElement('span'); w.className = 'am-grupo am-vacio'; w.dataset.k = g.k;
+      const t = document.createElement('button'); t.type = 'button'; t.className = 'btn-pdf am-toggle'; t.textContent = g.txt + ' ▾'; t.setAttribute('aria-haspopup', 'true'); t.setAttribute('aria-expanded', 'false');
+      const p = document.createElement('div'); p.className = 'am-panel'; p.setAttribute('role', 'menu');
+      t.onclick = e => { e.stopPropagation(); const abre = !w.classList.contains('abierto'); cerrarTodos(null); w.classList.toggle('abierto', abre); t.setAttribute('aria-expanded', abre ? 'true' : 'false'); };
+      p.onclick = e => { if (e.target.closest('button')) setTimeout(() => cerrarTodos(null), 0); };            // al elegir una opcion el menu se cierra (la accion del boton ya corrio)
+      w.append(t, p); cont.appendChild(w);
+    });
+    padre.insertBefore(cont, padre.firstChild);
+    return true;
+  }
+  function ordenar(padre, lista, antesDe) {                    // coloca los elementos en el orden dado; solo toca el DOM si hace falta
+    let ref = antesDe || null;
+    for (let i = lista.length - 1; i >= 0; i--) { const e = lista[i]; if (e.parentNode !== padre || e.nextSibling !== ref) padre.insertBefore(e, ref); ref = e; }
+  }
+  function adoptar() {
+    const sit = document.querySelector('#top-banner button[onclick*="generarSITREP"]'); if (sit && !sit.id) sit.id = 'btn-sitrep';
+    if (!asegurarContenedor()) return;
+    const sueltos = SUELTOS.map($).filter(Boolean); ordenar(cont, sueltos, cont.querySelector('.am-grupo'));
+    GRUPOS.forEach(g => {
+      const w = cont.querySelector('.am-grupo[data-k="' + g.k + '"]'), p = w.querySelector('.am-panel'), its = g.items.map($).filter(Boolean);
+      ordenar(p, its, null);
+      its.forEach(b => { if (b.style.marginRight) b.style.marginRight = ''; });
+      const hay = sesion() && its.some(visible); w.classList.toggle('am-vacio', !hay); if (!hay) w.classList.remove('abierto');
+    });
+  }
+  document.addEventListener('click', e => { if (cont && !e.target.closest('#ares-menus')) cerrarTodos(null); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarTodos(null); });
+  setInterval(adoptar, 700); adoptar();
+  window.aresMenus = { abrir: k => { adoptar(); const w = cont && cont.querySelector('.am-grupo[data-k="' + k + '"]'); if (w) { cerrarTodos(null); w.classList.add('abierto'); } }, cerrar: () => cerrarTodos(null) };
+})();
+</script>
+<!-- ===== FIN BLOQUE MENUS ===== -->
+<!-- ===== INICIO BLOQUE RIOS: pegar DESPUES de bloque-menus (o en cualquier lugar antes de </body>); el ensamblador lo ubica solo ===== -->
+<style id="rios-css">
+  #rios-panel { position: fixed; z-index: 2147483100; top: 56px; right: 10px; width: min(420px, calc(100vw - 20px)); max-height: calc(100vh - 70px); overflow: auto; background: #f8fafc; color: #1e293b; border: 1px solid #94a3b8; border-radius: 8px; padding: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.55); font: 13px sans-serif; display: none; }
+  #rios-panel.abierto { display: block; }
+  #rios-panel h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+  #rios-panel details.form-panel { margin: 8px 0; }
+  .rios-oculto { display: none !important; }
+</style>
+<script>
+/* A.R.E.S.: carga de niveles de rios y archivos de inundacion segun el rol.
+   - Niveles de rios (PDF de Prefectura, texto pegado, carga manual, sincronizar INA): Meteorologo y Administrador (respaldo).
+   - Mancha de inundacion (.geojson): Meteorologo y Administrador.
+   - Cortes viales (.csv/.txt, parte de Vialidad, busqueda OSM): Administrador y Planificador.
+   El Meteorologo no ve la barra lateral: para el se arma un panel "Ríos" que reutiliza los mismos controles (mismos ids y funciones).
+   El servidor aplica las mismas reglas: esto solo evita mostrar botones que no va a poder usar. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const rol = () => { try { return String(sesionActiva.rol || '').toLowerCase(); } catch (_) { return ''; } };
+  const auth = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const puedeRios = () => auth() && (rol() === 'meteorologo' || rol() === 'administrador');
+  const puedeInund = puedeRios;
+  const puedeCortes = () => auth() && (rol() === 'administrador' || rol() === 'planificador');
+  const aviso = t => { try { if (window.toast) window.toast(t); else alert(t); } catch (_) { /* nada */ } };
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
+
+  /* ---- Barreras: aunque alguien llame a la funcion desde la consola, se respeta el rol ---- */
+  function guardar(nombre, permitido, msg) {
+    const f = window[nombre]; if (typeof f !== 'function' || f.__rios) return;
+    const g = function () {
+      if (!permitido(arguments)) { try { if (arguments[0] && arguments[0].target && arguments[0].target.value !== undefined && arguments[0].target.type === 'file') arguments[0].target.value = ''; } catch (_) { /* nada */ } aviso(msg); try { if (arguments[0] && arguments[0].preventDefault) arguments[0].preventDefault(); } catch (_) { /* nada */ } return; }
+      return f.apply(this, arguments);
+    };
+    g.__rios = true; window[nombre] = g;
+  }
+  const MSG_RIOS = 'Solo el Meteorólogo o el Administrador cargan niveles de ríos.', MSG_CORTES = 'Solo el Administrador o el Planificador cargan cortes viales.';
+  const extDe = a => { try { return String(a[0].target.files[0].name).toLowerCase(); } catch (_) { return ''; } };
+  function instalar() {
+    guardar('cargarPDFOficialPNA', puedeRios, MSG_RIOS);
+    guardar('procesarTextoOficialPNA', puedeRios, MSG_RIOS);
+    guardar('procesarParteVialidad', puedeCortes, MSG_CORTES);
+    guardar('sincronizarCortesOSM', puedeCortes, MSG_CORTES);
+    guardar('cargarArchivoInundacionOCortes', a => { const n = extDe(a); return (/\.(geojson|json)$/.test(n)) ? puedeInund() : puedeCortes(); }, 'No tiene permiso para cargar ese tipo de archivo (inundación: Meteorólogo o Administrador; cortes: Administrador o Planificador).');
+  }
+
+  /* ---- Carga manual de un nivel (el formulario "Gestion Manual de Rios" no tenia funcion): valida, guarda en el servidor y refresca ---- */
+  function msgManual(t, ok) { let m = $('rios-msg-manual'); const f = document.querySelector('form[onsubmit*="cargarNivelManual"]'); if (!m && f) { m = el('div', 'font-size:12px;margin-top:4px'); m.id = 'rios-msg-manual'; f.appendChild(m); } if (m) { m.style.color = ok ? '#15803d' : '#b91c1c'; m.textContent = t; } }
+  window.cargarNivelManual = async function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (!puedeRios()) { aviso(MSG_RIOS); return; }
+    const sel = $('nivel-est'), h = (typeof estacionesHidro !== 'undefined') ? estacionesHidro[+(sel && sel.value)] : null;
+    if (!h) { msgManual('Elija una estación.', false); return; }
+    const num = id => { const v = String(($(id) || {}).value || '').trim().replace(',', '.'); return v === '' ? NaN : parseFloat(v); };
+    const alt = num('nivel-alt'), ale = num('nivel-ale'), eva = num('nivel-eva'), ok = v => isFinite(v) && v >= -5 && v <= 60;
+    if (!ok(alt)) { msgManual('La altura debe estar entre -5 y 60 metros.', false); return; }
+    if (isFinite(ale) && !ok(ale)) { msgManual('El nivel de alerta debe estar entre -5 y 60 metros.', false); return; }
+    if (isFinite(eva) && !ok(eva)) { msgManual('El nivel de evacuación debe estar entre -5 y 60 metros.', false); return; }
+    const antes = Number(h.actual), tend = !isFinite(antes) ? '═' : (alt - antes > 0.02 ? '▲' : alt - antes < -0.02 ? '▼' : '═');
+    const dato = { ID: h.id, Actual_m: alt, Alerta_m: isFinite(ale) ? ale : h.alerta, Evacuacion_m: isFinite(eva) ? eva : h.evacuacion, Tendencia: tend, Timestamp: Date.now(), Fuente: 'Carga manual' };
+    msgManual('Guardando…', true);
+    try {
+      const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ email: sesionActiva.email, pin: sesionActiva.pin, action: 'UPDATE', tab: 'Hidrometria', data: dato, detalle: 'Carga manual ' + h.estacion + ': ' + alt + ' m' }) });
+      let r = null; try { r = await res.json(); } catch (_) { /* sin JSON */ }
+      if (!r || r.status !== 'success') { msgManual('⚠ No se guardó: ' + ((r && r.message) || 'sin respuesta del servidor.'), false); return; }
+    } catch (_) { msgManual('❌ Sin conexión con el servidor. No se guardó.', false); return; }
+    Object.assign(h, { actual: alt, alerta: dato.Alerta_m, evacuacion: dato.Evacuacion_m, tendencia: tend, ts: dato.Timestamp, fuente: 'Carga manual', ejemplo: false });
+    try { if (typeof logEvento === 'function') logEvento('Carga manual: ' + h.estacion + ' -> ' + alt.toFixed(2) + ' m (' + tend + ')'); } catch (_) { /* nada */ }
+    try { if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria(); if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico(); if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics(); } catch (_) { /* nada */ }
+    msgManual('✅ ' + h.estacion + ': ' + alt.toFixed(2) + ' m guardado.', true);
+    const a2 = $('nivel-alt'); if (a2) a2.value = '';
+  };
+
+  /* ---- Panel "Rios" del Meteorologo ---- */
+  let panel = null, btn = null, movido = false;
+  function armarPanel() {
+    if (panel) return;
+    panel = el('div'); panel.id = 'rios-panel'; panel.setAttribute('role', 'dialog');
+    const h = el('h3'); h.appendChild(el('span', '', '🌊 Niveles de ríos e inundación'));
+    const x = el('button', 'background:#e2e8f0;border:0;border-radius:4px;padding:2px 8px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = () => panel.classList.remove('abierto'); h.appendChild(x);
+    panel.appendChild(h);
+    panel.appendChild(el('div', 'font-size:11.5px;color:#475569', 'Cargue el PDF de Prefectura (o pegue su texto) o corrija un nivel a mano: el mapa y las alertas se actualizan al instante para todo el teatro.'));
+    document.body.appendChild(panel);
+  }
+  function llenarPanel() {
+    if (movido) return;
+    const pdf = $('input-pdf-pna'), dPdf = pdf && pdf.closest('details'), form = document.querySelector('form[onsubmit*="cargarNivelManual"]'), dMan = form && form.closest('details');
+    if (!dPdf || !dMan) return;                    // todavia no esta la pantalla armada: se reintenta
+    armarPanel();
+    dPdf.open = true; dMan.open = true; panel.appendChild(dPdf); panel.appendChild(dMan);
+    /* mancha de inundacion (solo .geojson) */
+    const d = el('details'); d.className = 'form-panel'; d.open = true; d.style.borderLeftColor = '#dc2626';
+    d.appendChild(el('summary', '', '🌊🟥 Mancha de inundación (.geojson)'));
+    const g = el('div', 'display:flex;flex-direction:column;gap:5px;padding:6px 2px');
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.geojson,.json'; inp.style.cssText = 'padding:4px;background:#fff;border:1px solid #cbd5e1;border-radius:4px';
+    inp.onchange = ev => { if (typeof window.cargarArchivoInundacionOCortes === 'function') window.cargarArchivoInundacionOCortes(ev); };
+    g.append(el('div', 'font-size:11.5px;color:#475569', 'Carga el polígono de agua en el mapa de esta sesión (CONAE, IGN, etc.). Solo se ve en su propia pantalla.'), inp);
+    d.appendChild(g); panel.appendChild(d);
+    /* sincronizar con INA */
+    const s = el('div', 'margin:8px 0'); const b = el('button', 'background:#0369a1;color:#fff;border:0;border-radius:4px;padding:6px 10px;cursor:pointer;width:100%;font-size:12px', '🔄 Sincronizar ahora con INA / Prefectura'); b.type = 'button';
+    const est = el('div', 'font-size:11.5px;color:#475569;margin-top:4px');
+    b.onclick = async () => {
+      b.disabled = true; est.textContent = '⏳ Extrayendo datos oficiales…';
+      try {
+        const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'SYNC_PNA', email: sesionActiva.email, pin: sesionActiva.pin }) });
+        let r = null; try { r = await res.json(); } catch (_) { /* sin JSON */ }
+        est.textContent = r && r.status === 'success' ? '✅ Actualizado.' : '⚠ ' + ((r && r.message) || 'Sin confirmación del servidor.');
+        try { if (typeof window.refrescarDatosServer === 'function') await window.refrescarDatosServer(); } catch (_) { /* nada */ }
+      } catch (_) { est.textContent = '❌ Sin conexión.'; }
+      b.disabled = false;
+    };
+    s.append(b, est); panel.appendChild(s);
+    movido = true;
+  }
+  function boton() {
+    if (btn && document.body.contains(btn)) return;
+    const banner = $('top-banner'); if (!banner) return;
+    btn = el('button', '', '🌊 Ríos'); btn.id = 'btn-rios'; btn.type = 'button'; btn.className = 'btn-pdf'; btn.title = 'Cargar niveles de ríos (PDF de Prefectura) y archivos de inundación';
+    btn.onclick = () => { llenarPanel(); if (!panel) return; panel.classList.toggle('abierto'); };
+    const der = banner.querySelector('#sync-status'), padre = der ? der.parentNode : banner.lastElementChild; if (padre) padre.insertBefore(btn, padre.firstChild);
+  }
+
+  /* ---- Mostrar u ocultar controles de la barra lateral segun el rol (Administrador / Planificador / Operador) ---- */
+  function ocultar(e, si) { if (e) e.classList.toggle('rios-oculto', !!si); }
+  function ajustar() {
+    instalar();
+    const meteo = auth() && rol() === 'meteorologo';
+    boton(); if (btn) btn.style.display = meteo ? '' : 'none';
+    if (!meteo && panel) panel.classList.remove('abierto');
+    if (!auth()) return;
+    if (!meteo) {                                  // barra lateral
+      const pdf = $('input-pdf-pna'), form = document.querySelector('form[onsubmit*="cargarNivelManual"]');
+      ocultar(pdf && pdf.closest('details'), !puedeRios()); ocultar(form && form.closest('details'), !puedeRios());
+      const pan = $('panel-auto-inundaciones');
+      if (pan) {
+        const inp = pan.querySelector('input[type="file"]'), lab = inp && inp.previousElementSibling;
+        if (inp) {
+          const admin = rol() === 'administrador';
+          inp.accept = admin ? '.geojson,.json,.csv,.txt' : '.csv,.txt';
+          if (lab && lab.tagName === 'LABEL') lab.textContent = admin ? '📂 Cargar Mancha Inundación (.geojson) o Cortes (.txt/.csv):' : '📂 Cargar Cortes (.txt/.csv):';
+          ocultar(inp, !puedeCortes() && !puedeInund()); ocultar(lab, !puedeCortes() && !puedeInund());
+        }
+        pan.querySelectorAll('button[onclick*="sincronizarCortesOSM"]').forEach(b => ocultar(b, !puedeCortes()));
+        pan.querySelectorAll('details').forEach(dd => { if (dd.querySelector('#texto-parte-vialidad')) ocultar(dd, !puedeCortes()); });
+      }
+    }
+  }
+  setInterval(ajustar, 1000); ajustar();
+  window.aresRios = { abrir: () => { llenarPanel(); if (panel) panel.classList.add('abierto'); }, cerrar: () => { if (panel) panel.classList.remove('abierto'); }, puedeRios: puedeRios, puedeCortes: puedeCortes };
+})();
+</script>
+<!-- ===== FIN BLOQUE RIOS ===== -->
+<!-- ===== INICIO BLOQUE VISTAS: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<style id="vistas-css">
+  /* Inteligencia: solapas (tarjetas) que se pliegan */
+  #vista-analytics .analytics-card > h4 { cursor: pointer; }
+  #vista-analytics .analytics-card > h4 .vs-tg { display: inline-block; width: 22px; height: 22px; line-height: 20px; text-align: center; margin-right: 6px; border: 1px solid #94a3b8; border-radius: 4px; background: #f1f5f9; color: #334155; font-size: 12px; cursor: pointer; vertical-align: middle; padding: 0; }
+  #vista-analytics .analytics-card.plegada > :not(h4) { display: none !important; }
+  #vista-analytics .analytics-card.plegada { align-self: start; }
+  #vs-barra { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; font-size: 12px; color: #475569; }
+  #vs-barra button { font-size: 12px; padding: 3px 9px; border: 1px solid #94a3b8; border-radius: 4px; background: #f8fafc; color: #1e293b; cursor: pointer; }
+  /* Maximizar */
+  .vs-max-btn { background: #1e293b; border: 1px solid #475569; color: #e2e8f0; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; margin: 2px 4px 2px 0; }
+  #vs-windy { position: fixed; inset: 0; z-index: 2147483500; background: #020617; display: flex; flex-direction: column; }
+  #vs-windy .vs-barra-w { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 6px 8px; background: #0f172a; border-bottom: 1px solid #334155; color: #e2e8f0; font: 13px sans-serif; }
+  #vs-windy iframe { flex: 1; width: 100%; border: 0; }
+</style>
+<script>
+/* A.R.E.S.: vistas ajustables.
+   1) Pestaña Inteligencia: cada solapa (tarjeta) se pliega con su flecha o tocando el título; cada usuario conserva en su navegador lo que prefiere ver.
+   2) Meteorologia: el mapa de Windy se maximiza a pantalla completa; el panel Meteo y los informes se ensanchan; y se puede pasar la app a pantalla completa. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const LS = 'ares_solapas_v1';
+  const leer = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (_) { return {}; } };
+  const grabar = o => { try { localStorage.setItem(LS, JSON.stringify(o)); } catch (_) { /* sin almacenamiento: no se recuerda, pero funciona */ } };
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
+
+  /* ---------- 1) Solapas plegables de Inteligencia ---------- */
+  function tarjetas() { return Array.prototype.slice.call(document.querySelectorAll('#vista-analytics .analytics-card')); }
+  function fijar(card, i, plegada, recordar) {
+    card.classList.toggle('plegada', plegada);
+    const b = card.querySelector(':scope > h4 .vs-tg'); if (b) { b.textContent = plegada ? '▸' : '▾'; b.setAttribute('aria-expanded', plegada ? 'false' : 'true'); b.title = plegada ? 'Mostrar' : 'Minimizar'; }
+    if (recordar) { const o = leer(); o['c' + i] = plegada ? 1 : 0; grabar(o); }
+  }
+  function adoptarSolapas() {
+    const cs = tarjetas(); if (!cs.length) return;
+    const o = leer();
+    cs.forEach((c, i) => {
+      const h = c.querySelector(':scope > h4'); if (!h) return;
+      if (!h.querySelector('.vs-tg')) {
+        const b = el('button', '', '▾'); b.type = 'button'; b.className = 'vs-tg'; b.setAttribute('aria-label', 'Minimizar o mostrar esta solapa');
+        h.insertBefore(b, h.firstChild);
+        const alternar = () => fijar(c, i, !c.classList.contains('plegada'), true);
+        b.onclick = e => { e.stopPropagation(); alternar(); };
+        h.onclick = e => { if (e.target.closest('select,input,button,a,textarea')) return; alternar(); };
+        fijar(c, i, !!o['c' + i], false);
+      }
+    });
+    const grid = document.querySelector('#vista-analytics .analytics-grid');
+    if (grid && !$('vs-barra')) {
+      const bar = el('div'); bar.id = 'vs-barra';
+      const mk = (t, f) => { const b = el('button', '', t); b.type = 'button'; b.onclick = f; return b; };
+      bar.append(mk('⏷ Minimizar todo', () => tarjetas().forEach((c, i) => fijar(c, i, true, true))), mk('⏶ Mostrar todo', () => tarjetas().forEach((c, i) => fijar(c, i, false, true))), el('span', '', 'Toque el título de una solapa para minimizarla o mostrarla; se recuerda su elección.'));
+      grid.parentNode.insertBefore(bar, grid);
+    }
+  }
+
+  /* ---------- 2) Maximizar ---------- */
+  function windyGrande(origen) {
+    if ($('vs-windy')) return;
+    let url; try { url = new URL(origen.src); } catch (_) { return; }
+    const f = el('div'); f.id = 'vs-windy';
+    const barra = el('div'); barra.className = 'vs-barra-w';
+    const marco = document.createElement('iframe'); marco.title = 'Windy (pantalla completa)'; marco.referrerPolicy = 'no-referrer'; marco.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
+    const poner = ov => { url.searchParams.set('overlay', ov); marco.src = url.toString(); };
+    barra.appendChild(el('b', 'margin-right:8px', '🌀 Windy'));
+    [['wind', '💨 Viento'], ['satellite', '🛰 Satélite'], ['clouds', '☁ Nubes'], ['rain', '🌧 Lluvia'], ['temp', '🌡 Temperatura'], ['pressure', '🧭 Presión']].forEach(([ov, t]) => { const b = el('button', '', t); b.type = 'button'; b.className = 'vs-max-btn'; b.onclick = () => poner(ov); barra.appendChild(b); });
+    const x = el('button', 'margin-left:auto', '✕ Cerrar (Esc)'); x.type = 'button'; x.className = 'vs-max-btn'; barra.appendChild(x);
+    const cerrar = () => { document.removeEventListener('keydown', esc, true); f.remove(); };
+    const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); cerrar(); } };
+    x.onclick = cerrar; document.addEventListener('keydown', esc, true);
+    f.append(barra, marco); document.body.appendChild(f); poner(url.searchParams.get('overlay') || 'wind');
+  }
+  function pantallaCompleta() {
+    try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); } catch (_) { /* el navegador no lo permite */ }
+  }
+  function adoptarMeteo() {
+    const panel = $('meteo-panel');
+    if (panel) {
+      panel.querySelectorAll('iframe[title="Windy"]').forEach(fr => {
+        if (fr.dataset.vsMax) return; fr.dataset.vsMax = '1';
+        const b = el('button', '', '⛶ Maximizar mapa'); b.type = 'button'; b.className = 'vs-max-btn'; b.onclick = () => windyGrande(fr);
+        fr.parentNode.insertBefore(b, fr);
+      });
+      const cab = panel.firstElementChild;
+      if (cab && !cab.querySelector('.vs-panel')) {
+        const x = Array.prototype.slice.call(cab.querySelectorAll('button')).pop();
+        const anc = el('button', 'background:none;border:0;color:#e2e8f0;font-size:16px;cursor:pointer', '⛶'); anc.type = 'button'; anc.className = 'vs-panel'; anc.title = 'Ensanchar o reducir este panel';
+        anc.onclick = () => { const g = panel.dataset.vsAncho === '1'; panel.dataset.vsAncho = g ? '0' : '1'; panel.style.width = g ? 'min(400px,calc(100vw - 20px))' : 'min(960px,calc(100vw - 20px))'; if (!g) panel.style.maxHeight = 'calc(100vh - 66px)'; };
+        const fs = el('button', 'background:none;border:0;color:#e2e8f0;font-size:16px;cursor:pointer', '🖥'); fs.type = 'button'; fs.title = 'Pantalla completa (Esc para salir)'; fs.onclick = pantallaCompleta;
+        if (x) { cab.insertBefore(anc, x); cab.insertBefore(fs, x); } else { cab.append(anc, fs); }
+      }
+    }
+    ['modal-informe', 'reporte-meteo'].forEach(id => {
+      const m = $(id), caja = m && m.firstElementChild; if (!caja || caja.dataset.vsMax) return; caja.dataset.vsMax = '1';
+      const b = el('button', 'float:right', '⛶ Ampliar'); b.type = 'button'; b.className = 'vs-max-btn';
+      b.onclick = () => { const g = caja.dataset.vsGrande === '1'; caja.dataset.vsGrande = g ? '0' : '1'; if (!g) { caja.dataset.vsW = caja.style.width; caja.dataset.vsM = caja.style.maxHeight; caja.style.width = '98vw'; caja.style.maxWidth = '98vw'; caja.style.maxHeight = '97vh'; caja.style.height = '97vh'; b.textContent = '⛶ Reducir'; } else { caja.style.width = caja.dataset.vsW; caja.style.maxWidth = ''; caja.style.maxHeight = caja.dataset.vsM; caja.style.height = ''; b.textContent = '⛶ Ampliar'; } };
+      caja.insertBefore(b, caja.firstChild);
+    });
+  }
+  setInterval(() => { try { adoptarSolapas(); adoptarMeteo(); } catch (_) { /* un fallo visual no debe frenar la app */ } }, 800);
+  window.aresVistas = { plegarTodo: v => tarjetas().forEach((c, i) => fijar(c, i, v !== false, true)), windyGrande: () => { const f = document.querySelector('#meteo-panel iframe[title="Windy"]'); if (f) windyGrande(f); } };
+})();
+</script>
+<!-- ===== FIN BLOQUE VISTAS ===== -->
+</body>
+</html>  const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
     { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios'] },
