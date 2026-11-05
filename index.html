@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-k</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-l</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXWPyo71FV_CyQtOjDpobrOaM2sC0gPjV37Bu7pJpvXL2_BByTpjX7mIJEShw-aHJvgg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycby4VAwrzvQXlVnPvMuMmYwali1CGjuROOPuaQ4dM4q6I7-gHNIhsHkhEuJXy57k1rdHAw/exec";
 
 
 ;
@@ -3466,6 +3466,12 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       let r = await post({ action: 'LOGIN', email: emailInput, pin: pinInput });
       if (!(r.status === 'success' && r.usuario)) { errDiv.innerText = r.message || 'Credenciales inválidas o no autorizado.'; errDiv.style.display = 'block'; return; }
+      if (r.debeCambiar) {                                    // clave temporal (usuario nuevo o reseteado): no se entra hasta cambiarla
+        if (!window.aresClave) { errDiv.innerText = 'Debe cambiar su clave: actualice la aplicación (Ctrl+F5) e ingrese de nuevo.'; errDiv.style.display = 'block'; return; }
+        const nt = await window.aresClave.forzar(r.usuario.email, pinInput, r.token);
+        if (!nt) { $('login-pin').value = ''; errDiv.innerText = 'Debe cambiar su clave temporal para ingresar.'; errDiv.style.display = 'block'; return; }
+        r.token = nt;
+      }
       let teatro = r.teatro || null;
       window.__nTeatros = (r.teatros || []).length; window.__super = !!r.superadmin; window.__teatros = (r.teatros || []).map(x => ({ id: x.id, nombre: x.nombre }));
       const tokenPre = r.token, emailPre = r.usuario.email;
@@ -3881,7 +3887,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const cer = el('button', 'padding:5px 12px;border-radius:4px;border:none;background:#dc2626;color:#fff;cursor:pointer', 'Cerrar'); cer.type = 'button';
     const bNT = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #16a34a;background:#14532d;color:#fff;cursor:pointer', '➕ Nuevo teatro'); bNT.type = 'button';
     const bNU = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #2563eb;background:#1e3a8a;color:#fff;cursor:pointer', '👤 Nuevo usuario'); bNU.type = 'button';
-    cab.append(bNT, bNU, act, cer); fondo.appendChild(cab);
+    const bUS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #7c3aed;background:#4c1d95;color:#fff;cursor:pointer', '👥 Usuarios'); bUS.type = 'button';
+    cab.append(bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
     const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
     let mapa = null, usuariosTodos = [];
     cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
@@ -4039,16 +4046,57 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       f.firstChild.style.width = 'min(940px,98vw)';
     }
-    function formUsuario() {
-      modal('👤 Nuevo usuario (o cambiar su PIN)', (c, msg, cerrar) => {
-        const em = campo(c, 'Correo (será su usuario)', 'text', 'nombre@correo', '', i => { i.maxLength = 100; i.autocomplete = 'off'; });
-        const nom = campo(c, 'Nombre y rango', 'text', 'Tte. Apellido', '', i => { i.maxLength = 80; });
-        const pin = campo(c, 'PIN (4 a 12 letras o números)', 'password', '', '', i => { i.maxLength = 12; i.autocomplete = 'new-password'; });
-        c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:8px', 'El PIN se guarda protegido y no se puede volver a ver. Después asigne el usuario a un teatro desde su tarjeta (botón Accesos).'));
-        botones(c, 'Guardar usuario', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('USUARIO', { correo: em.value.trim(), nombre: nom.value.trim(), pinNuevo: pin.value }), cerrar); }, cerrar);
+    function formUsuario(pre) {
+      const pr = pre && typeof pre.email === 'string' ? pre : null;
+      modal(pr ? '🔑 Restablecer la clave de ' + (pr.nombre || pr.email) : '👤 Nuevo usuario', (c, msg, cerrar) => {
+        const em = campo(c, 'Correo (será su usuario)', 'text', 'nombre@correo', pr ? pr.email : '', i => { i.maxLength = 100; i.autocomplete = 'off'; if (pr) i.readOnly = true; });
+        const nom = campo(c, 'Nombre y rango', 'text', 'Tte. Apellido', pr ? (pr.nombre || '') : '', i => { i.maxLength = 80; });
+        const pin = campo(c, 'Clave temporal (4 a 12 letras o números; mejor 8 o más)', 'password', '', '', i => { i.maxLength = 12; i.autocomplete = 'new-password'; });
+        c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:8px', 'Es una clave TEMPORAL: el usuario deberá cambiarla en su próximo ingreso y sus sesiones abiertas se cerrarán. No se puede volver a ver. Entréguela por un canal privado.' + (pr ? '' : ' Después asigne el usuario a un teatro desde su tarjeta (botón Accesos).')));
+        botones(c, pr ? 'Restablecer clave' : 'Guardar usuario', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('USUARIO', { correo: em.value.trim(), nombre: nom.value.trim(), pinNuevo: pin.value }), cerrar); }, cerrar);
       });
     }
-    bNT.onclick = () => formTeatro(null); bNU.onclick = formUsuario;
+    /* ---- Lista de usuarios: estado, desactivar / reactivar, restablecer clave ---- */
+    async function traerUsuarios() {
+      const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'PANEL_MANDO', email, pin: token }) }); const j = await r.json();
+      if (j.status === 'success') usuariosTodos = j.usuariosTodos || [];
+      return j;
+    }
+    function listaUsuarios() {
+      const f = modal('👥 Usuarios', (c, msg, cerrar) => {
+        const bus = campo(c, 'Buscar por nombre o correo', 'text', 'Escriba para filtrar', '', i => { i.maxLength = 60; i.autocomplete = 'off'; });
+        const caja = el('div', 'margin-top:8px;max-height:54vh;overflow:auto;border:1px solid #334155;border-radius:6px'); c.appendChild(caja);
+        const chip = (t, bg) => el('span', 'font-size:11px;padding:2px 7px;border-radius:10px;background:' + bg, t);
+        const mini = (t, css, fn) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:11.5px;' + css, t); b.type = 'button'; b.onclick = fn; return b; };
+        async function cambiarEstado(u, activar) {
+          if (!activar && !confirm('¿Desactivar a ' + (u.nombre || u.email) + '?\n\nDejará de poder ingresar y sus sesiones abiertas se cerrarán. No se borra su historial.')) return;
+          msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+          try { const j = await admin('USUARIO_ESTADO', { correo: u.email, activo: activar }); msg.style.color = j.status === 'success' ? '#4ade80' : '#fca5a5'; msg.textContent = (j.status === 'success' ? '✅ ' : '⚠ ') + (j.message || 'Error'); if (j.status === 'success') { await traerUsuarios(); pintarLista(); } }
+          catch (_) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ Sin conexión con el servidor.'; }
+        }
+        function pintarLista() {
+          caja.innerHTML = ''; const q = bus.value.trim().toLowerCase();
+          const l = usuariosTodos.filter(u => !q || (u.email + ' ' + (u.nombre || '')).toLowerCase().indexOf(q) >= 0);
+          if (!l.length) { caja.appendChild(el('div', 'padding:10px;color:#94a3b8', usuariosTodos.length ? 'Sin resultados.' : 'No hay usuarios cargados.')); return; }
+          l.forEach(u => {
+            const fila = el('div', 'display:flex;gap:6px;align-items:center;padding:8px 9px;border-bottom:1px solid #334155;flex-wrap:wrap');
+            const t = el('div', 'flex:1;min-width:170px;overflow-wrap:anywhere'); t.append(el('b', '', u.nombre || u.email), el('div', 'font-size:11px;color:#94a3b8', u.email));
+            fila.append(t, chip(u.activo ? 'Activo' : 'Desactivado', u.activo ? '#14532d' : '#7f1d1d'));
+            if (u.activo && u.cambiar) fila.appendChild(chip('Debe cambiar la clave', '#78350f'));
+            if (String(u.email).toLowerCase() !== String(email).toLowerCase()) {
+              fila.appendChild(mini('Restablecer clave', '', () => formUsuario(u)));
+              fila.appendChild(u.activo ? mini('Desactivar', 'border-color:#b91c1c;color:#fca5a5', () => cambiarEstado(u, false)) : mini('Reactivar', 'border-color:#16a34a;color:#86efac', () => cambiarEstado(u, true)));
+            }
+            caja.appendChild(fila);
+          });
+        }
+        bus.addEventListener('input', pintarLista); pintarLista();
+        c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:8px', 'Desactivar no borra al usuario: se conserva su historial y puede reactivarse. Desactivarlo cierra sus sesiones de inmediato.'));
+        const no = el('button', 'margin-top:10px;padding:8px 14px;border:1px solid #475569;border-radius:4px;background:transparent;color:#fff;cursor:pointer', 'Cerrar'); no.type = 'button'; no.onclick = cerrar; c.appendChild(no);
+      });
+      f.firstChild.style.width = 'min(640px,98vw)';
+    }
+    bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
     function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
     function pintar(ts, gen) {
       try { if (mapa) mapa.remove(); } catch (_) {} mapa = null; cuerpo.innerHTML = '';
@@ -6877,5 +6925,104 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE MANCHA ===== -->
+<!-- ===== INICIO BLOQUE CLAVE: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<style id="clave-css">
+  #clave-fondo { position: fixed; inset: 0; z-index: 2147483600; background: rgba(2,6,23,.92); display: flex; align-items: center; justify-content: center; padding: 10px; font-family: sans-serif; }
+  #clave-caja { background: #1e293b; border: 1px solid #475569; border-radius: 10px; padding: 20px; width: min(430px, 96vw); max-height: 94vh; overflow: auto; color: #f8fafc; font-size: 13px; }
+  #clave-caja h3 { margin: 0 0 6px; font-size: 17px; }
+  #clave-caja label { display: block; margin-top: 10px; font-size: 11.5px; color: #94a3b8; }
+  #clave-caja input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; padding: 9px; border-radius: 5px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 14px; }
+  #clave-caja ul { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12px; }
+  #clave-caja li { margin: 2px 0; color: #94a3b8; }
+  #clave-caja li.ok { color: #4ade80; }
+  #clave-caja .cl-fila { display: flex; gap: 8px; margin-top: 14px; }
+  #clave-caja button { padding: 9px 14px; border-radius: 5px; border: 1px solid #475569; background: #0f172a; color: #fff; cursor: pointer; font-size: 13px; }
+  #clave-caja button.cl-ok { flex: 1; border: none; background: #16a34a; font-weight: bold; }
+  #clave-caja button:disabled { opacity: .5; cursor: default; }
+  #clave-msg { min-height: 18px; margin-top: 10px; font-size: 12.5px; }
+</style>
+<script>
+/* A.R.E.S.: cambio de clave por el propio usuario.
+   1) OBLIGATORIO en el primer ingreso (o tras un reseteo del administrador): el servidor no atiende nada mas hasta que la cambie.
+   2) VOLUNTARIO en cualquier momento: boton "Mi clave" junto a "Cerrar Sesion". Al cambiarla se cierran las demas sesiones abiertas.
+   Reglas (las valida tambien el servidor): 8 a 12 letras o numeros, con letras y numeros, distinta de la actual, sin secuencias ni repeticiones, sin el correo. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
+  const REGLAS = [
+    ['8 a 12 caracteres', v => v.length >= 8 && v.length <= 12],
+    ['Solo letras y números (sin símbolos ni espacios)', v => /^[A-Za-z0-9]*$/.test(v) && v.length > 0],
+    ['Al menos una letra y un número', v => /[A-Za-z]/.test(v) && /[0-9]/.test(v)],
+    ['Sin cuatro caracteres iguales seguidos', v => v.length > 0 && !/(.)\1\1\1/.test(v)],
+    ['Sin secuencias como 12345 o abcde', v => { const b = v.toLowerCase(); for (let i = 0; i + 5 <= b.length; i++) { const t = b.substr(i, 5); if ('abcdefghijklmnopqrstuvwxyz'.indexOf(t) >= 0 || '0123456789'.indexOf(t) >= 0) return false; } return v.length > 0; }]
+  ];
+  async function enviar(email, token, actual, nueva) {
+    const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ action: 'CAMBIAR_CLAVE', email: email, pin: token, claveActual: actual, claveNueva: nueva }) });
+    return r.json();
+  }
+  /* Devuelve una promesa: el token nuevo si se cambió, o null si se canceló. */
+  function dialogo(o) {
+    return new Promise(resolve => {
+      if ($('clave-fondo')) { resolve(null); return; }
+      const fondo = el('div'); fondo.id = 'clave-fondo'; const caja = el('div'); caja.id = 'clave-caja'; fondo.appendChild(caja);
+      caja.appendChild(el('h3', '', o.forzado ? '🔑 Cambie su clave para continuar' : '🔑 Cambiar mi clave'));
+      caja.appendChild(el('div', 'color:#cbd5e1;font-size:12.5px', o.forzado ? 'Está ingresando con una clave temporal. Elija una clave personal que solo usted conozca.' : 'Al cambiarla, las demás sesiones abiertas con su usuario se cerrarán.'));
+      const campo = (rot, auto) => { const l = el('label', '', rot), i = el('input'); i.type = 'password'; i.maxLength = 12; i.autocomplete = auto; l.appendChild(i); caja.appendChild(l); return i; };
+      const actual = o.forzado ? { value: o.actual } : campo('Clave actual', 'current-password');
+      const nueva = campo('Clave nueva', 'new-password'), rep = campo('Repetir la clave nueva', 'new-password');
+      const ul = el('ul'); const lis = REGLAS.map(r => { const li = el('li', '', '○ ' + r[0]); ul.appendChild(li); return li; }); caja.appendChild(ul);
+      const msg = el('div'); msg.id = 'clave-msg'; caja.appendChild(msg);
+      const fila = el('div'); fila.className = 'cl-fila'; const ok = el('button', '', 'Cambiar clave'); ok.type = 'button'; ok.className = 'cl-ok'; ok.disabled = true;
+      const no = el('button', '', o.forzado ? 'Cancelar y salir' : 'Cancelar'); no.type = 'button'; fila.append(ok, no); caja.appendChild(fila);
+      const validar = () => {
+        const v = nueva.value; let todas = true;
+        REGLAS.forEach((r, i) => { const c = r[1](v); lis[i].className = c ? 'ok' : ''; lis[i].textContent = (c ? '✔ ' : '○ ') + r[0]; if (!c) todas = false; });
+        const igual = v && v === rep.value, distinta = !actual.value || v !== actual.value;
+        ok.disabled = !(todas && igual && distinta && (o.forzado || actual.value));
+        msg.style.color = '#fbbf24'; msg.textContent = !v ? '' : (!distinta ? 'Debe ser distinta de la actual.' : (!igual && rep.value ? 'Las claves nuevas no coinciden.' : ''));
+      };
+      [nueva, rep].concat(o.forzado ? [] : [actual]).forEach(i => i.addEventListener('input', validar));
+      const cerrar = r => { fondo.remove(); resolve(r); };
+      no.onclick = () => cerrar(null);
+      ok.onclick = async () => {
+        ok.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+        try {
+          const j = await enviar(o.email, o.token, actual.value, nueva.value);
+          if (j.status === 'success' && j.token) { msg.style.color = '#4ade80'; msg.textContent = '✅ ' + (j.message || 'Clave cambiada.'); setTimeout(() => cerrar(j.token), 700); }
+          else { validar(); msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'No se pudo cambiar la clave.'); }
+        } catch (_) { validar(); msg.style.color = '#fca5a5'; msg.textContent = '⚠ Sin conexión con el servidor.'; }
+      };
+      document.body.appendChild(fondo); (o.forzado ? nueva : actual).focus();
+    });
+  }
+  /* Cambio voluntario desde la sesion abierta */
+  async function abrir() {
+    let s; try { s = sesionActiva; } catch (_) { return; }
+    if (!s || !s.autenticado) return;
+    const t = await dialogo({ forzado: false, email: s.email, token: s.pin });
+    if (t) {
+      try { sesionActiva.pin = t; } catch (_) { /* nada */ }
+      const pm = $('panel-mando'); if (pm) pm.remove();                // el panel de mando guarda el token anterior: se reabre desde el menu con el nuevo
+    }
+  }
+  /* Cambio obligatorio durante el ingreso (lo llama el codigo de inicio de sesion) */
+  function forzar(email, claveTemporal, token) { return dialogo({ forzado: true, email: email, actual: claveTemporal, token: token }); }
+  /* Boton "Mi clave" junto a "Cerrar Sesion" */
+  setInterval(() => {
+    try {
+      const logged = (() => { try { return !!(sesionActiva && sesionActiva.autenticado); } catch (_) { return false; } })();
+      let b = $('btn-mi-clave');
+      if (!logged) { if (b) b.remove(); return; }
+      if (b) return;
+      const salir = document.querySelector('button[onclick="cerrarSesionCOP()"]'); if (!salir || !salir.parentNode) return;
+      b = el('button', 'background:#334155;color:#fff;border:none;padding:3px 8px;font-size:10px;border-radius:3px;cursor:pointer;margin-right:4px', '🔑 Mi clave'); b.id = 'btn-mi-clave'; b.type = 'button'; b.title = 'Cambiar mi clave de acceso';
+      b.onclick = abrir; salir.parentNode.insertBefore(b, salir);
+    } catch (_) { /* un fallo visual no debe frenar la app */ }
+  }, 1000);
+  window.aresClave = { forzar: forzar, abrir: abrir, reglas: REGLAS.map(r => r[0]) };
+})();
+</script>
+<!-- ===== FIN BLOQUE CLAVE ===== -->
 </body>
 </html>
