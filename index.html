@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A.R.E.S. C4I | Sistema de Comando Operativo Interfuerzas (NEA)</title>
+<title>A.R.E.S. C4I</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script>
 /* diagnostico: muestra en pantalla el primer error de JavaScript */
@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Núcleo GAFRAGO · Credenciales de Servicio</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-h</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-i</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -85,20 +85,15 @@ table.analytics-table th{background:#1e293b;color:#fff}
     <button type="button" onclick="iniciarSesionCOP()" id="btn-login" style="width: 100%; margin-top: 1.5rem; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">INGRESAR AL SISTEMA</button>
     <div id="login-error" style="color: #ef4444; font-size: 0.8rem; margin-top: 0.75rem; text-align: center; display: none;">Credenciales inválidas</div>
 
-    <!-- BOTÓN DE ACCESO CONSULTA / INVITADO -->
-    <div style="border-top: 1px solid #334155; margin-top: 1.25rem; padding-top: 1rem;">
-      <button type="button" onclick="ingresarComoInvitado()" style="width: 100%; padding: 0.55rem; background: #334155; color: #94a3b8; border: 1px solid #475569; border-radius: 4px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff';this.style.background='#475569'" onmouseout="this.style.color='#94a3b8';this.style.background='#334155'">
-        👁️ Acceso Consulta (Solo Lectura)
-      </button>
-    </div>
+    <div style="border-top: 1px solid #334155; margin-top: 1.25rem; padding-top: 0.6rem; text-align: center; font-size: 10px; color: #64748b;">Comando y control para emergencias y operaciones<br>Desarrollado por GAFRAGO</div>
   </div>
 </div>
 
 <div id="top-banner">
   <div>
-    <span class="badge-proto">A.R.E.S. · GAFRAGO</span>
+    <span class="badge-proto">A.R.E.S. C4I</span>
     <button onclick="cerrarSesionCOP()" style="background:#dc2626; color:white; border:none; padding:3px 8px; font-size:10px; border-radius:3px; cursor:pointer;">Cerrar Sesión</button>
-    <strong>CENTRO DE OPERACIONES E INTELIGENCIA HÍDRICA (A.R.E.S. C4I NEA)</strong>
+    <strong>CENTRO DE OPERACIONES (A.R.E.S. C4I)</strong>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="sync-status" style="color:#4ade80; font-size:11px; font-weight:bold;">🟢 Enlace Seguro</span>
@@ -109,7 +104,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div class="tab-bar">
   <button class="tab-btn active" onclick="cambiarPestana('tactica')">🗺️ Visor Táctico</button>
   <button class="tab-btn" onclick="cambiarPestana('radar')">⛈️ Visor Estratégico (Radar)</button>
-  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia Híbrida (Oficial + Satelital)</button>
+  <button class="tab-btn" onclick="cambiarPestana('analytics')">📊 Inteligencia y situación</button>
 </div>
 <!-- VISTA 1: TÁCTICA -->
 <div id="vista-tactica" class="view-container active">
@@ -270,7 +265,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <!-- VISTA 3: INTELIGENCIA HÍBRIDA -->
 <div id="vista-analytics" class="view-container">
   <div style="max-width:1200px;margin:0 auto;width:100%">
-    <h2 style="color:#1e293b;margin-top:0">📊 Panel de Inteligencia Híbrida (Altura Oficial + Tendencia Satelital)</h2>
+    <h2 style="color:#1e293b;margin-top:0">📊 Panel de inteligencia y situación</h2>
     <div class="analytics-grid">
       <div class="analytics-card" style="grid-column:span 2">
         <h4>🌤️ Pronóstico próximas 48 h (bloques de 6 h)
@@ -331,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyHvJbFnEMg6xKGPHoJaZn3-icQaG2mMLI7i1F3awdZ8rVt7fYpsDqfc3auAWy5STFNRg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbw537uzM-EpwNozk6hsWk8If5koDVmbdmh2Ic9l2DVSeWoGimgbAw7GKptN7pxa88v_dg/exec";
 
 
 ;
@@ -358,6 +353,7 @@ function cerrarSesionCOP() {
 // MODO INVITADO / SOLO LECTURA
 // ==========================================
 function ingresarComoInvitado() {
+  return;   // el acceso de solo lectura fue retirado: todo ingreso exige usuario y PIN
   sesionActiva = {
     autenticado: true,
     invitado: true,
@@ -1286,7 +1282,7 @@ function inicializarMapaRadar() {
 function generarSITREP() {
   const { jsPDF } = window.jspdf, doc = new jsPDF();
   const hayEjemplo = estacionesHidro.some(h => h.ejemplo), hayViejo = estacionesHidro.some(h => !h.ejemplo && !estadoHidro(h).ok);
-  doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP - NEA)", 14, 18);
+  doc.setFontSize(15); doc.setTextColor(30, 41, 59); const tn = String((window.ARES_TEATRO && window.ARES_TEATRO.nombre) || '').trim(); doc.text("PARTE DIARIO OPERATIVO CONJUNTO (SITREP" + (tn ? " - " + tn.toUpperCase() : "") + ")", 14, 18);
   doc.setFontSize(9.5); doc.text(`Emisión: ${new Date().toLocaleString('es-AR')}`, 14, 25);
   doc.text(`Operador a cargo: ${sesionActiva.nombre || 'N/A'}`, 14, 31);
   if (hayEjemplo || hayViejo) { doc.setTextColor(192, 57, 43); doc.text(`ATENCION: ${hayEjemplo ? 'contiene valores de EJEMPLO. ' : ''}${hayViejo ? 'Hay datos hidrometricos DESACTUALIZADOS.' : ''}`, 14, 37); }
@@ -1301,7 +1297,7 @@ function generarSITREP() {
   
   y = doc.lastAutoTable.finalY + 8; doc.setFontSize(11); doc.setTextColor(44, 62, 80); doc.text("3. Bitacora (ultimos eventos)", 14, y);
   doc.autoTable({ startY: y + 3, head: [['Hora', 'Evento']], body: bitacora.slice(0, 10).map(b => [fmtFecha(b.ts), b.t]), headStyles: { fillColor: [100, 116, 139] }, styles: { fontSize: 8 } });
-  doc.save(`SITREP_COP_NEA_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`SITREP_${(tn || 'COP').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'COP'}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 setInterval(() => { const ro = document.getElementById('reloj-operativo'); if(ro) ro.innerText = new Date().toLocaleString('es-AR'); }, 1000);
@@ -2452,7 +2448,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const tareas = [];                                // las tres lecturas corren a la vez (antes eran una tras otra y sumaban la demora de Google)
 
     tareas.push(paso('Ríos', async () => {
-      const j = await (await conTiempo(`${COP_API_URL}?action=getData&tab=Hidrometria`)).json();
+      let j; try { j = await leerSeguro('Hidrometria'); try { if (j && j.status === 'success') localStorage.setItem('ares_rios_cache', JSON.stringify({ t: Date.now(), j: j })); } catch (_) { /* sin almacenamiento */ } }   // lectura con sesion (la lectura publica ya no existe)
+      catch (e) { if (e && e.message === 'sesion') throw e; let c = null; try { c = JSON.parse(localStorage.getItem('ares_rios_cache')); } catch (_) { /* nada */ } if (!c || !c.j) throw e; j = c.j; }   // sin conexion: ultimo dato guardado en este equipo
       if (j.status !== 'success') throw new Error(j.message || 'error');
       const locales = {}; (estacionesHidro || []).forEach(h => { if (String(h.fuente || '').includes('PDF')) locales[h.id] = h; });
       const remotos = j.data.map((h, i) => {
@@ -2518,7 +2515,7 @@ window.addEventListener('DOMContentLoaded', () => {
   /* 7) Cerrar sesion: borra datos del navegador y recarga (antes los datos quedaban detras del login) */
   window.cerrarSesionCOP = function () {
     if (!sesionActiva.autenticado) return;
-    try { localStorage.removeItem('cop_recursos_local_v1'); localStorage.removeItem('cop_bitacora_v1'); } catch (_) { /* sin acceso */ }
+    try { localStorage.removeItem('cop_recursos_local_v1'); localStorage.removeItem('cop_bitacora_v1'); localStorage.removeItem('ares_rios_cache'); } catch (_) { /* sin acceso */ }
     location.reload();
   };
 
@@ -3517,7 +3514,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!tiene('HIDRICO')) { window.cargarCaudalesGloFAS = function () {}; window.glofasIniciado = true; }
     if (!tiene('METEO')) window.cargarPronostico = function () {};
     const tit = document.querySelector('#top-banner strong'); if (tit) tit.textContent = 'CENTRO DE OPERACIONES — ' + t.nombre.toUpperCase() + ' (A.R.E.S. C4I)';
-    const h2 = document.querySelector('#vista-analytics h2'); if (h2) h2.textContent = '📊 Panel de Inteligencia — ' + t.nombre;
+    const h2 = document.querySelector('#vista-analytics h2'); if (h2) h2.textContent = '📊 Inteligencia y situación — ' + t.nombre;
     timers.forEach(clearInterval); timers = [];
     const vieja = $('lbl-torm'); if (vieja) vieja.remove();
     if (tiene('ZONAS') || tiene('INCENDIOS') || tiene('SISMOS')) montarEventos();
@@ -3841,7 +3838,7 @@ window.addEventListener('DOMContentLoaded', () => {
         c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Qué emergencia cubre este teatro (módulos):'));
         const cks = {}; MODS.forEach(([k, d]) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:4px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = (t.modulos || []).indexOf(k) >= 0; cks[k] = ck; l.append(ck, document.createTextNode(d)); c.appendChild(l); });
         const opt = (rot, val) => { const l = el('label', 'display:flex;gap:7px;align-items:center;margin-top:6px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!val; l.append(ck, document.createTextNode(rot)); c.appendChild(l); return ck; };
-        const act = opt('Teatro activo', t.activo !== false), pub = opt('Los invitados (sin usuario) ven los ríos de este teatro', t.publico), syn = opt('Actualizar los ríos con el INA cada hora', t.sync);
+        const act = opt('Teatro activo', t.activo !== false), pub = { checked: false }, syn = opt('Actualizar los ríos con el INA cada hora', t.sync);
         botones(c, nuevo ? 'Crear teatro' : 'Guardar cambios', async () => {
           msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
           const datos = { id: id.value.trim().toUpperCase(), nombre: nom.value.trim(), tipo: tipo.value, lat: parseFloat(lat.value), lon: parseFloat(lon.value), zoom: parseInt(zoom.value, 10) || 8, radio: parseFloat(radio.value) || 300, modulos: MODS.map(m => m[0]).filter(k => cks[k].checked), sectores: parseSectores(sec.value), activo: act.checked, publico: pub.checked, sync: syn.checked };
