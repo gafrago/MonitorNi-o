@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-u</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-v</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyh2UGhi_Aglsoun9q7Ti1gfP2bsfAjQ6d7ATMDTQyj-Gs87tzmlB0L_G0rvyiTdVcs_Q/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyKBAHXfaSPbdRTB1w_4v5hC59lv12JI4yhTpmEuK-hY5cc5pTnII9oGp5WLcPHP-pgUw/exec";
 
 
 ;
@@ -3949,7 +3949,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -6466,7 +6466,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -8209,5 +8209,235 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE JEFE DE TEATRO ===== -->
+<!-- ===== INICIO BLOQUE COMBATE: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: fuerzas desplegadas (propias, enemigas, neutrales y desconocidas) con armamento, símbolos con marco OTAN y anillos de alcance.
+   Solo existe en teatros de EJERCICIO que tengan el módulo COMBATE (lo habilita únicamente el superadministrador).
+   Fuerzas ROJO y DESCONOCIDO: las crea solo el superadministrador. El control (Administrador y Planificador) las ve siempre y las "revela";
+   mientras no estén reveladas el servidor NO se las envía al Operador. Este bloque solo dibuja lo que el servidor devuelve.
+   Símbolos: marcos de color y forma según APP-6 / MIL-STD-2525 (rectángulo, rombo, cuadrado, trébol) con glifos simplificados; sin dependencias externas. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador|operador)$/i.test(String(s.rol).trim()); };
+  const moduloOn = () => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf('COMBATE') >= 0); } catch (_) { return false; } };
+  const COL = { AZUL: ['#80e0ff', '#0369a1', 'Propia'], ROJO: ['#ff8080', '#b91c1c', 'Enemiga'], NEUTRAL: ['#aaffaa', '#15803d', 'Neutral'], DESCONOCIDO: ['#ffff80', '#a16207', 'Desconocida'] };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const hostil = a => a === 'ROJO' || a === 'DESCONOCIDO';
+  const SIMBOLOS = [['GEN', 'Genérico'], ['INF', 'Infantería'], ['MEC', 'Mecanizada'], ['BLI', 'Blindados'], ['ART', 'Artillería'], ['ADA', 'Antiaérea'], ['MIS', 'Misiles antiaéreos'], ['REC', 'Reconocimiento'], ['ING', 'Ingenieros'], ['COM', 'Comunicaciones'], ['LOG', 'Logística'], ['PC', 'Puesto de comando'], ['RAD', 'Radar'], ['INS', 'Instalación'], ['CAZ', 'Caza'], ['ATA', 'Ataque'], ['TRA', 'Transporte'], ['HEL', 'Helicóptero'], ['UAV', 'No tripulado'], ['BUQ', 'Buque'], ['LAN', 'Embarcación menor']];
+  let datos = null, ver = '', capa = null, capaAlc = null, marcadores = {}, panel = null, tab = 'lista', filtro = { af: '', q: '' }, editando = null, mostrarAlc = true, mostrarMapa = true, ocupado = false, timer = null, ultimo = '';
+
+  /* ---------- símbolo SVG ---------- */
+  function glifo(s) {
+    const L = 'fill="none" stroke="#000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"', T = t => '<text x="50" y="62" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="30" fill="#000">' + t + '</text>';
+    switch (s) {
+      case 'INF': return '<path ' + L + ' d="M33 36 L67 64 M67 36 L33 64"/>';
+      case 'MEC': return '<ellipse cx="50" cy="50" rx="20" ry="11" ' + L + '/><path ' + L + ' d="M33 36 L67 64 M67 36 L33 64"/>';
+      case 'BLI': return '<ellipse cx="50" cy="50" rx="20" ry="11" ' + L + '/>';
+      case 'ART': return '<circle cx="50" cy="50" r="8" fill="#000"/>';
+      case 'ADA': return '<path ' + L + ' d="M30 62 Q50 24 70 62 Z"/>';
+      case 'MIS': return '<path ' + L + ' d="M30 62 Q50 24 70 62 Z M50 62 V70"/>';
+      case 'REC': return '<path ' + L + ' d="M33 66 L67 34"/>';
+      case 'ING': return '<path ' + L + ' d="M32 64 V42 H40 V50 H46 V42 H54 V50 H60 V42 H68 V64 Z"/>';
+      case 'COM': return '<path ' + L + ' d="M38 36 L60 50 L40 50 L62 64"/>';
+      case 'LOG': return T('S'); case 'PC': return '<text x="50" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="24" fill="#000">HQ</text>';
+      case 'RAD': return T('R'); case 'INS': return T('I');
+      case 'CAZ': return T('F'); case 'ATA': return T('A'); case 'TRA': return T('T'); case 'UAV': return T('U');
+      case 'HEL': return '<path ' + L + ' d="M28 40 H72 M50 40 V58 M38 58 H62"/>';
+      case 'BUQ': return '<path ' + L + ' d="M28 52 H72 L64 64 H36 Z M50 52 V38"/>';
+      case 'LAN': return '<path ' + L + ' d="M34 54 H66 L60 63 H40 Z"/>';
+      default: return '<circle cx="50" cy="50" r="5" fill="#000"/>';
+    }
+  }
+  function simboloSVG(afil, simb, dom) {
+    const c = COL[afil] || COL.DESCONOCIDO, F = 'fill="' + c[0] + '" stroke="#000" stroke-width="5"'; let marco, escala = 1;
+    if (afil === 'ROJO') { marco = '<path ' + F + ' d="M50 8 L92 50 L50 92 L8 50 Z"/>'; escala = .8; }
+    else if (afil === 'DESCONOCIDO') { marco = '<g ' + F + '><circle cx="36" cy="36" r="22"/><circle cx="64" cy="36" r="22"/><circle cx="36" cy="64" r="22"/><circle cx="64" cy="64" r="22"/></g><rect x="30" y="30" width="40" height="40" fill="' + c[0] + '"/>'; escala = .8; }
+    else if (dom === 'AIRE') marco = '<path ' + F + ' d="M15 80 V52 A35 35 0 0 1 85 52 V80 Z"/>';
+    else if (dom === 'MAR' && afil === 'AZUL') marco = '<circle ' + F + ' cx="50" cy="50" r="36"/>';
+    else if (afil === 'NEUTRAL' || dom === 'MAR') marco = '<rect ' + F + ' x="20" y="20" width="60" height="60"/>';
+    else marco = '<rect ' + F + ' x="12" y="22" width="76" height="56"/>';
+    const g = escala === 1 ? glifo(simb) : '<g transform="translate(50 50) scale(' + escala + ') translate(-50 -50)">' + glifo(simb) + '</g>';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">' + marco + g + '</svg>';
+  }
+  const simboloURL = (a, s, d) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(simboloSVG(a, s, d));
+  function imgSimbolo(f, px) { const i = document.createElement('img'); i.src = simboloURL(f.afiliacion, f.simbolo, f.dominio); i.width = i.height = px; i.alt = ''; i.style.display = 'block'; return i; }
+
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  const puedeGest = () => !!(datos && datos.puedeGestionar), puedeEnemigo = () => !!(datos && datos.puedeEnemigo);
+  const puedeTocar = f => puedeGest() && (!hostil(f.afiliacion) || puedeEnemigo());
+
+  /* ---------- mapa ---------- */
+  function popupDe(f) {
+    const d = el('div', 'font-size:12px;min-width:190px;max-width:260px'); d.appendChild(el('b', 'font-size:13px', f.nombre + (f.cantidad > 1 ? ' ×' + f.cantidad : '')));
+    const col = COL[f.afiliacion] || COL.DESCONOCIDO; d.appendChild(el('div', 'color:' + col[1] + ';font-weight:bold', col[2] + ' · ' + f.categoria + ' · ' + f.dominio.toLowerCase()));
+    d.appendChild(el('div', '', 'Estado: ' + f.estado.replace('_', ' ').toLowerCase() + (f.rumbo !== null ? ' · rumbo ' + f.rumbo + '°' : '')));
+    if (f.alcance) d.appendChild(el('div', '', 'Alcance: ' + f.alcance + ' km'));
+    (f.armamento || []).forEach(a => d.appendChild(el('div', 'font-size:11.5px', '• ' + a.cantidad + ' × ' + a.nombre + (a.alcance ? ' (' + a.alcance + ' km)' : ''))));
+    if (f.notas) d.appendChild(el('div', 'margin-top:4px;font-size:11.5px;color:#475569', f.notas));
+    if (hostil(f.afiliacion) && puedeGest()) d.appendChild(el('div', 'margin-top:4px;font-weight:bold;color:' + (f.revelado ? '#15803d' : '#b91c1c'), f.revelado ? '👁 Revelada a los operadores' : '🙈 OCULTA a los operadores'));
+    return d;
+  }
+  function iconoDe(f) {
+    const w = el('div', 'position:relative;width:38px;height:38px'); w.className = 'cb-ic' + (hostil(f.afiliacion) && !f.revelado ? ' cb-oculto' : '');
+    const im = imgSimbolo(f, 38); if (f.estado === 'NO_OPERATIVO') im.style.opacity = '.45'; else if (f.estado === 'INACTIVO') im.style.opacity = '.35'; else if (f.estado === 'DEGRADADO') im.style.opacity = '.75'; if (hostil(f.afiliacion) && !f.revelado) { im.style.opacity = '.55'; im.style.filter = 'grayscale(.4)'; }
+    w.appendChild(im);
+    if (f.rumbo !== null) { const fl = el('div', 'position:absolute;left:18px;top:19px;width:2px;height:30px;background:#000;transform-origin:1px 0;pointer-events:none'); fl.style.transform = 'rotate(' + (f.rumbo + 180) + 'deg)'; w.appendChild(fl); }
+    if (f.cantidad > 1) w.appendChild(el('span', 'position:absolute;right:-6px;top:-6px;background:#0f172a;color:#fff;border-radius:8px;font:bold 10px sans-serif;padding:0 4px', '×' + f.cantidad));
+    if (hostil(f.afiliacion) && !f.revelado && puedeGest()) w.appendChild(el('span', 'position:absolute;left:-6px;top:-8px;font-size:12px', '🙈'));
+    const l = el('span', 'position:absolute;left:50%;top:39px;transform:translateX(-50%);white-space:nowrap;font:bold 11px sans-serif;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none', f.nombre); w.appendChild(l);
+    return L.divIcon({ className: 'cb-div', html: w, iconSize: [38, 38], iconAnchor: [19, 19] });
+  }
+  function dibujar() {
+    const M = mapa(); if (!M || !datos) return;
+    if (!capa) { capa = L.layerGroup(); capaAlc = L.layerGroup(); }
+    capa.clearLayers(); capaAlc.clearLayers(); marcadores = {};
+    (datos.fuerzas || []).forEach(f => {
+      if (!isFinite(f.lat) || !isFinite(f.lon)) return;
+      const m = L.marker([f.lat, f.lon], { icon: iconoDe(f), zIndexOffset: hostil(f.afiliacion) ? 500 : 400, keyboard: false }); m.bindPopup(() => popupDe(f)); capa.addLayer(m); marcadores[f.id] = m;
+      const col = (COL[f.afiliacion] || COL.DESCONOCIDO)[1], vistos = {};
+      const anillo = (km, fino) => { if (!(km > 0) || vistos[km]) return; vistos[km] = 1; capaAlc.addLayer(L.circle([f.lat, f.lon], { radius: km * 1000, color: col, weight: fino ? 1 : 2, dashArray: fino ? '2 5' : '8 6', fillOpacity: fino ? 0 : .05, interactive: false })); };
+      if (f.estado !== 'DESTRUIDO' && f.estado !== 'INACTIVO') { anillo(f.alcance, false); (f.armamento || []).slice(0, 4).forEach(a => anillo(a.alcance, true)); }
+    });
+    if (mostrarMapa) { if (!M.hasLayer(capa)) capa.addTo(M); } else if (M.hasLayer(capa)) M.removeLayer(capa);
+    const verA = mostrarMapa && mostrarAlc; if (verA) { if (!M.hasLayer(capaAlc)) capaAlc.addTo(M); } else if (M.hasLayer(capaAlc)) M.removeLayer(capaAlc);
+  }
+
+  /* ---------- panel ---------- */
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const campo = (c, rot, tipo, val, extra) => { const l = el('label', 'display:block;margin-top:6px;font-size:11px;color:#94a3b8', rot); const i = tipo === 'select' ? el('select') : tipo === 'area' ? el('textarea') : el('input'); if (tipo !== 'select' && tipo !== 'area') i.type = tipo;
+    i.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px' + (tipo === 'area' ? ';min-height:48px' : ''); if (val !== undefined && val !== null) i.value = val; if (extra) extra(i); l.appendChild(i); c.appendChild(l); return i; };
+  function aviso(t, ok) { const e = panel && panel.querySelector('.cb-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
+  async function accion(a, extra, okMsg) { aviso('Guardando…', true); try { const r = await api(a, extra); if (r.status === 'success') { aviso(okMsg || 'Listo.', true); await recargar(true); return r; } aviso('⚠ ' + (r.message || 'No se pudo.'), false); return r; } catch (e) { aviso('⚠ Sin conexión.', false); return null; } }
+
+  function filaFuerza(f) {
+    const tr = el('div', 'display:flex;gap:6px;align-items:center;padding:5px 2px;border-bottom:1px solid #1e293b'); tr.className = 'cb-fila'; tr.dataset.id = f.id;
+    const th = el('div', 'flex:0 0 30px'); th.appendChild(imgSimbolo(f, 30)); tr.appendChild(th);
+    const tx = el('div', 'flex:1;min-width:0'); const col = COL[f.afiliacion] || COL.DESCONOCIDO;
+    tx.appendChild(el('div', 'font-size:12.5px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', f.nombre + (f.cantidad > 1 ? ' ×' + f.cantidad : '')));
+    tx.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', col[2] + ' · ' + f.categoria + ' · ' + f.estado.replace('_', ' ').toLowerCase() + (f.alcance ? ' · ' + f.alcance + ' km' : '') + (hostil(f.afiliacion) && puedeGest() ? (f.revelado ? ' · 👁 revelada' : ' · 🙈 oculta') : '')));
+    tr.appendChild(tx); const bs = el('div', 'flex:0 0 auto;white-space:nowrap');
+    bs.appendChild(btn('🎯', '#475569', () => { try { mapTactico.setView([f.lat, f.lon], Math.max(mapTactico.getZoom(), 9)); if (marcadores[f.id]) marcadores[f.id].openPopup(); } catch (_) { /* nada */ } }, 'Centrar en el mapa'));
+    if (hostil(f.afiliacion) && puedeGest()) bs.appendChild(btn(f.revelado ? '🙈' : '👁', f.revelado ? '#92400e' : '#15803d', () => accion('COMB_REVELAR', { id: f.id, revelar: !f.revelado }, f.revelado ? 'Oculta a los operadores.' : 'Revelada a los operadores.'), f.revelado ? 'Ocultar a los operadores' : 'Revelar a los operadores'));
+    if (puedeTocar(f)) { bs.appendChild(btn('✏️', '#1d4ed8', () => { editando = f; tab = 'form'; pintar(); }, 'Editar')); bs.appendChild(btn('🗑', '#991b1b', () => { if (confirm('¿Borrar «' + f.nombre + '»?')) accion('COMB_BORRAR', { id: f.id }, 'Borrada.'); }, 'Borrar')); }
+    tr.appendChild(bs); return tr;
+  }
+  function tabLista(c) {
+    const fl = el('div', 'display:flex;gap:6px;margin-bottom:6px'); const sel = el('select', 'background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:4px;flex:0 0 auto'); sel.className = 'cb-filtro-af';
+    [['', 'Todas'], ['AZUL', 'Propias'], ['ROJO', 'Enemigas'], ['NEUTRAL', 'Neutrales'], ['DESCONOCIDO', 'Desconocidas']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; sel.appendChild(op); }); sel.value = filtro.af; sel.onchange = () => { filtro.af = sel.value; pintar(); };
+    const q = el('input', 'flex:1;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:4px;min-width:0'); q.placeholder = 'Buscar…'; q.value = filtro.q; q.className = 'cb-buscar'; q.oninput = () => { filtro.q = q.value; const p = q.selectionStart; pintar(); const n = panel.querySelector('.cb-buscar'); if (n) { n.focus(); n.setSelectionRange(p, p); } };
+    fl.append(sel, q); c.appendChild(fl);
+    const l = (datos.fuerzas || []).filter(f => (!filtro.af || f.afiliacion === filtro.af) && (!filtro.q || (f.nombre + ' ' + f.categoria).toLowerCase().indexOf(filtro.q.toLowerCase()) >= 0));
+    if (!l.length) c.appendChild(el('div', 'color:#94a3b8;font-size:12px;padding:10px 0', (datos.fuerzas || []).length ? 'Ninguna coincide con el filtro.' : 'Todavía no hay fuerzas desplegadas.' + (puedeGest() ? ' Use «➕ Nueva».' : '')));
+    l.slice(0, 150).forEach(f => c.appendChild(filaFuerza(f)));
+    if (datos.ocultos > 0 && puedeGest()) c.appendChild(el('div', 'margin-top:6px;font-size:11px;color:#fcd34d', '🙈 ' + datos.ocultos + ' fuerza(s) enemiga(s) o desconocida(s) todavía oculta(s) para los operadores.'));
+  }
+  function tabForm(c) {
+    const f = editando, nuevo = !f; const ex = f || { afiliacion: 'AZUL', nombre: '', cantidad: 1, estado: 'OPERATIVO', rumbo: null, alcance: '', lat: '', lon: '', armamento: [], notas: '', catId: '' };
+    if (!puedeGest()) { c.appendChild(el('div', 'color:#fca5a5', 'Solo el control despliega fuerzas.')); return; }
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); const vista = el('div', 'flex:0 0 40px'); cab.appendChild(vista); cab.appendChild(el('b', '', nuevo ? 'Nueva fuerza' : 'Editar ' + f.nombre)); c.appendChild(cab);
+    const af = campo(c, 'Afiliación', 'select', null, i => { [['AZUL', 'Propia (azul)'], ['NEUTRAL', 'Neutral (verde)']].concat(puedeEnemigo() ? [['ROJO', 'Enemiga (rojo)'], ['DESCONOCIDO', 'Desconocida (amarillo)']] : []).forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); }); }); af.value = ex.afiliacion; af.className = 'cb-af';
+    const cat = campo(c, 'Categoría del catálogo', 'select', null, i => { const gr = {}; (datos.catalogo || []).forEach(k => { (gr[k.dominio] = gr[k.dominio] || []).push(k); }); Object.keys(gr).forEach(d => { const og = el('optgroup'); og.label = d; gr[d].forEach(k => { const op = el('option', '', k.nombre + (k.alcance ? ' (' + k.alcance + ' km)' : '')); op.value = k.id; og.appendChild(op); }); i.appendChild(og); }); }); cat.className = 'cb-cat';
+    if (!(datos.catalogo || []).length) c.appendChild(el('div', 'color:#fcd34d;font-size:11.5px', 'El catálogo está vacío: el superadministrador debe cargarlo (pestaña Catálogo).'));
+    const catActual = f ? (datos.catalogo || []).filter(k => k.nombre === f.categoria && k.dominio === f.dominio)[0] : null; if (catActual) cat.value = catActual.id; else if (f) cat.value = '';
+    const nom = campo(c, 'Nombre / designación', 'text', ex.nombre); nom.maxLength = 80; nom.className = 'cb-nombre';
+    const fl = el('div', 'display:flex;gap:6px'); c.appendChild(fl);
+    const cant = campo(fl, 'Cantidad', 'number', ex.cantidad), est = campo(fl, 'Estado', 'select', null, i => { [['OPERATIVO', 'Operativo'], ['DEGRADADO', 'Degradado'], ['NO_OPERATIVO', 'No operativo'], ['INACTIVO', 'Inactivo']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); }); }); est.value = ex.estado; cant.parentNode.style.flex = est.parentNode.style.flex = '1'; cant.className = 'cb-cant';
+    const fl2 = el('div', 'display:flex;gap:6px'); c.appendChild(fl2);
+    const lat = campo(fl2, 'Latitud', 'number', ex.lat), lon = campo(fl2, 'Longitud', 'number', ex.lon); lat.step = lon.step = 'any'; lat.parentNode.style.flex = lon.parentNode.style.flex = '1'; lat.className = 'cb-lat'; lon.className = 'cb-lon';
+    c.appendChild(btn('📍 Elegir en el mapa', '#1d4ed8', () => { aviso('Haga clic en el mapa…', true); mapTactico.once('click', e => { lat.value = e.latlng.lat.toFixed(5); lon.value = e.latlng.lng.toFixed(5); aviso('Ubicación elegida.', true); }); }));
+    const fl3 = el('div', 'display:flex;gap:6px'); c.appendChild(fl3);
+    const rum = campo(fl3, 'Rumbo (0 a 359°, opcional)', 'number', ex.rumbo === null ? '' : ex.rumbo), alc = campo(fl3, 'Alcance km (vacío = el del catálogo)', 'number', ex.alcance || ''); rum.parentNode.style.flex = alc.parentNode.style.flex = '1'; alc.className = 'cb-alc';
+    c.appendChild(el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Armamento (hasta 12 renglones)')); const arms = el('div'); c.appendChild(arms);
+    const renglon = a => { const r = el('div', 'display:flex;gap:4px;margin-top:3px'); r.className = 'cb-arm'; const n = el('input', 'flex:3;min-width:0;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:4px'); n.placeholder = 'Sistema / arma'; n.value = a ? a.nombre : ''; n.maxLength = 60;
+      const q = el('input', 'flex:1;min-width:0;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:4px'); q.type = 'number'; q.placeholder = 'Cant.'; q.value = a ? a.cantidad : 1;
+      const k = el('input', 'flex:1;min-width:0;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:4px'); k.type = 'number'; k.placeholder = 'km'; k.value = a && a.alcance ? a.alcance : '';
+      r.append(n, q, k, btn('✕', '#7f1d1d', () => r.remove())); arms.appendChild(r); return r; };
+    (ex.armamento || []).forEach(renglon); c.appendChild(btn('+ Agregar armamento', '#475569', () => { if (arms.children.length < 12) renglon(null); }));
+    const notas = campo(c, 'Notas', 'area', ex.notas); notas.maxLength = 300; notas.className = 'cb-notas';
+    const pv = () => { vista.textContent = ''; const k = (datos.catalogo || []).filter(x => x.id === cat.value)[0]; vista.appendChild(imgSimbolo({ afiliacion: af.value, simbolo: k ? k.simbolo : 'GEN', dominio: k ? k.dominio : 'TIERRA' }, 38)); }; af.onchange = cat.onchange = pv; pv();
+    const bs = el('div', 'display:flex;gap:8px;justify-content:flex-end;margin-top:10px'); bs.appendChild(btn('Cancelar', '#475569', () => { editando = null; tab = 'lista'; pintar(); }));
+    const ok = btn(nuevo ? 'Desplegar' : 'Guardar', '#16a34a', async () => {
+      const armamento = [...arms.children].map(r => { const i = r.querySelectorAll('input'); return { nombre: i[0].value.trim(), cantidad: i[1].value, alcance: i[2].value }; }).filter(x => x.nombre || x.alcance);
+      const r = await accion('COMB_GUARDAR', { id: f ? f.id : '', afiliacion: af.value, catId: cat.value, nombre: nom.value.trim(), cantidad: cant.value, estado: est.value, lat: lat.value, lon: lon.value, rumbo: rum.value, alcance: alc.value, armamento: armamento, notas: notas.value }, nuevo ? 'Fuerza desplegada.' : 'Cambios guardados.');
+      if (r && r.status === 'success') { editando = null; tab = 'lista'; pintar(); }
+    }); ok.className = 'cb-ok'; bs.appendChild(ok); c.appendChild(bs);
+  }
+  function resumenTexto() {
+    const l = datos.fuerzas || [], por = a => l.filter(f => f.afiliacion === a), suma = a => por(a).reduce((s, f) => s + f.cantidad, 0), t = [];
+    t.push('SITUACIÓN DE FUERZAS — ' + (window.ARES_TEATRO && ARES_TEATRO.nombre ? ARES_TEATRO.nombre : 'Teatro') + ' (EJERCICIO) — ' + new Date().toLocaleString('es-AR'));
+    ['AZUL', 'ROJO', 'NEUTRAL', 'DESCONOCIDO'].forEach(a => { if (por(a).length) t.push(COL[a][2] + ': ' + por(a).length + ' elemento(s), ' + suma(a) + ' en total' + (hostil(a) && puedeGest() ? ' (reveladas: ' + por(a).filter(f => f.revelado).length + ')' : '')); });
+    ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const n = l.filter(f => f.dominio === d).length; if (n) t.push('Dominio ' + d.toLowerCase() + ': ' + n); });
+    const mayor = l.filter(f => hostil(f.afiliacion) && f.alcance > 0).sort((a, b) => b.alcance - a.alcance)[0]; if (mayor) t.push('Mayor alcance adversario: ' + mayor.nombre + ' (' + mayor.alcance + ' km)');
+    if (puedeGest() && datos.ocultos) t.push('Ocultas para los operadores: ' + datos.ocultos); return t.join('\n');
+  }
+  function tabResumen(c) {
+    const l = datos.fuerzas || []; const g = el('div', 'display:grid;grid-template-columns:repeat(2,1fr);gap:6px');
+    ['AZUL', 'ROJO', 'NEUTRAL', 'DESCONOCIDO'].forEach(a => { const n = l.filter(f => f.afiliacion === a); const d = el('div', 'background:#0f172a;border-left:4px solid ' + COL[a][1] + ';border-radius:4px;padding:6px 8px'); d.append(el('div', 'font-size:20px;font-weight:bold', String(n.length)), el('div', 'font-size:11px;color:#94a3b8', COL[a][2] + 's · ' + n.reduce((s, f) => s + f.cantidad, 0) + ' en total')); g.appendChild(d); });
+    c.appendChild(g); const lb = el('label', 'display:block;margin-top:8px;font-size:12px'); const k = el('input'); k.type = 'checkbox'; k.checked = mostrarMapa; k.onchange = () => { mostrarMapa = k.checked; dibujar(); }; lb.append(k, document.createTextNode(' Mostrar fuerzas en el mapa')); c.appendChild(lb);
+    const lb2 = el('label', 'display:block;margin-top:4px;font-size:12px'); const k2 = el('input'); k2.type = 'checkbox'; k2.checked = mostrarAlc; k2.id = 'cb-alc-ck'; k2.onchange = () => { mostrarAlc = k2.checked; dibujar(); }; lb2.append(k2, document.createTextNode(' Mostrar anillos de alcance')); c.appendChild(lb2);
+    c.appendChild(btn('📋 Copiar resumen de situación', '#1d4ed8', async () => { const t = resumenTexto(); try { await navigator.clipboard.writeText(t); aviso('Resumen copiado.', true); } catch (_) { aviso('No se pudo copiar.', false); } })); const pre = el('pre', 'margin-top:8px;white-space:pre-wrap;font-size:11.5px;color:#cbd5e1;background:#0f172a;padding:8px;border-radius:4px'); pre.className = 'cb-resumen'; pre.textContent = resumenTexto(); c.appendChild(pre);
+    const lg = el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Marcos: rectángulo azul = propia; rombo rojo = enemiga; cuadrado verde = neutral; trébol amarillo = desconocida; arco = aire.'); c.appendChild(lg);
+  }
+  function tabCatalogo(c) {
+    if (!puedeEnemigo()) { c.appendChild(el('div', 'color:#94a3b8', 'El catálogo lo edita el superadministrador.')); return; }
+    const cat = datos.catalogo || [];
+    if (!cat.length) { c.appendChild(el('div', 'font-size:12px;margin-bottom:6px', 'El catálogo está vacío. Cargue las categorías genéricas (sin modelos ni cifras) y complete usted los alcances.')); c.appendChild(btn('Cargar categorías iniciales', '#16a34a', () => accion('ADMIN', { op: 'ARMA_INICIAL' }, 'Catálogo inicial cargado.'))); }
+    cat.forEach(k => { const r = el('div', 'display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:12px'); r.className = 'cb-cat-fila'; r.appendChild(imgSimbolo({ afiliacion: 'AZUL', simbolo: k.simbolo, dominio: k.dominio }, 22)); r.appendChild(el('div', 'flex:1' + (k.activo ? '' : ';opacity:.5'), k.nombre + ' · ' + k.dominio.toLowerCase() + ' · ' + (k.alcance ? k.alcance + ' km' : 'alcance sin definir') + (k.activo ? '' : ' · inactiva'))); r.appendChild(btn('✏️', '#1d4ed8', () => formCat(k))); c.appendChild(r); });
+    c.appendChild(btn('➕ Nueva categoría', '#15803d', () => formCat(null)));
+    function formCat(k) {
+      const m = el('div', 'margin-top:8px;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:8px'); m.className = 'cb-cat-form'; const x = k || { dominio: 'TIERRA', categoria: '', nombre: '', simbolo: 'GEN', alcance: '', notas: '', activo: true };
+      const dom = campo(m, 'Dominio', 'select', null, i => ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const o = el('option', '', d); o.value = d; i.appendChild(o); })); dom.value = x.dominio;
+      const grp = campo(m, 'Grupo (para ordenar)', 'text', x.categoria), nom = campo(m, 'Nombre de la categoría', 'text', x.nombre), sim = campo(m, 'Símbolo', 'select', null, i => SIMBOLOS.forEach(s => { const o = el('option', '', s[1]); o.value = s[0]; i.appendChild(o); })); sim.value = x.simbolo;
+      const alc = campo(m, 'Alcance de referencia en km (opcional)', 'number', x.alcance || ''); const act = campo(m, 'Estado', 'select', null, i => [['SI', 'Activa'], ['NO', 'Inactiva']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); })); act.value = x.activo ? 'SI' : 'NO';
+      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
+    }
+  }
+  function pintar() {
+    if (!panel || !datos) return; const cu = panel.querySelector('.cb-cuerpo'); cu.textContent = '';
+    const tabs = panel.querySelector('.cb-tabs'); tabs.textContent = '';
+    [['lista', '📋 Fuerzas'], ['form', puedeGest() ? (editando ? '✏️ Editar' : '➕ Nueva') : null], ['resumen', '📊 Resumen'], ['cat', puedeEnemigo() ? '🗂 Catálogo' : null]].forEach(t => { if (!t[1]) return; const b = btn(t[1], tab === t[0] ? '#2563eb' : '#334155', () => { if (t[0] === 'form' && tab !== 'form') editando = null; tab = t[0]; pintar(); }); b.dataset.tab = t[0]; tabs.appendChild(b); });
+    const c = el('div'); cu.appendChild(c); if (tab === 'form') tabForm(c); else if (tab === 'resumen') tabResumen(c); else if (tab === 'cat') tabCatalogo(c); else tabLista(c);
+  }
+  function abrir() {
+    if (panel) return; if (!rolOk() || !moduloOn()) return;
+    panel = el('div', 'position:fixed;top:70px;right:10px;width:min(400px,94vw);max-height:calc(100vh - 90px);overflow:auto;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-family:sans-serif;padding:10px'); panel.id = 'cb-panel';
+    const h = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); h.appendChild(el('b', 'flex:1;font-size:14px', '⚔ FUERZAS DESPLEGADAS')); h.appendChild(btn('↻', '#334155', () => recargar(true), 'Actualizar')); h.appendChild(btn('✕', '#dc2626', cerrar, 'Cerrar')); panel.appendChild(h);
+    panel.appendChild(el('div', 'background:#7f1d1d;border-radius:4px;padding:3px 8px;font-size:11px;margin-bottom:6px', 'EJERCICIO — fuerzas simuladas'));
+    const tabs = el('div', 'margin-bottom:6px'); tabs.className = 'cb-tabs'; panel.appendChild(tabs); const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'cb-aviso'; panel.appendChild(av);
+    const cu = el('div'); cu.className = 'cb-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); if (datos) pintar(); recargar(true);
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } editando = null; }
+
+  async function recargar(forzar) {
+    if (ocupado || !rolOk() || !moduloOn()) return; ocupado = true;
+    try { const r = await api('COMB_LISTAR', { ver: forzar ? '' : ver });
+      if (r.status === 'success') { if (!r.sinCambios) { datos = r; ver = r.ver; dibujar(); if (panel && !(tab === 'form')) pintar(); else if (panel && !datos.puedeGestionar) pintar(); } else if (datos) { datos.ocultos = r.ocultos; } }
+      else if (panel) aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false);
+    } catch (_) { /* sin conexión: se reintenta */ } finally { ocupado = false; }
+  }
+  function css() { if ($('ares-cb-css')) return; const s = document.createElement('style'); s.id = 'ares-cb-css'; s.textContent = '.cb-div{background:none!important;border:none!important}.cb-ic img{filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}'; document.head.appendChild(s); }
+  function boton() {
+    const b = $('btn-combate'); if (!(rolOk() && moduloOn())) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-electoral') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '⚔ Fuerzas'); n.id = 'btn-combate'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Fuerzas propias, enemigas y su armamento (ejercicio)'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref);
+  }
+  function reiniciar() { cerrar(); if (capa && mapa()) { try { mapTactico.removeLayer(capa); mapTactico.removeLayer(capaAlc); } catch (_) { /* nada */ } } capa = capaAlc = null; marcadores = {}; datos = null; ver = ''; const b = $('btn-combate'); if (b) b.remove(); }
+  css();
+  setInterval(() => {
+    const s = sesion(), clave = s && moduloOn() && rolOk() ? s.email + '|' + s.pin + '|' + (ARES_TEATRO.nombre || '') : '';
+    if (clave !== ultimo) { if (ultimo) reiniciar(); ultimo = clave; if (clave) recargar(true); }
+    if (clave) boton();
+  }, 1500);
+  timer = setInterval(() => { if (ultimo && !document.hidden) recargar(false); }, 15000);
+  window.aresCombate = { abrir: abrir, cerrar: cerrar, recargar: () => recargar(true), fuerzas: () => (datos && datos.fuerzas) || [], marcadores: () => Object.keys(marcadores).length, anillos: () => capaAlc ? capaAlc.getLayers().length : 0, simboloSVG: simboloSVG, resumen: () => datos ? resumenTexto() : '', datos: () => datos };
+})();
+</script>
+<!-- ===== FIN BLOQUE COMBATE ===== -->
 </body>
 </html>
