@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-m</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-n</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxNBLFltHJV-Fl-B9cUiYkPfMY6npRnwp2TdpchkgRmkoYgKM2O3k4Mef8o2IQRHiJjlw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwpICvqlM2klUECP_hMwsuDnZDnlrZPb4XkuCC4Q7tS1k1RmCRkdK-2S8VhwaLXjaq0PQ/exec";
 
 
 ;
@@ -6419,7 +6419,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
     { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios'] },
-    { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-reporte-meteo', 'btn-rios'] },
+    { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
   let cont = null;
@@ -7027,5 +7027,339 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE CLAVE ===== -->
+<!-- ===== INICIO BLOQUE CAPA METEO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: capa meteorologica del Visor Tactico.
+   - El Meteorologo (y el Administrador) publica AREAS: tormentas, lluvias, crecidas, inundacion, viento, niebla, temperaturas extremas.
+     Cada area tiene fenomeno, severidad, vigencia en horas y una zona: dibujada a mano, un circulo, un departamento, un sector del teatro o un lugar buscado.
+   - TODOS los usuarios la ven en el Visor Tactico apenas ingresan y se renueva sola cada 60 s. Las areas vencen solas.
+   - Todo texto de usuarios se muestra con textContent (nunca como HTML). El servidor reconstruye la geometria (solo poligonos, en rango, con limites de tamano). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const TIPOS = { TORMENTA: ['⛈', 'Tormenta / granizo / ráfagas', '#7c3aed'], LLUVIA: ['🌧', 'Lluvias', '#2563eb'], CRECIDA: ['🌊', 'Crecida de río', '#0891b2'], INUNDACION: ['🟦', 'Inundación / anegamiento', '#0e7490'], VIENTO: ['💨', 'Viento', '#0d9488'], NIEBLA: ['🌫', 'Niebla', '#64748b'], TEMPERATURA: ['🌡', 'Temperatura extrema', '#ea580c'], OTRO: ['⚠', 'Otro fenómeno', '#475569'] };
+  const SEV = { INFO: ['Informativo', '#2563eb', 1.5, '6 4', 0.12], PRECAUCION: ['Precaución', '#d97706', 2.5, '', 0.2], ALERTA: ['Alerta', '#ea580c', 3.5, '', 0.3], CRITICA: ['Crítica', '#b91c1c', 5, '', 0.42] };
+  const SEV_ORDEN = ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'];
+  const MAX_BYTES = 44000, ESTE = /^(?:TORMENTA|LLUVIA|CRECIDA|INUNDACION|VIENTO|NIEBLA|TEMPERATURA|OTRO)$/;
+  let areas = [], ver = '', desfase = 0, capa = null, ctrl = null, ctrlDiv = null, panel = null, previa = null, borrador = null, dib = null, barra = null, iniciado = false, ultimoTeatro = '', ocupado = false;
+  let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true;
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const teatro = () => window.ARES_TEATRO || null;
+  const miCorreo = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  const clave = k => 'ares_capa_' + k + '_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
+  const lsGet = (k, d) => { try { const v = localStorage.getItem(clave(k)); return v === null ? d : v; } catch (_) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(clave(k), String(v)); } catch (_) { /* sin almacenamiento */ } };
+  const hhmm = ms => new Date(ms).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const fechaHora = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const ahora = () => Date.now() + desfase;
+  const quitar = c => { if (c) { try { c.remove(); } catch (_) { /* ya no esta */ } } return null; };
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const vigentes = () => areas.filter(a => a.vence > ahora());
+  const ordenSev = a => SEV_ORDEN.indexOf(a.sev);
+
+  /* ---------- Geometria ---------- */
+  const R4 = v => Math.round(v * 1e4) / 1e4;
+  function pd(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1]; if (!dx && !dy) return Math.hypot(p[0] - a[0], p[1] - a[1]); let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy); t = Math.max(0, Math.min(1, t)); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); }
+  function dp(pts, tol) {                                       // Douglas-Peucker: baja la cantidad de vertices sin deformar a la vista
+    if (pts.length <= 2) return pts.slice(); const k = new Uint8Array(pts.length); k[0] = k[pts.length - 1] = 1; const st = [[0, pts.length - 1]];
+    while (st.length) { const s = st.pop(), a = s[0], b = s[1]; let md = 0, mi = -1; for (let i = a + 1; i < b; i++) { const d = pd(pts[i], pts[a], pts[b]); if (d > md) { md = d; mi = i; } } if (md > tol && mi > 0) { k[mi] = 1; st.push([a, mi], [mi, b]); } }
+    return pts.filter((_, i) => k[i]);
+  }
+  function anilloOk(r, tol) { let q = (r || []).map(c => [R4(Number(c[0])), R4(Number(c[1]))]).filter(c => isFinite(c[0]) && isFinite(c[1])); if (q.length < 3) return null; const a = q[0], z = q[q.length - 1]; if (a[0] !== z[0] || a[1] !== z[1]) q.push([a[0], a[1]]); q = dp(q, tol); return q.length >= 4 ? q : null; }
+  function polisDe(g) {                                         // cualquier geometria GeoJSON -> lista de poligonos [[anillo, ...], ...]
+    if (!g) return []; if (g.type === 'Polygon') return [g.coordinates]; if (g.type === 'MultiPolygon') return g.coordinates.slice();
+    if (g.type === 'Feature') return polisDe(g.geometry); if (g.type === 'FeatureCollection') return [].concat.apply([], (g.features || []).map(polisDe)); return [];
+  }
+  function circulo(lat, lon, km, n) {
+    n = n || 48; const r = []; const dLat = km / 111.32, dLon = km / (111.32 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+    for (let i = 0; i < n; i++) { const a = 2 * Math.PI * i / n; r.push([R4(lon + dLon * Math.cos(a)), R4(lat + dLat * Math.sin(a))]); } r.push(r[0].slice()); return [r];
+  }
+  function geomFinal(polys) {                                   // simplifica hasta entrar en el limite del servidor
+    let tol = 0.0008;
+    for (let i = 0; i < 9; i++) {
+      const out = []; polys.forEach(p => { const rr = p.map(r => anilloOk(r, tol)).filter(Boolean); if (rr.length && anilloOk(p[0], tol)) out.push(rr); });
+      if (!out.length) return null; const s = JSON.stringify({ type: 'MultiPolygon', coordinates: out });
+      if (s.length <= MAX_BYTES) return { json: s, geo: { type: 'MultiPolygon', coordinates: out }, vertices: out.reduce((n, p) => n + p.reduce((m, r) => m + r.length, 0), 0), bytes: s.length };
+      tol *= 1.9;
+    }
+    return { demasiado: true };
+  }
+  const contarV = polys => polys.reduce((n, p) => n + p.reduce((m, r) => m + r.length, 0), 0);
+
+  /* ---------- Capa en el mapa (la ven todos) ---------- */
+  function popupArea(a) {
+    const d = el('div', 'font:12px sans-serif;max-width:250px'), t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO;
+    const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1;font-size:13px', t[0] + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); d.appendChild(h);
+    d.appendChild(el('div', 'color:#475569;margin-top:2px', t[1]));
+    if (a.lugares) d.appendChild(el('div', 'margin-top:3px', '📍 ' + a.lugares));
+    if (a.texto) d.appendChild(el('div', 'white-space:pre-wrap;margin-top:4px', a.texto));
+    d.appendChild(el('div', 'color:#64748b;font-size:11px;margin-top:4px', (a.autor || 'Meteorólogo') + ' · actualizado ' + fechaHora(a.ts) + ' · vigente hasta ' + fechaHora(a.vence)));
+    if (puedeBorrarTodas || (puedeEditar && a.autorEmail === miCorreo())) {
+      const b = el('button', 'margin-top:6px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', 'Cerrar área'); b.type = 'button';
+      b.onclick = () => cerrarArea(a);
+      d.appendChild(b);
+    }
+    return d;
+  }
+  function dibujar(sinPanel) {
+    const mp = mapa(); if (!mp) return; if (!capa) capa = L.layerGroup();
+    capa.clearLayers();
+    vigentes().slice().sort((x, y) => ordenSev(x) - ordenSev(y) || x.ts - y.ts).forEach(a => {
+      const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO;
+      try {
+        const g = L.geoJSON(a.geom, { style: { color: s[1], weight: s[2], dashArray: s[3], fillColor: t[2], fillOpacity: s[4], opacity: 0.95 } });
+        g.bindPopup(() => popupArea(a)); g.addTo(capa);
+        const c = g.getBounds().getCenter();
+        L.marker(c, { icon: L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14], html: '<div style="width:28px;height:28px;border-radius:50%;background:#fff;border:3px solid ' + s[1] + ';display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 6px #0008">' + t[0] + '</div>' }), title: t[1] + ': ' + a.titulo, keyboard: false }).bindPopup(() => popupArea(a)).addTo(capa);
+      } catch (_) { /* un area danada no frena a las demas */ }
+    });
+    if (visible && !dib) { if (!mp.hasLayer(capa)) capa.addTo(mp); } else if (mp.hasLayer(capa)) mp.removeLayer(capa);
+    leyenda(); if (panel && !dib && !sinPanel) pintar();
+  }
+  function volarA(a) {
+    const mp = mapa(); if (!mp) return; try { const g = L.geoJSON(a.geom); mp.fitBounds(g.getBounds(), { padding: [30, 30], maxZoom: 9, animate: false }); } catch (_) { /* nada */ }
+    if (!visible) { visible = true; lsSet('vis', 1); dibujar(); }
+  }
+  function leyenda() {
+    const mp = mapa(); if (!mp) return;
+    if (!ctrl) {
+      ctrl = L.control({ position: 'bottomright' });
+      ctrl.onAdd = function () { ctrlDiv = el('div', 'background:rgba(15,23,42,.93);color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:6px 8px;font:12px sans-serif;max-width:270px;max-height:40vh;overflow:auto'); ctrlDiv.id = 'capa-leyenda'; L.DomEvent.disableClickPropagation(ctrlDiv); L.DomEvent.disableScrollPropagation(ctrlDiv); return ctrlDiv; };
+      ctrl.addTo(mp);
+    }
+    if (!ctrlDiv) return; ctrlDiv.textContent = '';
+    const v = vigentes().sort((x, y) => ordenSev(y) - ordenSev(x) || y.ts - x.ts);
+    const cab = el('label', 'display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:bold'), k = el('input'); k.type = 'checkbox'; k.checked = visible; k.onchange = () => { visible = k.checked; lsSet('vis', visible ? 1 : 0); dibujar(); };
+    const mx = v.length ? SEV[SEV_ORDEN[Math.max.apply(null, v.map(ordenSev))]][1] : '#64748b';
+    cab.append(k, el('span', 'flex:1', '🌦 Capa del Meteorólogo (' + v.length + ')'), el('span', 'width:10px;height:10px;border-radius:50%;background:' + mx + ';display:inline-block'));
+    const tog = el('button', 'background:none;border:0;color:#94a3b8;cursor:pointer;font-size:12px;padding:0 2px', listaAbierta ? '▾' : '▸'); tog.type = 'button'; tog.title = 'Mostrar u ocultar la lista'; tog.onclick = e => { e.preventDefault(); listaAbierta = !listaAbierta; lsSet('lista', listaAbierta ? 1 : 0); leyenda(); }; cab.appendChild(tog);
+    ctrlDiv.appendChild(cab);
+    if (!v.length) { ctrlDiv.appendChild(el('div', 'color:#94a3b8;margin-top:3px', 'Sin áreas vigentes.')); return; }
+    if (!listaAbierta) return;
+    v.slice(0, 8).forEach(a => {
+      const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO, f = el('div', 'margin-top:4px;padding:3px 5px;border-left:4px solid ' + s[1] + ';background:#1e293b;border-radius:3px;cursor:pointer');
+      f.appendChild(el('div', 'font-weight:bold', t[0] + ' ' + a.titulo)); f.appendChild(el('div', 'font-size:11px;color:#94a3b8', s[0] + (a.lugares ? ' · ' + a.lugares : '') + ' · hasta ' + hhmm(a.vence)));
+      f.onclick = () => { volarA(a); }; ctrlDiv.appendChild(f);
+    });
+    if (v.length > 8) ctrlDiv.appendChild(el('div', 'color:#94a3b8;font-size:11px;margin-top:3px', '+ ' + (v.length - 8) + ' más (toque el mapa para verlas)'));
+  }
+
+  /* ---------- Carga y renovacion ---------- */
+  async function cargar(forzar) {
+    if (ocupado || !activa()) return; ocupado = true;
+    try {
+      const r = await api('MET_AREA_LISTAR', forzar ? {} : { ver: ver }); if (r.status !== 'success') return;
+      desfase = Number(r.ahora) ? Number(r.ahora) - Date.now() : desfase; const antes = puedeEditar; puedeEditar = !!r.puedeEditar; puedeBorrarTodas = !!r.puedeBorrarTodas;
+      if (!r.sinCambios) { areas = r.areas || []; ver = r.ver || ''; dibujar(); } else if (antes !== puedeEditar) dibujar();
+      boton();
+    } catch (_) { /* sin conexion: se queda con lo ultimo que vio */ } finally { ocupado = false; }
+  }
+  async function cerrarArea(a) {
+    if (!confirm('¿Cerrar el área “' + a.titulo + '”? Deja de verse en el mapa de todos.')) return;
+    try { const r = await api('MET_AREA_BORRAR', { id: a.id }); if (r.status !== 'success') { alert(r.message); return; } const mp = mapa(); if (mp) mp.closePopup(); await cargar(true); } catch (_) { /* sesion */ }
+  }
+
+  /* ---------- Panel del Meteorologo ---------- */
+  const estiloSel = s => { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; };
+  const btnCss = 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px';
+  const nuevoBorrador = () => ({ id: '', tipo: 'TORMENTA', sev: 'PRECAUCION', horas: 12, titulo: '', texto: '', lugares: '', partes: [], radio: 30 });
+  function abrir() {
+    if (panel) { cerrarPanel(); return; }
+    if (!puedeEditar) return; if (!borrador) borrador = nuevoBorrador();
+    panel = el('div', 'position:fixed;left:10px;top:56px;width:min(400px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'capa-panel';
+    document.body.appendChild(panel); pintar();
+  }
+  function cerrarPanel() { finDibujo(true); previa = quitar(previa); if (panel) { panel.remove(); panel = null; } }
+  function departamentos() {
+    try { if (typeof datosZonasGeoJSON === 'undefined' || !datosZonasGeoJSON || !datosZonasGeoJSON.features) return []; const mapaD = {}; datosZonasGeoJSON.features.forEach(f => { const n = String(nombreZona(f) || '').trim(); if (n && !mapaD[n]) mapaD[n] = f; }); return Object.keys(mapaD).sort((a, b) => a.localeCompare(b, 'es')).map(n => ({ nombre: n, f: mapaD[n] })); } catch (_) { return []; }
+  }
+  function lugarDe(lat, lon) { try { const r = window.aresCobertura && window.aresCobertura.lugar(lat, lon); return r && r.txt ? r.txt : ''; } catch (_) { return ''; } }
+  function agregarParte(txt, polys, lugar) {
+    borrador.partes.push({ txt: txt, polys: polys }); if (lugar) { const l = borrador.lugares.split(/\s*,\s*/).filter(Boolean); if (l.indexOf(lugar) < 0) l.push(lugar); borrador.lugares = l.join(', ').slice(0, 240); }
+    if (!borrador.titulo && lugar) { /* el titulo lo escribe el Meteorologo */ }
+    vistaPrevia(true); pintar();
+  }
+  function todasLasPolys() { return [].concat.apply([], borrador.partes.map(p => p.polys)); }
+  function vistaPrevia(ajustar) {
+    previa = quitar(previa); const mp = mapa(); if (!mp || !borrador) return; const ps = todasLasPolys(); if (!ps.length) return;
+    const t = TIPOS[borrador.tipo] || TIPOS.OTRO, s = SEV[borrador.sev] || SEV.INFO;
+    previa = L.geoJSON({ type: 'MultiPolygon', coordinates: ps }, { style: { color: s[1], weight: 3, dashArray: '8 6', fillColor: t[2], fillOpacity: 0.25 }, interactive: false }).addTo(mp);
+    if (ajustar) { try { mp.fitBounds(previa.getBounds(), { padding: [40, 40], maxZoom: 9, animate: false }); } catch (_) { /* nada */ } }
+  }
+  function pintar() {
+    if (!panel) return; const st = panel.scrollTop; panel.textContent = ''; const b = borrador || (borrador = nuevoBorrador());
+    const lab = (t, c) => { const l = el('label', 'display:block;margin:5px 0'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); l.appendChild(c); return l; };
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗺 Mi capa · ' + ((teatro() && teatro().nombre) || 'Teatro')));
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
+    panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:2px 0 6px', 'Lo que publique aparece en el Visor Táctico de todo el teatro, y se renueva solo cada 60 segundos. Las áreas vencen solas.'));
+    // vigentes
+    const v = vigentes().sort((p, q) => q.ts - p.ts), caja = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:6px 0'); caja.open = true; caja.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', '📋 Áreas vigentes (' + v.length + ')'));
+    if (!v.length) caja.appendChild(el('div', 'color:#94a3b8;font-size:12px;margin:4px 0', 'No hay áreas vigentes.'));
+    v.forEach(a => {
+      const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO, f = el('div', 'border-left:4px solid ' + s[1] + ';background:#1e293b;border-radius:4px;padding:5px 7px;margin:5px 0');
+      const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', t[0] + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); f.appendChild(h);
+      f.appendChild(el('div', 'font-size:11px;color:#94a3b8', (a.lugares ? a.lugares + ' · ' : '') + 'hasta ' + fechaHora(a.vence) + ' · ' + (a.autor || '')));
+      const fila = el('div', 'display:flex;gap:5px;margin-top:4px'), bs = (tx, fn, col) => { const q = el('button', btnCss + ';padding:1px 7px;font-size:11px;' + (col ? 'color:' + col : ''), tx); q.type = 'button'; q.onclick = fn; return q; };
+      fila.appendChild(bs('Ver', () => volarA(a)));
+      if (puedeBorrarTodas || a.autorEmail === miCorreo()) {
+        fila.appendChild(bs('Editar', () => editar(a))); fila.appendChild(bs('Cerrar', () => cerrarArea(a), '#fca5a5'));
+      }
+      f.appendChild(fila); caja.appendChild(f);
+    });
+    panel.appendChild(caja);
+    // formulario
+    const fm = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:6px 0'); fm.open = true; fm.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', b.id ? '✏️ Editar área' : '➕ Nueva área'));
+    const sT = estiloSel(el('select')); Object.keys(TIPOS).forEach(k => { const o = el('option', '', TIPOS[k][0] + ' ' + TIPOS[k][1]); o.value = k; sT.appendChild(o); }); sT.value = b.tipo; sT.onchange = () => { b.tipo = sT.value; vistaPrevia(false); };
+    const sS = estiloSel(el('select')); SEV_ORDEN.forEach(k => { const o = el('option', '', SEV[k][0]); o.value = k; sS.appendChild(o); }); sS.value = b.sev; sS.onchange = () => { b.sev = sS.value; vistaPrevia(false); };
+    const hr = estiloSel(el('input')); hr.type = 'number'; hr.min = 1; hr.max = 168; hr.value = b.horas; hr.style.width = '70px'; hr.oninput = () => { b.horas = hr.value; };
+    const rapidas = el('div', 'display:flex;gap:4px;margin-top:3px'); [3, 6, 12, 24, 48].forEach(n => { const q = el('button', btnCss + ';padding:1px 6px;font-size:11px', n + ' h'); q.type = 'button'; q.onclick = () => { b.horas = n; hr.value = n; }; rapidas.appendChild(q); });
+    const f1 = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); const lh = lab('Vigencia (horas, 1–168)', hr); lh.appendChild(rapidas); f1.append(lab('Fenómeno', sT), lab('Severidad', sS), lh); fm.appendChild(f1);
+    const ti = estiloSel(el('input')); ti.maxLength = 80; ti.style.cssText += ';width:100%;box-sizing:border-box'; ti.placeholder = 'Ej: Tormentas fuertes con granizo'; ti.value = b.titulo; ti.oninput = () => { b.titulo = ti.value; };
+    const tx = estiloSel(el('textarea')); tx.rows = 3; tx.maxLength = 600; tx.style.cssText += ';width:100%;box-sizing:border-box'; tx.placeholder = 'Qué se espera, cuándo y qué recomienda al personal.'; tx.value = b.texto; tx.oninput = () => { b.texto = tx.value; };
+    fm.append(lab('Título', ti), lab('Texto', tx));
+    // donde
+    fm.appendChild(el('div', 'margin:8px 0 3px;font-weight:bold;color:#7dd3fc', 'Dónde está el fenómeno'));
+    const fb = el('div', 'display:flex;gap:6px;flex-wrap:wrap'), bb = (t, fn, tt) => { const q = el('button', btnCss, t); q.type = 'button'; q.onclick = fn; if (tt) q.title = tt; return q; };
+    fb.append(bb('✏️ Dibujar área', () => iniciarDibujo('poly'), 'Marque los vértices sobre el mapa'), bb('⭕ Círculo en el mapa', () => iniciarDibujo('circ'), 'Centro y radio con dos clics')); fm.appendChild(fb);
+    const rad = estiloSel(el('input')); rad.type = 'number'; rad.min = 5; rad.max = 400; rad.value = b.radio; rad.style.width = '70px'; rad.oninput = () => { b.radio = rad.value; };
+    const deps = departamentos(), sec = (teatro() && teatro().sectores || []).filter(s => isFinite(s.lat) && isFinite(s.lon)), zs = (window.aresMeteo && window.aresMeteo.zonas && window.aresMeteo.zonas()) || [];
+    if (deps.length) { const sd = estiloSel(el('select')); const o0 = el('option', '', '🏛 Agregar departamento…'); o0.value = ''; sd.appendChild(o0); deps.forEach((d, i) => { const o = el('option', '', d.nombre); o.value = String(i); sd.appendChild(o); }); sd.onchange = () => { if (sd.value === '') return; const d = deps[+sd.value]; const ps = polisDe(d.f.geometry); sd.value = ''; if (!ps.length) return; agregarParte('Departamento ' + d.nombre, ps, d.nombre); }; fm.appendChild(el('div', 'margin-top:6px')).appendChild(sd); }
+    else fm.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'La lista de departamentos solo está disponible donde el teatro tiene su mapa político cargado; use dibujar, círculo, sector o buscar lugar.'));
+    if (sec.length || zs.length) {
+      const ss = estiloSel(el('select')); const o0 = el('option', '', '📌 Agregar sector o zona (círculo)…'); o0.value = ''; ss.appendChild(o0);
+      sec.forEach((s, i) => { const o = el('option', '', 'Sector ' + s.nombre); o.value = 's' + i; ss.appendChild(o); }); zs.forEach((z, i) => { const o = el('option', '', 'Zona ' + z.nombre + ' (' + z.radio + ' km)'); o.value = 'z' + i; ss.appendChild(o); });
+      ss.onchange = () => { const k = ss.value; ss.value = ''; if (!k) return; if (k[0] === 's') { const s = sec[+k.slice(1)], r = Math.min(400, Math.max(5, Number(b.radio) || 30)); agregarParte('Sector ' + s.nombre + ' (' + r + ' km)', [circulo(s.lat, s.lon, r)], s.nombre); } else { const z = zs[+k.slice(1)]; agregarParte('Zona ' + z.nombre + ' (' + z.radio + ' km)', [circulo(z.lat, z.lon, z.radio)], z.nombre); } };
+      fm.appendChild(el('div', 'margin-top:6px')).appendChild(ss);
+    }
+    const bq = estiloSel(el('input')); bq.placeholder = 'Buscar lugar (ej: Goya, Corrientes)'; bq.style.cssText += ';flex:1;min-width:140px'; const lugares = el('div'), mq = el('div', 'font-size:12px;min-height:14px;margin:3px 0;color:#94a3b8');
+    async function buscar() {
+      lugares.textContent = ''; const q = bq.value.trim(); if (!q) { mq.style.color = '#fca5a5'; mq.textContent = 'Escriba el lugar a buscar.'; return; } mq.style.color = '#94a3b8'; mq.textContent = 'Buscando…';
+      try {
+        const j = await (await fetch('https://photon.komoot.io/api/?limit=10&lat=-30&lon=-60&q=' + encodeURIComponent(q))).json();
+        const fs = (j.features || []).filter(f => f && f.geometry && Array.isArray(f.geometry.coordinates)).map(f => { const pr = f.properties || {}; return { nombre: [pr.name, pr.state, pr.country].filter(Boolean).join(', ') || q, lat: Number(f.geometry.coordinates[1]), lon: Number(f.geometry.coordinates[0]), ar: pr.countrycode === 'AR', corto: pr.name || q }; }).filter(f => isFinite(f.lat) && isFinite(f.lon));
+        fs.sort((x, y) => (y.ar ? 1 : 0) - (x.ar ? 1 : 0)); if (!fs.length) { mq.style.color = '#fca5a5'; mq.textContent = 'No se encontró. Pruebe con la provincia o dibuje el área.'; return; }
+        mq.textContent = 'Elija el lugar correcto (se agrega un círculo con el radio de abajo):';
+        fs.slice(0, 6).forEach(f => { const q2 = el('button', 'display:block;width:100%;text-align:left;margin-top:3px;padding:4px 8px;border-radius:4px;border:1px solid ' + (f.ar ? '#475569' : '#b45309') + ';background:#0f172a;color:' + (f.ar ? '#e2e8f0' : '#fcd34d') + ';cursor:pointer;font-size:12px', (f.ar ? '' : '⚠ FUERA DE ARGENTINA · ') + f.nombre); q2.type = 'button'; q2.onclick = () => { lugares.textContent = ''; mq.textContent = ''; const r = Math.min(400, Math.max(5, Number(b.radio) || 30)); agregarParte('Alrededor de ' + f.corto + ' (' + r + ' km)', [circulo(f.lat, f.lon, r)], f.corto); }; lugares.appendChild(q2); });
+      } catch (_) { mq.style.color = '#fca5a5'; mq.textContent = 'No se pudo buscar. Dibuje el área en el mapa.'; }
+    }
+    bq.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } };
+    const fq = el('div', 'display:flex;gap:5px;margin-top:6px'); fq.append(bq, bb('🔎 Buscar', buscar)); fm.append(fq, mq, lugares);
+    fm.appendChild(lab('Radio para sector, zona o lugar (km)', rad));
+    // partes agregadas
+    const lp = el('div', 'margin:6px 0'); if (!b.partes.length) lp.appendChild(el('div', 'font-size:12px;color:#fbbf24', 'Aún no marcó ninguna zona.')); else lp.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Zonas marcadas (' + contarV(todasLasPolys()) + ' vértices):'));
+    b.partes.forEach((p, i) => { const f = el('div', 'display:flex;gap:6px;align-items:center;background:#1e293b;border-radius:4px;padding:3px 6px;margin:3px 0'); f.appendChild(el('span', 'flex:1;font-size:12px', '▪ ' + p.txt)); const q = el('button', btnCss + ';padding:0 6px', '✕'); q.type = 'button'; q.title = 'Quitar'; q.onclick = () => { b.partes.splice(i, 1); vistaPrevia(false); pintar(); }; f.appendChild(q); lp.appendChild(f); });
+    fm.appendChild(lp);
+    const lg = estiloSel(el('input')); lg.maxLength = 240; lg.style.cssText += ';width:100%;box-sizing:border-box'; lg.placeholder = 'Ej: Dptos. San Fernando y Bermejo (Chaco)'; lg.value = b.lugares; lg.oninput = () => { b.lugares = lg.value; };
+    fm.appendChild(lab('Lugares afectados (texto que ven los demás)', lg));
+    const res = el('div', 'font-size:12px;min-height:16px;margin:6px 0');
+    const pub = el('button', 'background:#15803d;border:0;color:#fff;border-radius:4px;padding:7px 12px;cursor:pointer;font-weight:bold', b.id ? '💾 Guardar cambios' : '📡 Publicar en el mapa de todos'); pub.type = 'button';
+    const lim = el('button', btnCss + ';padding:7px 12px', b.id ? 'Cancelar edición' : 'Limpiar'); lim.type = 'button'; lim.onclick = () => { borrador = nuevoBorrador(); previa = quitar(previa); pintar(); };
+    pub.onclick = async () => {
+      if (!b.titulo.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Escriba un título.'; return; }
+      const h = Math.round(Number(b.horas)); if (!(h >= 1 && h <= 168)) { res.style.color = '#fca5a5'; res.textContent = 'La vigencia debe estar entre 1 y 168 horas.'; return; }
+      if (!b.partes.length) { res.style.color = '#fca5a5'; res.textContent = 'Marque dónde está el fenómeno: dibuje, elija un departamento, un sector o busque un lugar.'; return; }
+      const g = geomFinal(todasLasPolys()); if (!g) { res.style.color = '#fca5a5'; res.textContent = 'La zona marcada no es válida. Vuelva a marcarla.'; return; } if (g.demasiado) { res.style.color = '#fca5a5'; res.textContent = 'La zona es demasiado compleja. Quite departamentos o dibuje un área más simple.'; return; }
+      pub.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Publicando…';
+      try {
+        const r = await api('MET_AREA_GUARDAR', { id: b.id, tipo: b.tipo, sev: b.sev, titulo: b.titulo.trim(), texto: b.texto.trim(), lugares: b.lugares.trim(), horas: h, geom: g.json });
+        if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = r.message || 'No se pudo publicar.'; pub.disabled = false; return; }
+        await cargar(true); previa = quitar(previa); borrador = nuevoBorrador(); pintar();
+        const m2 = $('capa-panel') && $('capa-panel').querySelector('#capa-res'); if (m2) { m2.style.color = '#86efac'; m2.textContent = '✅ Publicado. Todos lo ven en el Visor Táctico (se renueva cada 60 s).'; }
+        try { if (typeof logEvento === 'function') logEvento('Publicó área meteorológica: ' + b.titulo.slice(0, 80)); } catch (_) { /* nada */ }
+      } catch (_) { res.style.color = '#fca5a5'; res.textContent = 'Sin conexión con el servidor.'; pub.disabled = false; }
+    };
+    res.id = 'capa-res'; const fa = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); fa.append(pub, lim); fm.append(res, fa);
+    panel.appendChild(fm); panel.scrollTop = st;
+  }
+  function editar(a) {
+    borrador = { id: a.id, tipo: a.tipo, sev: a.sev, horas: Math.max(1, Math.min(168, Math.round((a.vence - ahora()) / 3600000) || 12)), titulo: a.titulo, texto: a.texto, lugares: a.lugares, radio: 30, partes: [{ txt: 'Zona publicada (' + contarV(polisDe(a.geom)) + ' vértices)', polys: polisDe(a.geom) }] };
+    vistaPrevia(true); pintar(); if (panel) panel.scrollTop = 1e6;
+  }
+
+  /* ---------- Dibujo sobre el mapa ---------- */
+  function info(t) { if (barra) { const i = barra.querySelector('#capa-pista'); if (i) i.textContent = t; } }
+  function iniciarDibujo(modo) {
+    const mp = mapa(); if (!mp) { return; } finDibujo(true);
+    dib = { modo: modo, pts: [], capas: [], centro: null, linea: null }; if (panel) panel.style.display = 'none';
+    if (capa && mp.hasLayer(capa)) mp.removeLayer(capa);                                   // la capa publicada se oculta mientras se dibuja
+    barra = el('div', 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483400;background:#0369a1;color:#fff;padding:8px 12px;border-radius:6px;font:13px sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:96vw');
+    barra.appendChild(el('span', '', '')).id = 'capa-pista';
+    const bt = (t, fn) => { const q = el('button', 'background:#0c4a6e;border:1px solid #7dd3fc;color:#fff;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px', t); q.type = 'button'; q.onclick = fn; return q; };
+    if (modo === 'poly') barra.append(bt('Deshacer', deshacer), bt('Terminar', terminarPoly));
+    barra.appendChild(bt('Cancelar', () => finDibujo(true))); document.body.appendChild(barra);
+    info(modo === 'poly' ? 'Clic para agregar vértices (mínimo 3). Doble clic o Enter para terminar. Retroceso deshace. Esc cancela.' : 'Clic en el centro; mueva el cursor y haga clic otra vez para fijar el radio. Esc cancela.');
+    mp.on('click', alClic); mp.on('mousemove', alMover); mp.on('dblclick', alDoble); try { mp.doubleClickZoom.disable(); } catch (_) { /* nada */ }
+    document.addEventListener('keydown', alTecla, true);
+  }
+  function finDibujo(cancelar) {
+    const mp = mapa(); if (mp) { mp.off('click', alClic); mp.off('mousemove', alMover); mp.off('dblclick', alDoble); try { mp.doubleClickZoom.enable(); } catch (_) { /* nada */ } }
+    document.removeEventListener('keydown', alTecla, true); if (dib) dib.capas.forEach(quitar); const habia = !!dib; dib = null; barra = quitar(barra);
+    if (habia) { if (panel) panel.style.display = ''; if (mp && capa && visible && !mp.hasLayer(capa)) capa.addTo(mp); }
+  }
+  function actualizarBorrador(cursor) {
+    const mp = mapa(); if (!mp || !dib) return;
+    if (dib.modo === 'poly') {
+      const pts = dib.pts.slice(); if (cursor) pts.push(cursor);
+      if (!dib.linea) { dib.linea = L.polygon([], { color: '#fbbf24', weight: 3, dashArray: '6 6', fillOpacity: 0.12, interactive: false }).addTo(mp); dib.capas.push(dib.linea); } dib.linea.setLatLngs(pts);
+      dib.capas.filter(c => c._vtx).forEach(quitar); dib.capas = dib.capas.filter(c => !c._vtx);
+      dib.pts.forEach(p => { const c = L.circleMarker(p, { radius: 4, color: '#fff', weight: 2, fillColor: '#f59e0b', fillOpacity: 1, interactive: false }).addTo(mp); c._vtx = true; dib.capas.push(c); });
+    } else if (dib.centro) {
+      const r = cursor ? mp.distance(dib.centro, cursor) : (dib.radio || 0);
+      if (!dib.linea) { dib.linea = L.circle(dib.centro, { radius: Math.max(1, r), color: '#fbbf24', weight: 3, dashArray: '6 6', fillOpacity: 0.12, interactive: false }).addTo(mp); dib.capas.push(dib.linea); } dib.linea.setRadius(Math.max(1, r)); info('Radio: ' + (r / 1000).toFixed(1) + ' km. Clic para fijarlo.');
+    }
+  }
+  function alClic(e) {
+    if (!dib) return; const mp = mapa();
+    if (dib.modo === 'poly') { const u = dib.pts[dib.pts.length - 1]; if (u && mp.latLngToContainerPoint(u).distanceTo(mp.latLngToContainerPoint(e.latlng)) < 4) return; dib.pts.push(e.latlng); actualizarBorrador(null); }
+    else if (!dib.centro) { dib.centro = e.latlng; dib.capas.push(L.circleMarker(e.latlng, { radius: 5, color: '#fff', weight: 2, fillColor: '#f59e0b', fillOpacity: 1, interactive: false }).addTo(mp)); actualizarBorrador(e.latlng); }
+    else { const km = mp.distance(dib.centro, e.latlng) / 1000; if (km < 1) return; terminarCirculo(dib.centro, km); }
+  }
+  function alMover(e) { if (dib && ((dib.modo === 'poly' && dib.pts.length) || (dib.modo === 'circ' && dib.centro))) actualizarBorrador(e.latlng); }
+  function alDoble() { if (dib && dib.modo === 'poly') terminarPoly(); }
+  function alTecla(e) {
+    if (!dib) return; if (e.key === 'Escape') { e.preventDefault(); finDibujo(true); } else if (e.key === 'Enter' && dib.modo === 'poly') { e.preventDefault(); terminarPoly(); } else if ((e.key === 'Backspace' || e.key === 'Delete') && dib.modo === 'poly') { e.preventDefault(); deshacer(); }
+  }
+  function deshacer() { if (dib && dib.modo === 'poly' && dib.pts.length) { dib.pts.pop(); actualizarBorrador(null); } }
+  function terminarPoly() {
+    if (!dib || dib.pts.length < 3) { info('Marque al menos 3 vértices.'); return; }
+    const ring = dib.pts.map(p => [R4(p.lng), R4(p.lat)]); ring.push(ring[0].slice()); const c = L.polygon(dib.pts).getBounds().getCenter(), lg = lugarDe(c.lat, c.lng);
+    finDibujo(true); agregarParte('Área dibujada (' + (ring.length - 1) + ' vértices)', [[ring]], lg ? 'cerca de ' + lg : '');
+  }
+  function terminarCirculo(c, km) {
+    const lg = lugarDe(c.lat, c.lng), poly = circulo(c.lat, c.lng, km); finDibujo(true);
+    agregarParte('Círculo de ' + km.toFixed(1) + ' km', [poly], lg ? 'cerca de ' + lg : '');
+  }
+
+  /* ---------- Boton y arranque ---------- */
+  function boton() {
+    const b = $('btn-capa-meteo');
+    if (!activa() || !puedeEditar) { if (b) b.remove(); return; }
+    if (b) return; const ref = $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🗺 Mi capa'); n.id = 'btn-capa-meteo'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Publicar áreas meteorológicas en el Visor Táctico de todo el teatro'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref);
+  }
+  function reiniciar() {
+    cerrarPanel(); capa = quitar(capa); if (ctrl) { try { ctrl.remove(); } catch (_) { /* nada */ } ctrl = null; ctrlDiv = null; } const b = $('btn-capa-meteo'); if (b) b.remove();
+    areas = []; ver = ''; borrador = null; puedeEditar = false; puedeBorrarTodas = false; desfase = 0;
+  }
+  setInterval(() => {
+    if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
+    const mp = mapa(); if (!mp) return;
+    const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
+    if (!iniciado || tid !== ultimoTeatro) { if (iniciado) reiniciar(); iniciado = true; ultimoTeatro = tid; visible = lsGet('vis', '1') !== '0'; listaAbierta = lsGet('lista', '1') !== '0'; cargar(true); }
+    else boton();
+  }, 2000);
+  setInterval(() => { if (activa() && iniciado && !document.hidden) cargar(false); }, 60000);
+  setInterval(() => { if (activa() && iniciado && areas.length && !dib) dibujar(true); }, 45000);            // las vencidas dejan de verse sin esperar al servidor
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado) cargar(false); });
+  window.aresCapaMeteo = { abrir: abrir, recargar: () => cargar(true), areas: () => vigentes().slice(), geomFinal: geomFinal, circulo: circulo };
+})();
+</script>
+<!-- ===== FIN BLOQUE CAPA METEO ===== -->
 </body>
 </html>
