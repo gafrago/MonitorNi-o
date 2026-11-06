@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-w</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-x</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyi6rfLcKeUH9dAI_OqC106fpVPTderoI0abVaMCr9blFWi47qZFesSi1A5CX5tFe7CIA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbz1_hqDI42I424K1fybtfLPqs7jR7FjvyXO0CpJSNB7Z5lvVYRYEE7ESSNFkuwTJ0KuXw/exec";
 
 
 ;
@@ -8489,8 +8489,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const M = mapa(); if (!M || !base.length) return; limpiarMapa(); capa = L.layerGroup(); capaLin = L.layerGroup();
     unidades(snapAct).forEach(u => { if (!isFinite(u.lat) || !isFinite(u.lon)) return;
       const m = L.marker([u.lat, u.lon], { icon: iconoDe(u), zIndexOffset: 700, keyboard: false }); m.on('click', () => { sel = u.id; if (panel) pintar(); dibujar(snapAct, lineas); });
-      m.bindPopup(() => { const d = el('div', 'font-size:12px'); d.appendChild(el('b', '', u.n)); d.appendChild(el('div', '', (COL[u.af] || COL.DESCONOCIDO)[1] + ' · ' + u.c + ' · ' + u.d.toLowerCase())); d.appendChild(el('div', '', 'Fuerza ' + Math.ceil(u.f) + ' de ' + u.q + ' · ' + (EST[u.e] || u.e))); if (u.al) d.appendChild(el('div', '', 'Alcance ' + u.al + ' km')); return d; }); capa.addLayer(m);
+      m.bindPopup(() => { const d = el('div', 'font-size:12px'); d.appendChild(el('b', '', u.n)); d.appendChild(el('div', '', (COL[u.af] || COL.DESCONOCIDO)[1] + ' · ' + u.c + ' · ' + u.d.toLowerCase())); d.appendChild(el('div', '', 'Fuerza ' + Math.ceil(u.f) + ' de ' + u.q + ' · ' + (EST[u.e] || u.e))); if (u.al) d.appendChild(el('div', '', 'Alcance ' + u.al + ' km'));
+        const A = (snapAct || act)[u.id]; if (A && u.s === 'LOG' && A.cg) d.appendChild(el('div', '', modoTxt(A.modo) + ' · carga ' + RN3.map(r => r[1] + ' ' + Math.round(A.cg[r[0]]) + '/' + Math.round(A.cap[r[0]])).join(' · '))); else if (A && A.s) d.appendChild(el('div', '', RN3.map(r => r[1] + ' ' + Math.round(A.s[r[0]]) + '%').join(' · '))); return d; }); capa.addLayer(m);
       if (verAlc && u.al > 0 && vivo(u)) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: u.al * 1000, color: (COL[u.af] || COL.DESCONOCIDO)[0], weight: 1.5, dashArray: '8 6', fillOpacity: .04, interactive: false }));
+      if (verAlc && u.s === 'LOG' && vivo(u) && ej && ej.params) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: ej.params.radioReab * 1000, color: '#10b981', weight: 1.5, dashArray: '2 4', fillOpacity: .05, interactive: false }));
       const o = !snapAct && ord[u.id]; if (o) capaLin.addLayer(L.polyline([[u.lat, u.lon], [o.lat, o.lon]], { color: '#facc15', weight: 2, dashArray: '4 6', interactive: false })); });
     (lineas || []).forEach(l => capaLin.addLayer(L.polyline(l.p, { color: l.c, weight: l.w || 2, dashArray: l.d || null, interactive: false })));
     capaLin.addTo(M); capa.addTo(M);
@@ -8498,6 +8500,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------- eventos a texto ---------- */
+  const RN = { m: 'la munición', c: 'el combustible', v: 'los víveres' }, RN3 = [['m', 'M', 'Munición'], ['c', 'C', 'Combustible'], ['v', 'V', 'Víveres']];
+  const recTxt = e => RN3.filter(r => e[r[0]] > 0).map(r => r[2].toLowerCase() + ' ' + e[r[0]]).join(' · ');
   function textoEv(e) {
     const n = nombreDe;
     switch (e.t) {
@@ -8505,13 +8509,20 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'FUEGO': return n(e.a) + ' dispara a ' + n(e.d) + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano;
       case 'BAJA': return n(e.u) + ': fuerza ' + e.antes + ' → ' + e.despues;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
-      case 'ORDEN': return e.q ? 'Orden: ' + n(e.u) + ' se detiene' : e.e ? 'Orden: ' + n(e.u) + ' cambia a ' + (EST[e.e] || e.e) : 'Orden: ' + n(e.u) + ' se dirige a ' + e.lat + ', ' + e.lon;
+      case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
+      case 'CARGA': return n(e.u) + (e.modo === 'CARGAR' ? ' carga de ' : ' descarga en ') + n(e.o) + ': ' + recTxt(e);
+      case 'AGOT': return n(e.u) + ' agotó ' + (RN[e.r] || e.r);
+      case 'BAJO': return n(e.u) + ': ' + (RN[e.r] || e.r) + ' por debajo del 25%';
+      case 'ORDEN': if (e.modo) return 'Orden: ' + n(e.u) + (e.modo === 'NINGUNO' ? ' pasa a depósito fijo' : e.modo === 'CARGAR' ? ' pasa a convoy: cargar' : ' pasa a convoy: descargar');
+        if (e.rec) return 'Orden: recursos de ' + n(e.u) + ' fijados (' + RN3.filter(r => e.rec[r[0]] !== undefined).map(r => r[2].toLowerCase() + ' ' + e.rec[r[0]]).join(', ') + ')';
+        if (e.cap) return 'Orden: capacidad de carga de ' + n(e.u) + ' fijada (' + RN3.map(r => r[2].toLowerCase() + ' ' + e.cap[r[0]]).join(', ') + ')';
+        return e.q ? 'Orden: ' + n(e.u) + ' se detiene' : e.e ? 'Orden: ' + n(e.u) + ' cambia a ' + (EST[e.e] || e.e) : 'Orden: ' + n(e.u) + ' se dirige a ' + e.lat + ', ' + e.lon;
       case 'PARAMS': return 'El árbitro modificó los parámetros';
       case 'FIN': return 'FIN: ' + e.m;
       default: return e.t;
     }
   }
-  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd' }[t] || '#cbd5e1');
+  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24' }[t] || '#cbd5e1');
 
   /* ---------- carga ---------- */
   async function cargarLista() { try { const r = await api('SIM_LISTAR'); if (r.status === 'success') { lista = r; if (panel && tab === 'ejercicios') pintar(); } else aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); } catch (_) { aviso('⚠ Sin conexión.', false); } }
@@ -8544,7 +8555,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const nuevo = el('div', 'margin-top:10px;padding:8px;border:1px solid #334155;border-radius:6px'); nuevo.appendChild(el('b', 'font-size:12.5px', 'Nuevo ejercicio'));
     const [l1, nom] = campo('Nombre', 'text', '', 'sm-nom'); const [l2, esc] = campo('Parte de', 'select', null, 'sm-esc'); esc.add(new Option('Fuerzas desplegadas ahora', 'ACTUAL')); l.escenarios.forEach(e => esc.add(new Option('Escenario: ' + e.nombre + ' (' + e.unidades + ')', e.id)));
     const [l3, sem] = campo('Semilla (opcional, entero; vacía = al azar)', 'number', '', 'sm-sem'); nuevo.append(l1, l2, l3);
-    nuevo.appendChild(btn('Crear ejercicio', '#15803d', () => accion('SIM_CREAR', { nombre: nom.value, escenario: esc.value, semilla: sem.value === '' ? undefined : Number(sem.value) }, 'Ejercicio creado.', r => abrirEj(r.id))));
+    const det = el('details', 'margin-top:6px'); det.appendChild(el('summary', 'font-size:11.5px;color:#94a3b8;cursor:pointer', 'Logística inicial (opcional)')); const ii = {}, cc = {};
+    const f1 = el('div', 'display:flex;gap:6px'), f2 = el('div', 'display:flex;gap:6px'); det.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', 'Recursos iniciales de cada fuerza combatiente (% del máximo; vacío = 100)'));
+    RN3.forEach(([k, lt, nom]) => { const [lb, i] = campo(nom, 'number', '', 'sm-ini-' + k); lb.style.flex = '1'; ii[k] = i; f1.appendChild(lb); }); det.appendChild(f1);
+    det.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', 'Carga inicial de cada fuerza de apoyo logístico (vacío = 1000)'));
+    RN3.forEach(([k, lt, nom]) => { const [lb, i] = campo(nom, 'number', '', 'sm-car-' + k); lb.style.flex = '1'; cc[k] = i; f2.appendChild(lb); }); det.appendChild(f2); nuevo.appendChild(det);
+    const grupo = o => { const r = {}; RN3.forEach(([k]) => { if (o[k].value !== '') r[k] = Number(o[k].value); }); return Object.keys(r).length ? r : undefined; };
+    nuevo.appendChild(btn('Crear ejercicio', '#15803d', () => accion('SIM_CREAR', { nombre: nom.value, escenario: esc.value, semilla: sem.value === '' ? undefined : Number(sem.value), params: { ini: grupo(ii), cargaLog: grupo(cc) } }, 'Ejercicio creado.', r => abrirEj(r.id))));
     c.appendChild(nuevo);
     const sc = el('div', 'margin-top:10px;padding:8px;border:1px solid #334155;border-radius:6px'); sc.appendChild(el('b', 'font-size:12.5px', 'Escenarios guardados'));
     sc.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Un escenario guarda las fuerzas desplegadas tal como están, para repetir el ejercicio con otras decisiones.'));
@@ -8553,6 +8570,14 @@ window.addEventListener('DOMContentLoaded', () => {
     const [l4, en] = campo('Guardar las fuerzas actuales como escenario', 'text', '', 'sm-enom'); en.placeholder = 'Nombre del escenario'; sc.appendChild(l4);
     sc.appendChild(btn('Guardar escenario', '#475569', () => accion('SIM_ESC_GUARDAR', { nombre: en.value }, 'Escenario guardado.', cargarLista))); c.appendChild(sc);
   }
+  function mini(l, p, t) { const w = el('div', 'flex:1'); w.title = t; w.appendChild(el('div', 'font-size:9px;color:#94a3b8;line-height:10px', l)); const b = el('div', 'height:4px;background:#1e293b;border-radius:2px'); b.appendChild(el('div', 'height:4px;border-radius:2px;width:' + Math.round(Math.max(0, Math.min(1, p)) * 100) + '%;background:' + (p > .5 ? '#22c55e' : p > .25 ? '#f59e0b' : '#ef4444'))); w.appendChild(b); return w; }
+  function recBarras(u) {
+    const a = act[u.id], w = el('div', 'display:flex;gap:4px;margin-top:3px'); w.className = 'sm-rec'; if (!a) return w;
+    if (u.s === 'LOG') { if (!a.cg || !a.cap) return w; RN3.forEach(([k, l, nom]) => w.appendChild(mini(l, a.cap[k] > 0 ? a.cg[k] / a.cap[k] : 0, nom + ': ' + Math.round(a.cg[k]) + ' de ' + Math.round(a.cap[k])))); }
+    else { if (!a.s) return w; RN3.forEach(([k, l, nom]) => w.appendChild(mini(l, a.s[k] / 100, nom + ': ' + Math.round(a.s[k]) + '%'))); }
+    return w;
+  }
+  const modoTxt = m => m === 'CARGAR' ? 'convoy: cargando' : m === 'DESCARGAR' ? 'convoy: descargando' : 'depósito';
   function barra(u) { const p = u.q > 0 ? Math.max(0, Math.min(1, u.f / u.q)) : 0, b = el('div', 'height:5px;background:#1e293b;border-radius:3px;margin-top:2px'); b.appendChild(el('div', 'height:5px;border-radius:3px;width:' + Math.round(p * 100) + '%;background:' + (p > .5 ? '#22c55e' : p > 0 ? '#f59e0b' : '#64748b'))); return b; }
   function tabConducir(c) {
     if (!ej) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
@@ -8571,7 +8596,7 @@ window.addEventListener('DOMContentLoaded', () => {
     uni.forEach(u => { const f = el('div', 'display:flex;gap:6px;align-items:center;padding:4px 2px;border-bottom:1px solid #1e293b;cursor:pointer' + (sel === u.id ? ';background:#1e293b' : '')); f.className = 'sm-u'; f.dataset.id = u.id; f.onclick = () => { sel = u.id; pintar(); dibujar(); };
       const im = document.createElement('img'); im.src = urlDe(u); im.width = im.height = 26; im.alt = ''; f.appendChild(im);
       const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-size:12px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (COL[u.af] || COL.DESCONOCIDO)[0].replace('#0369a1', '#7dd3fc').replace('#b91c1c', '#fca5a5').replace('#15803d', '#86efac').replace('#a16207', '#fde047'), u.n));
-      t.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Fuerza ' + Math.ceil(u.f) + '/' + u.q + ' · ' + (EST[u.e] || u.e) + (ord[u.id] ? ' · en movimiento' : ''))); t.appendChild(barra(u)); f.appendChild(t);
+      t.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Fuerza ' + Math.ceil(u.f) + '/' + u.q + ' · ' + (EST[u.e] || u.e) + (u.s === 'LOG' && act[u.id] ? ' · ' + modoTxt(act[u.id].modo) : '') + (ord[u.id] ? ' · en movimiento' : ''))); t.appendChild(barra(u)); t.appendChild(recBarras(u)); f.appendChild(t);
       f.appendChild(btn('🎯', '#475569', ev => { if (ev && ev.stopPropagation) ev.stopPropagation(); try { mapTactico.setView([u.lat, u.lon], Math.max(mapTactico.getZoom(), 9)); } catch (_) { /* nada */ } }, 'Centrar')); c.appendChild(f); });
     if (cond && !fin) {
       const u = base.filter(x => x.id === sel)[0], caja = el('div', 'margin-top:8px;padding:8px;border:1px solid #334155;border-radius:6px'); caja.className = 'sm-ordenes';
@@ -8580,6 +8605,15 @@ window.addEventListener('DOMContentLoaded', () => {
         const fila = el('div', 'margin-top:4px');
         fila.appendChild(btn(modoClic ? '📍 Haga clic en el mapa… (cancelar)' : '📍 Mover: elegir destino en el mapa', modoClic ? '#b45309' : '#1d4ed8', () => { modoClic = !modoClic; if (modoClic) pedirDestino(u); else { aviso('', true); pintar(); } }));
         fila.appendChild(btn('✋ Detener', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, quieto: true }] }, 'Orden enviada.', () => refrescar(true)))); caja.appendChild(fila);
+        const A = act[u.id] || {}, lg = u.s === 'LOG', R0 = lg ? A.cg : A.s;
+        if (R0) { const g = el('div', 'margin-top:8px;padding-top:6px;border-top:1px solid #334155'); g.appendChild(el('div', 'font-size:11.5px;font-weight:bold', lg ? 'Carga actual' : 'Recursos (% del máximo)'));
+          const fl = el('div', 'display:flex;gap:6px'), ri = {}; RN3.forEach(([k, l, nom]) => { const [lb, i] = campo(nom, 'number', Math.round(R0[k] * 10) / 10, 'sm-rec-' + k); i.step = 'any'; lb.style.flex = '1'; ri[k] = i; fl.appendChild(lb); }); g.appendChild(fl);
+          g.appendChild(btn('Aplicar recursos', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, recursos: { m: Number(ri.m.value), c: Number(ri.c.value), v: Number(ri.v.value) } }] }, 'Recursos fijados.', () => refrescar(true)))); caja.appendChild(g); }
+        if (lg && A.cap) { const g = el('div', 'margin-top:8px;padding-top:6px;border-top:1px solid #334155'); g.appendChild(el('div', 'font-size:11.5px;font-weight:bold', 'Función logística'));
+          const [lm, sm] = campo('Rol', 'select', null, 'sm-modo'); [['NINGUNO', 'Depósito fijo (solo reabastece)'], ['CARGAR', 'Convoy: cargar del depósito/convoy cercano'], ['DESCARGAR', 'Convoy: descargar en el depósito/convoy cercano']].forEach(([v, t]) => sm.add(new Option(t, v))); sm.value = A.modo || 'NINGUNO'; g.appendChild(lm);
+          g.appendChild(btn('Aplicar rol', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, modo: sm.value }] }, 'Rol fijado.', () => refrescar(true))));
+          const fc = el('div', 'display:flex;gap:6px'), ci = {}; RN3.forEach(([k, l, nom]) => { const [lb, i] = campo('Capacidad de ' + nom.toLowerCase(), 'number', Math.round(A.cap[k] * 10) / 10, 'sm-cap-' + k); i.step = 'any'; lb.style.flex = '1'; ci[k] = i; fc.appendChild(lb); }); g.appendChild(fc);
+          g.appendChild(btn('Aplicar capacidad', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, cap: { m: Number(ci.m.value), c: Number(ci.c.value), v: Number(ci.v.value) } }] }, 'Capacidad fijada.', () => refrescar(true)))); caja.appendChild(g); }
         const [l1, es] = campo('Cambiar estado (adjudicación del árbitro)', 'select', null, 'sm-estado'); Object.keys(EST).forEach(k => es.add(new Option(EST[k], k))); es.value = (act[u.id] || {}).e || 'OPERATIVO'; caja.appendChild(l1);
         caja.appendChild(btn('Aplicar estado', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, estado: es.value }] }, 'Orden enviada.', () => refrescar(true)))); }
       c.appendChild(caja);
@@ -8594,17 +8628,19 @@ window.addEventListener('DOMContentLoaded', () => {
     try { const r = await api('SIM_AVANZAR', { id: ejId, n: n }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo.'), false);
       ultimosEventos = r.eventos || []; rep = null; aviso(r.terminado ? '⛔ ' + r.fin : 'Turno ' + r.turno + ' resuelto.', !r.terminado); await refrescar(true); } catch (_) { aviso('⚠ Sin conexión.', false); }
   }
-  const FILAS_PAR = [['turnoMin', 'Duración del turno (min)', 5, 1440], ['pBase', 'Probabilidad base de impacto (0 a 1)', 0, 1], ['dano', 'Daño por impacto', .1, 100], ['modDegradado', 'Factor de fuerza degradada (0 a 1)', 0, 1], ['antiaereo', 'Efectividad antiaérea contra aire', 0, 2]];
+  const FILAS_PAR = [['turnoMin', 'Duración del turno (min)', 5, 1440], ['pBase', 'Probabilidad base de impacto (0 a 1)', 0, 1], ['dano', 'Daño por impacto', .1, 100], ['modDegradado', 'Factor de fuerza degradada (0 a 1)', 0, 1], ['antiaereo', 'Efectividad antiaérea contra aire', 0, 2],
+    ['umbral', 'Recursos: % por encima del cual rinde pleno', 1, 100], ['consMun', 'Munición que gasta un turno de fuego (puntos)', 0, 100], ['consViv', 'Víveres que gasta cada turno (puntos)', 0, 100], ['radioReab', 'Radio de reabastecimiento (km)', 0.1, 200], ['tasaReab', 'Reabastecimiento máximo por turno (puntos)', 0, 100], ['tasaCarga', 'Carga y descarga de convoyes por turno', 0, 10000]];
   function tabParams(c) {
     if (!ej) return; const P = ej.params, cond = puede() && ej.estado !== 'TERMINADO', inputs = {};
     c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:4px', 'Valores genéricos y ficticios: ajústelos a su criterio. Cada cambio queda en la bitácora.'));
     FILAS_PAR.forEach(([k, r, lo, hi]) => { const [l, i] = campo(r, 'number', P[k]); i.step = 'any'; i.min = lo; i.max = hi; i.disabled = !cond; inputs[k] = i; c.appendChild(l); });
     c.appendChild(el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Velocidad (km/h)')); const v = el('div', 'display:flex;gap:6px'); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const [l, i] = campo(d.toLowerCase(), 'number', P.vel[d]); i.disabled = !cond; i.step = 'any'; inputs['v' + d] = i; l.style.flex = '1'; v.appendChild(l); }); c.appendChild(v);
+    c.appendChild(el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Combustible que gasta un turno completo de marcha (puntos)')); const cb = el('div', 'display:flex;gap:6px'); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const [l, i] = campo(d.toLowerCase(), 'number', P.consComb[d]); i.disabled = !cond; i.step = 'any'; inputs['k' + d] = i; l.style.flex = '1'; cb.appendChild(l); }); c.appendChild(cb);
     c.appendChild(el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Efectividad (0 a 2): quien dispara → contra quién')); const tb = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse;margin-top:2px');
     const h = el('tr'); ['', 'tierra', 'aire', 'mar'].forEach(t => h.appendChild(el('th', 'text-align:center;color:#94a3b8;font-weight:normal', t))); tb.appendChild(h);
     ['TIERRA', 'AIRE', 'MAR'].forEach(a => { const tr = el('tr'); tr.appendChild(el('td', 'color:#94a3b8', a.toLowerCase())); ['TIERRA', 'AIRE', 'MAR'].forEach(t => { const i = el('input', 'width:54px;padding:3px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12px'); i.type = 'number'; i.step = 'any'; i.value = P.eff[a][t]; i.disabled = !cond; inputs['e' + a + t] = i; const td = el('td', 'text-align:center'); td.appendChild(i); tr.appendChild(td); }); tb.appendChild(tr); }); c.appendChild(tb);
     if (cond) c.appendChild(el('div', 'margin-top:8px')).appendChild(btn('Guardar parámetros', '#15803d', () => {
-      const p = { vel: {}, eff: { TIERRA: {}, AIRE: {}, MAR: {} } }; FILAS_PAR.forEach(([k]) => { p[k] = Number(inputs[k].value); }); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { p.vel[d] = Number(inputs['v' + d].value); ['TIERRA', 'AIRE', 'MAR'].forEach(t => { p.eff[d][t] = Number(inputs['e' + d + t].value); }); });
+      const p = { vel: {}, consComb: {}, eff: { TIERRA: {}, AIRE: {}, MAR: {} } }; FILAS_PAR.forEach(([k]) => { p[k] = Number(inputs[k].value); }); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { p.vel[d] = Number(inputs['v' + d].value); p.consComb[d] = Number(inputs['k' + d].value); ['TIERRA', 'AIRE', 'MAR'].forEach(t => { p.eff[d][t] = Number(inputs['e' + d + t].value); }); });
       accion('SIM_PARAMS', { id: ejId, params: p }, 'Parámetros guardados.', () => refrescar(true)); }));
     else c.appendChild(el('div', 'margin-top:8px;font-size:11.5px;color:#fbbf24', puede() ? 'El ejercicio terminó: los parámetros ya no se editan.' : 'Solo el árbitro edita los parámetros.'));
   }
@@ -8636,6 +8672,10 @@ window.addEventListener('DOMContentLoaded', () => {
   function informeDatos() {
     if (!rep) return null; const ini = rep.snaps[0].act, fin = rep.snaps[rep.snaps.length - 1].act, B = rep.base, res = {}, porTurno = [];
     ['AZUL', 'ROJO'].forEach(b => { const us = B.filter(u => bando(u.af) === b); res[b] = { unidades: us.length, inicial: us.reduce((s, u) => s + u.q, 0), final: us.reduce((s, u) => s + Math.ceil((fin[u.id] || {}).f || 0), 0), operativas: us.filter(u => { const a = fin[u.id]; return a && a.f > .0001 && (a.e === 'OPERATIVO' || a.e === 'DEGRADADO'); }).length, disparos: 0, impactos: 0 }; });
+    const fs = fin; ['AZUL', 'ROJO'].forEach(b => { const us = B.filter(u => bando(u.af) === b && u.s !== 'LOG' && (fs[u.id] || {}).s); const med = k => us.length ? Math.round(us.reduce((t, u) => t + fs[u.id].s[k], 0) / us.length) : null;
+      res[b].rec = { m: med('m'), c: med('c'), v: med('v') }; res[b].agot = { m: 0, c: 0, v: 0 }; res[b].reab = { m: 0, c: 0, v: 0 }; });
+    rep.eventos.forEach(e => { const u = B.filter(x => x.id === e.u)[0], b = u && bando(u.af); if (!b || !res[b].agot) return; if (e.t === 'AGOT') res[b].agot[e.r]++; else if (e.t === 'REAB') ['m', 'c', 'v'].forEach(k => { res[b].reab[k] += e[k] || 0; }); });
+    ['AZUL', 'ROJO'].forEach(b => ['m', 'c', 'v'].forEach(k => { res[b].reab[k] = Math.round(res[b].reab[k]); }));
     const nm = id => (B.filter(u => u.id === id)[0] || {}).n || id;
     for (let t = 1; t < rep.snaps.length; t++) { const f = { turno: t, azulBajas: 0, rojoBajas: 0, disparos: 0 };
       rep.eventos.filter(e => e.turno === t).forEach(e => { if (e.t === 'FUEGO') { const u = B.filter(x => x.id === e.a)[0], b = u && bando(u.af); f.disparos++; if (b) { res[b].disparos++; res[b].impactos += e.imp; } }
@@ -8648,6 +8688,9 @@ window.addEventListener('DOMContentLoaded', () => {
     box.appendChild(el('div', 'font-size:12.5px;margin-bottom:6px', ej.nombre + ' · turno ' + ej.turno + ' · semilla ' + ej.semilla + ' · ' + d.fin));
     const tb = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse'); const h = el('tr'); ['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'].forEach(t => h.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); tb.appendChild(h);
     ['AZUL', 'ROJO'].forEach(b => { const r = d.res[b], tr = el('tr'); [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); tb.appendChild(tr); }); box.appendChild(tb);
+    box.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Logística (recursos finales medios de la tropa, agotamientos y reabastecido)'));
+    const tl = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse'); tl.className = 'sm-log'; const hl = el('tr'); ['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'].forEach(t => hl.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); tl.appendChild(hl);
+    ['AZUL', 'ROJO'].forEach(b => { const r = d.res[b], tr = el('tr'); [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); tl.appendChild(tr); }); box.appendChild(tl);
     box.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Bajas por turno (en efectivos)')); const t2 = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse'); const h2 = el('tr'); ['Turno', 'Azul', 'Rojo', 'Disparos'].forEach(t => h2.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); t2.appendChild(h2);
     d.porTurno.forEach(f => { const tr = el('tr'); [f.turno, f.azulBajas, f.rojoBajas, f.disparos].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); t2.appendChild(tr); }); box.appendChild(t2); c.appendChild(box);
     c.appendChild(el('div', 'margin-top:8px')).appendChild(btn('⬇ Informe en PDF', '#1d4ed8', () => pdf(d), 'Descargar el informe'));
@@ -8659,8 +8702,9 @@ window.addEventListener('DOMContentLoaded', () => {
     doc.text('Teatro: ' + teatro + ' (EJERCICIO)   Ejercicio: ' + ej.nombre, 14, 24); doc.text('Turnos resueltos: ' + ej.turno + '   Semilla: ' + ej.semilla + '   Duración del turno: ' + ej.params.turnoMin + ' min', 14, 30); doc.text('Resultado: ' + d.fin, 14, 36);
     let y = 42; const AT = (cab, filas) => { if (doc.autoTable) { doc.autoTable({ startY: y, head: [cab], body: filas, styles: { fontSize: 9 }, headStyles: { fillColor: [30, 58, 95] } }); y = doc.lastAutoTable.finalY + 8; } };
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
+    AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN').slice(0, 400); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
