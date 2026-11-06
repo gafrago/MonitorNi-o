@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-l</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-m</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycby4VAwrzvQXlVnPvMuMmYwali1CGjuROOPuaQ4dM4q6I7-gHNIhsHkhEuJXy57k1rdHAw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxNBLFltHJV-Fl-B9cUiYkPfMY6npRnwp2TdpchkgRmkoYgKM2O3k4Mef8o2IQRHiJjlw/exec";
 
 
 ;
@@ -3373,9 +3373,9 @@ window.addEventListener('DOMContentLoaded', () => {
     (estacionesHidro || []).forEach(h => {
       const e = (typeof estadoHidro === 'function') ? estadoHidro(h) : { color: '#64748b', txt: '' };
       const v = h.variacion, vtxt = (v === null || v === undefined || !isFinite(Number(v))) ? '—' : (Number(v) > 0 ? '+' : '') + Number(v).toFixed(2);
-      const sinPDF = !String(h.fuente || '').includes('PDF');
+      const viejo = !(Number(h.ts) > 0) || (Date.now() - Number(h.ts)) > 48 * 3600000;
       tb.insertAdjacentHTML('beforeend', `<tr><td><b>${esc(h.estacion)}</b></td><td>${esc(h.rio)}</td><td><b>${m2(h.actual)}</b></td>` +
-        `<td style="color:${Number(v) > 0 ? '#dc2626' : Number(v) < 0 ? '#16a34a' : 'inherit'}">${vtxt}</td><td>${esc(h.periodo || '—')}</td><td>${esc(h.fechaHora || '—')}</td><td>${esc(h.estadoPNA || '—')}</td>` +
+        `<td style="color:${Number(v) > 0 ? '#dc2626' : Number(v) < 0 ? '#16a34a' : 'inherit'}">${vtxt}</td><td>${esc(h.periodo || '—')}</td><td${viejo ? ' style="color:#dc2626;font-weight:bold" title="Dato con más de 48 h: sincronice o cargue el parte vigente"' : ''}>${viejo ? '⚠ ' : ''}${esc(h.fechaHora || (h.ts ? new Date(h.ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'))}<br><small style="color:#64748b;font-weight:normal">${esc(h.fuente || '')}</small></td><td>${esc(h.estadoPNA || '—')}</td>` +
         `<td>${m2(h.regAnterior)}</td><td>${esc(h.fechaAnterior || '—')}</td><td>${m2(h.alerta)}</td><td>${m2(h.evacuacion)}</td>` +
         `<td><span style="color:${e.color};font-weight:bold">${esc(e.txt)}</span></td><td>${typeof textoQ === 'function' ? textoQ(h) : '—'}</td><td>${esc(h.tendencia || '═')}</td></tr>`);
     });
@@ -6522,14 +6522,17 @@ window.addEventListener('DOMContentLoaded', () => {
     if (isFinite(ale) && !ok(ale)) { msgManual('El nivel de alerta debe estar entre -5 y 60 metros.', false); return; }
     if (isFinite(eva) && !ok(eva)) { msgManual('El nivel de evacuación debe estar entre -5 y 60 metros.', false); return; }
     const antes = Number(h.actual), tend = !isFinite(antes) ? '═' : (alt - antes > 0.02 ? '▲' : alt - antes < -0.02 ? '▼' : '═');
-    const dato = { ID: h.id, Actual_m: alt, Alerta_m: isFinite(ale) ? ale : h.alerta, Evacuacion_m: isFinite(eva) ? eva : h.evacuacion, Tendencia: tend, Timestamp: Date.now(), Fuente: 'Carga manual' };
+    const ahora = Date.now(), pad = n => (n < 10 ? '0' : '') + n, d0 = new Date(ahora), fAhora = pad(d0.getDate()) + '/' + pad(d0.getMonth() + 1) + '/' + d0.getFullYear() + ' ' + pad(d0.getHours()) + ':' + pad(d0.getMinutes());
+    const fAnt = h.fechaHora || (h.ts ? (() => { const q = new Date(h.ts); return pad(q.getDate()) + '/' + pad(q.getMonth() + 1) + '/' + q.getFullYear() + ' ' + pad(q.getHours()) + ':' + pad(q.getMinutes()); })() : '');
+    const dato = { ID: h.id, Actual_m: alt, Alerta_m: isFinite(ale) ? ale : h.alerta, Evacuacion_m: isFinite(eva) ? eva : h.evacuacion, Tendencia: tend, Timestamp: ahora, Fuente: 'Carga manual',
+      Fecha_Hora: fAhora, Variacion_m: isFinite(antes) ? Math.round((alt - antes) * 100) / 100 : '', Periodo: '', Estado_PNA: '', Reg_Anterior_m: isFinite(antes) ? antes : '', Fecha_Anterior: isFinite(antes) ? fAnt : '' };
     msgManual('Guardando…', true);
     try {
       const res = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify({ email: sesionActiva.email, pin: sesionActiva.pin, action: 'UPDATE', tab: 'Hidrometria', data: dato, detalle: 'Carga manual ' + h.estacion + ': ' + alt + ' m' }) });
       let r = null; try { r = await res.json(); } catch (_) { /* sin JSON */ }
       if (!r || r.status !== 'success') { msgManual('⚠ No se guardó: ' + ((r && r.message) || 'sin respuesta del servidor.'), false); return; }
     } catch (_) { msgManual('❌ Sin conexión con el servidor. No se guardó.', false); return; }
-    Object.assign(h, { actual: alt, alerta: dato.Alerta_m, evacuacion: dato.Evacuacion_m, tendencia: tend, ts: dato.Timestamp, fuente: 'Carga manual', ejemplo: false });
+    Object.assign(h, { actual: alt, alerta: dato.Alerta_m, evacuacion: dato.Evacuacion_m, tendencia: tend, ts: dato.Timestamp, fuente: 'Carga manual', ejemplo: false, fechaHora: dato.Fecha_Hora, variacion: dato.Variacion_m === '' ? null : dato.Variacion_m, periodo: '', estadoPNA: '', regAnterior: dato.Reg_Anterior_m === '' ? null : dato.Reg_Anterior_m, fechaAnterior: dato.Fecha_Anterior });
     try { if (typeof logEvento === 'function') logEvento('Carga manual: ' + h.estacion + ' -> ' + alt.toFixed(2) + ' m (' + tend + ')'); } catch (_) { /* nada */ }
     try { if (typeof window.renderizarHidrometria === 'function') window.renderizarHidrometria(); if (typeof dibujarRiosEstrategico === 'function') dibujarRiosEstrategico(); if (typeof actualizarDashboardAnalytics === 'function') actualizarDashboardAnalytics(); } catch (_) { /* nada */ }
     msgManual('✅ ' + h.estacion + ': ' + alt.toFixed(2) + ' m guardado.', true);
