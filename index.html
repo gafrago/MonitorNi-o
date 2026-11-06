@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-r</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-s</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxGbG85skON8udPwf-mivKsGSQ53jzDGcFX0fGHjJbELj1N7R29Wnu8Xt5BqhynYyScrg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbz1Qi38mHPzjCPtce4ma_hvP_2sXj8gJYliRXA3ujyaCqohl45axjDO_wKrZssp3BVhhQ/exec";
 
 
 ;
@@ -3949,7 +3949,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -6464,7 +6464,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -7731,5 +7731,287 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE MAPAS BASE ===== -->
+<!-- ===== INICIO BLOQUE ELECTORAL: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: Operativo Electoral (apoyo de la Fuerza Aerea). Solo aparece en teatros con el modulo ELECTORAL.
+   - Locales de votacion (escuelas) en el Visor Tactico, coloreados por fase: Pendiente > Alistado > En traslado > Entregado > En custodia > Replegando > Finalizado.
+   - Tablero de situacion: totales, avance, incidentes, retrasos y locales bajo aviso meteorologico (Alerta o Critica de la capa del Meteorologo).
+   - Administrador y Planificador cargan, editan y asignan; el Operador informa fase e incidentes de los locales que tiene a cargo.
+   - Datos de simulacro marcados con 🧪: se generan desde escuelas de OpenStreetMap y se borran de una vez. No se carga ningun dato de electores.
+   - Todo texto se muestra con textContent (nunca como HTML). El servidor valida y registra cada hito con hora y autor. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const FASES = ['PENDIENTE', 'ALISTADO', 'EN_TRASLADO', 'ENTREGADO', 'EN_CUSTODIA', 'REPLEGANDO', 'FINALIZADO'];
+  const FASE = { PENDIENTE: ['Pendiente', '#94a3b8'], ALISTADO: ['Alistado', '#3b82f6'], EN_TRASLADO: ['En traslado', '#f59e0b'], ENTREGADO: ['Entregado', '#22c55e'], EN_CUSTODIA: ['En custodia', '#15803d'], REPLEGANDO: ['Replegando', '#a855f7'], FINALIZADO: ['Finalizado', '#475569'] };
+  const ACC = { TERRESTRE: ['🚚', 'Terrestre'], AEREO: ['🚁', 'Aéreo'], FLUVIAL: ['🚤', 'Fluvial'], ANIMAL: ['🐴', 'Animal'] };
+  const INCIDENTES_DEMO = ['Pista de aterrizaje anegada', 'Camino cortado por crecida', 'Falta de combustible en el punto de apoyo', 'Demora por condiciones meteorológicas', 'Aeronave en mantenimiento, se reasigna medio', 'Acceso bloqueado por manifestación'];
+  let locales = [], ver = '', desfase = 0, capa = null, rend = null, panel = null, tab = 'tablero', iniciado = false, ultimoTeatro = '', ocupado = false, puedeGestionar = false, yo = '', miembros = [], visible = true, editando = null, demo = null, pulsos = null;
+  let filtro = { q: '', fase: '', acceso: '', novedades: false }, msgG = '', msgGColor = '#94a3b8', noEs = 0;
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado && /^(administrador|planificador|operador)$/i.test(String(sesionActiva.rol).trim())); } catch (_) { return false; } };
+  const teatro = () => window.ARES_TEATRO || null;
+  const tieneModulo = () => { const t = teatro(); return !!(t && Array.isArray(t.modulos) && t.modulos.map(m => String(m).toUpperCase()).indexOf('ELECTORAL') >= 0); };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const clave = k => 'ares_elec_' + k + '_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
+  const lsGet = (k, d) => { try { const v = localStorage.getItem(clave(k)); return v === null ? d : v; } catch (_) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(clave(k), String(v)); } catch (_) { /* sin almacenamiento */ } };
+  const ahora = () => Date.now() + desfase;
+  const hhmm = ms => ms ? new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  const quitar = c => { if (c) { try { c.remove(); } catch (_) { /* ya no esta */ } } return null; };
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  const idx = l => FASES.indexOf(l.fase);
+  const retrasado = l => !!(l.prevista && ahora() > l.prevista && idx(l) < 3);
+  const puedeFase = l => puedeGestionar || l.responsableEmail === yo;
+
+  /* ---------- Aviso meteorologico: el local cae dentro de un area Alerta/Critica de la capa del Meteorologo ---------- */
+  function dentroAnillo(lat, lon, r) { let d = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1]; if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) d = !d; } return d; }
+  function dentroPoli(lat, lon, p) { if (!p || !p.length || !dentroAnillo(lat, lon, p[0])) return false; for (let k = 1; k < p.length; k++) if (dentroAnillo(lat, lon, p[k])) return false; return true; }
+  function polisDe(g) { if (!g) return []; if (g.type === 'Polygon') return [g.coordinates]; if (g.type === 'MultiPolygon') return g.coordinates; return []; }
+  function avisosMeteo() { try { return (window.aresCapaMeteo ? window.aresCapaMeteo.areas() : []).filter(a => (a.sev === 'ALERTA' || a.sev === 'CRITICA') && a.geom).map(a => ({ a: a, polis: polisDe(a.geom) })); } catch (_) { return []; } }
+  function meteoDe(l, av) { for (const x of av) if (x.polis.some(p => dentroPoli(l.lat, l.lon, p))) return x.a; return null; }
+
+  /* ---------- Capa en el mapa ---------- */
+  function css() {
+    if ($('ares-el-css')) return; const s = document.createElement('style'); s.id = 'ares-el-css';
+    s.textContent = '@keyframes aresElPulso{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2.6);opacity:0}}.ares-el-ring{width:22px;height:22px;border-radius:50%;border:3px solid #dc2626;box-sizing:border-box;animation:aresElPulso 1.3s ease-out infinite;pointer-events:none}@media (prefers-reduced-motion:reduce){.ares-el-ring{animation:none}}'
+      + '#el-panel button:disabled{opacity:.5;cursor:default}';
+    document.head.appendChild(s);
+  }
+  function popupLocal(l) {
+    const d = el('div', 'font:12px sans-serif;width:260px'), f = FASE[l.fase] || FASE.PENDIENTE, ac = ACC[l.acceso] || ACC.TERRESTRE;
+    const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1;font-size:13px', (l.simulacro ? '🧪 ' : '') + l.nombre)); h.appendChild(el('span', 'color:#fff;background:' + f[1] + ';border-radius:3px;padding:0 5px;font-size:11px', f[0])); d.appendChild(h);
+    d.appendChild(el('div', 'color:#475569;margin-top:2px', [l.tipo.charAt(0) + l.tipo.slice(1).toLowerCase(), l.localidad, l.provincia].filter(Boolean).join(' · ') + ' · ' + l.mesas + ' mesas'));
+    d.appendChild(el('div', 'margin-top:3px', ac[0] + ' Acceso ' + ac[1].toLowerCase() + (l.medio ? ' · Medio: ' + l.medio : '')));
+    d.appendChild(el('div', 'margin-top:2px', '👤 ' + (l.responsable || 'Sin responsable asignado')));
+    if (l.prevista) d.appendChild(el('div', 'margin-top:2px;' + (retrasado(l) ? 'color:#b91c1c;font-weight:bold' : ''), (retrasado(l) ? '⏰ Con retraso · ' : 'Entrega prevista: ') + hhmm(l.prevista)));
+    d.appendChild(el('div', 'color:#64748b;font-size:11px;margin-top:2px', 'Fase desde ' + hhmm(l.faseTs)));
+    const m = meteoDe(l, avisosMeteo()); if (m) d.appendChild(el('div', 'margin-top:4px;background:#ede9fe;color:#5b21b6;border-radius:3px;padding:2px 5px', '⛈ Bajo aviso meteorológico: ' + m.titulo + ' (' + (m.sev === 'CRITICA' ? 'Crítica' : 'Alerta') + ')'));
+    if (l.incidente) d.appendChild(el('div', 'margin-top:4px;background:#fee2e2;color:#991b1b;border-radius:3px;padding:2px 5px', '⚠ ' + l.incidente));
+    if (l.notas) d.appendChild(el('div', 'margin-top:3px;white-space:pre-wrap', l.notas));
+    const acc = el('div', 'margin-top:6px;display:flex;flex-direction:column;gap:4px'), bs = (t, fn, col) => { const b = el('button', 'padding:3px 8px;border-radius:4px;border:1px solid #94a3b8;cursor:pointer;font-size:11px;background:' + (col || '#f1f5f9'), t); b.type = 'button'; b.onclick = fn; return b; };
+    if (puedeFase(l) && idx(l) < FASES.length - 1) {
+      const nota = el('input', 'width:100%;box-sizing:border-box;font-size:11px;padding:2px 4px'); nota.maxLength = 200; nota.placeholder = 'Nota (opcional)'; acc.appendChild(nota);
+      const sig = FASES[idx(l) + 1]; acc.appendChild(bs('➡ Marcar «' + FASE[sig][0] + '»', async function () { this.disabled = true; await cambiarFase(l, sig, nota.value); }, '#dcfce7'));
+    }
+    if (puedeFase(l)) {
+      const ti = el('input', 'width:100%;box-sizing:border-box;font-size:11px;padding:2px 4px'); ti.maxLength = 300; ti.placeholder = l.incidente ? 'Nota de cierre (opcional)' : 'Describa el incidente'; if (!l.incidente) acc.appendChild(ti);
+      acc.appendChild(bs(l.incidente ? '✔ Resolver incidente' : '⚠ Informar incidente', async function () { if (!l.incidente && !ti.value.trim()) { ti.focus(); return; } this.disabled = true; await incidente(l, l.incidente ? '' : ti.value); }, l.incidente ? '#dcfce7' : '#fee2e2'));
+    }
+    const hist = el('div', 'font-size:11px;color:#334155');
+    acc.appendChild(bs('🕓 Historial', async function () { hist.textContent = 'Consultando…'; try { const r = await api('ELEC_HITOS', { id: l.id }); hist.textContent = ''; if (!(r.hitos || []).length) hist.textContent = 'Sin movimientos.'; (r.hitos || []).slice(0, 8).forEach(x => hist.appendChild(el('div', '', hhmm(x.ts) + ' · ' + (FASE[x.fase] ? FASE[x.fase][0] : x.fase.replace('_', ' ').toLowerCase()) + ' · ' + x.autor + (x.nota ? ' — ' + x.nota : '')))); } catch (_) { hist.textContent = 'No se pudo consultar.'; } }));
+    if (puedeGestionar) acc.appendChild(bs('✏️ Editar o borrar', () => { const mp = mapa(); if (mp) mp.closePopup(); editando = l.id; tab = 'gestion'; abrir(true); }));
+    d.appendChild(acc); d.appendChild(hist); return d;
+  }
+  function dibujar() {
+    const mp = mapa(); if (!mp) return; css();
+    if (!capa) { capa = L.layerGroup(); rend = L.canvas({ padding: 0.3 }); pulsos = L.layerGroup(); }
+    capa.clearLayers(); pulsos.clearLayers(); const av = avisosMeteo();
+    locales.forEach(l => {
+      if (!isFinite(l.lat) || !isFinite(l.lon)) return; const f = FASE[l.fase] || FASE.PENDIENTE, inc = !!l.incidente, ret = retrasado(l), met = !!meteoDe(l, av);
+      const borde = inc ? '#dc2626' : ret ? '#ef4444' : met ? '#7c3aed' : '#ffffff';
+      const c = L.circleMarker([l.lat, l.lon], { renderer: rend, radius: Math.min(11, 5 + Math.round(l.mesas / 3)), color: borde, weight: inc ? 3.5 : (ret || met) ? 3 : 1.5, dashArray: ret && !inc ? '3 3' : null, fillColor: f[1], fillOpacity: 0.95 });
+      c.bindPopup(() => popupLocal(l), { maxWidth: 300 }); c.options.title = l.nombre; c.addTo(capa);
+      if (inc) L.marker([l.lat, l.lon], { icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], html: '<div class="ares-el-ring"></div>' }), interactive: false, keyboard: false, zIndexOffset: -100 }).addTo(pulsos);
+    });
+    if (visible && locales.length) { if (!mp.hasLayer(capa)) capa.addTo(mp); if (!mp.hasLayer(pulsos)) pulsos.addTo(mp); } else { if (mp.hasLayer(capa)) mp.removeLayer(capa); if (mp.hasLayer(pulsos)) mp.removeLayer(pulsos); }
+  }
+  function volarA(l) { const mp = mapa(); if (!mp) return; if (!visible) { visible = true; lsSet('vis', 1); dibujar(); } mp.setView([l.lat, l.lon], Math.max(mp.getZoom(), 11), { animate: false }); capa.eachLayer(c => { if (c.options && c.options.title === l.nombre && c.getLatLng && Math.abs(c.getLatLng().lat - l.lat) < 1e-6) c.openPopup(); }); }
+
+  /* ---------- Acciones ---------- */
+  async function cargar(forzar) {
+    if (ocupado || !activa() || !tieneModulo()) return; ocupado = true;
+    try {
+      const r = await api('ELEC_LISTAR', forzar ? {} : { ver: ver }); if (r.status !== 'success') return;
+      desfase = Number(r.ahora) ? Number(r.ahora) - Date.now() : desfase; const g0 = puedeGestionar; puedeGestionar = !!r.puedeGestionar; yo = r.yo || yo; if (r.miembros) miembros = r.miembros;
+      if (!r.sinCambios) { locales = r.locales || []; ver = r.ver || ''; dibujar(); if (panel) pintar(); } else if (g0 !== puedeGestionar && panel) pintar();
+      boton();
+    } catch (_) { /* sin conexion: queda lo ultimo que vio */ } finally { ocupado = false; }
+  }
+  async function cambiarFase(l, fase, nota) { try { const r = await api('ELEC_FASE', { id: l.id, fase: fase, nota: (nota || '').trim() }); if (r.status !== 'success') { alert(r.message); return; } const mp = mapa(); if (mp) mp.closePopup(); await cargar(true); try { if (typeof logEvento === 'function') logEvento('Local ' + l.nombre.slice(0, 40) + ': ' + FASE[fase][0]); } catch (_) { /* nada */ } } catch (_) { /* sesion */ } }
+  async function incidente(l, texto) { try { const r = await api('ELEC_INCIDENTE', { id: l.id, texto: (texto || '').trim() }); if (r.status !== 'success') { alert(r.message); return; } const mp = mapa(); if (mp) mp.closePopup(); await cargar(true); } catch (_) { /* sesion */ } }
+
+  /* ---------- Resumen para informar ---------- */
+  function conteos() {
+    const por = {}; FASES.forEach(f => { por[f] = 0; }); let mesas = 0; locales.forEach(l => { por[l.fase] = (por[l.fase] || 0) + 1; mesas += l.mesas; });
+    const av = avisosMeteo(), inc = locales.filter(l => l.incidente), ret = locales.filter(retrasado), met = locales.filter(l => meteoDe(l, av));
+    const entregados = locales.filter(l => idx(l) >= 3).length;
+    return { por: por, mesas: mesas, inc: inc, ret: ret, met: met, entregados: entregados, total: locales.length };
+  }
+  function resumen() {
+    const c = conteos(), t = teatro(), L = [];
+    L.push('SITUACIÓN — OPERATIVO ELECTORAL' + (t && t.nombre ? ' — ' + t.nombre : '') + (locales.some(l => l.simulacro) ? ' (SIMULACRO)' : '') + ' — ' + hhmm(ahora()));
+    L.push('Locales: ' + c.total + ' (' + c.mesas + ' mesas). Entregados o más avanzados: ' + c.entregados + (c.total ? ' (' + Math.round(c.entregados * 100 / c.total) + '%)' : ''));
+    L.push('Por fase: ' + FASES.map(f => FASE[f][0] + ' ' + c.por[f]).join(' · '));
+    L.push('Incidentes abiertos: ' + c.inc.length); c.inc.slice(0, 10).forEach(l => L.push('  - ' + l.nombre + (l.localidad ? ' (' + l.localidad + ')' : '') + ': ' + l.incidente));
+    L.push('Con retraso: ' + c.ret.length); c.ret.slice(0, 10).forEach(l => L.push('  - ' + l.nombre + ' (previsto ' + hhmm(l.prevista) + ', fase ' + FASE[l.fase][0] + ')'));
+    L.push('Bajo aviso meteorológico (Alerta/Crítica): ' + c.met.length); c.met.slice(0, 10).forEach(l => L.push('  - ' + l.nombre + (l.localidad ? ' (' + l.localidad + ')' : '')));
+    return L.join('\n');
+  }
+
+  /* ---------- Panel ---------- */
+  const estiloSel = s => { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; };
+  const btnCss = 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px';
+  function abrir(forzar) {
+    if (panel && !forzar) { cerrarPanel(); return; }
+    if (!panel) { panel = el('div', 'position:fixed;right:10px;top:56px;width:min(470px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'el-panel'; document.body.appendChild(panel); }
+    pintar();
+  }
+  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } editando = null; pararDemo(); }
+  function pintar() {
+    if (!panel) return; const st = panel.scrollTop; panel.textContent = '';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗳 Operativo Electoral' + (locales.some(l => l.simulacro) ? ' · 🧪 simulacro' : '')));
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
+    const tabs = el('div', 'display:flex;gap:4px;margin:6px 0'); [['tablero', '📊 Tablero'], ['locales', '📋 Locales']].concat(puedeGestionar ? [['gestion', '⚙ Gestión']] : []).forEach(t => { const b = el('button', btnCss + (tab === t[0] ? ';background:#0369a1;border-color:#38bdf8' : ''), t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.onclick = () => { tab = t[0]; pintar(); }; tabs.appendChild(b); }); panel.appendChild(tabs);
+    if (tab === 'tablero') pTablero(); else if (tab === 'locales') pLocales(); else if (puedeGestionar) pGestion(); else { tab = 'tablero'; pTablero(); }
+    panel.scrollTop = st;
+  }
+  function pTablero() {
+    const c = conteos(); const w = panel;
+    if (!c.total) { w.appendChild(el('div', 'color:#fbbf24;margin:8px 0', 'Todavía no hay locales cargados.' + (puedeGestionar ? ' Cárguelos en ⚙ Gestión (importar una lista o generar un simulacro).' : ' El Planificador debe cargarlos.'))); return; }
+    const k = el('div', 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0');
+    const tarj = (n, t, col) => { const d = el('div', 'background:#1e293b;border-radius:6px;padding:6px;text-align:center;border-top:3px solid ' + col); d.appendChild(el('div', 'font-size:20px;font-weight:bold', String(n))); d.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); return d; };
+    k.append(tarj(c.total, 'locales', '#38bdf8'), tarj(c.mesas, 'mesas', '#38bdf8'), tarj(c.total ? Math.round(c.entregados * 100 / c.total) + '%' : '0%', 'entregados', '#22c55e'), tarj(c.inc.length, 'incidentes', c.inc.length ? '#dc2626' : '#475569')); w.appendChild(k);
+    const barra = el('div', 'display:flex;height:16px;border-radius:4px;overflow:hidden;margin:8px 0 4px;background:#1e293b'); FASES.forEach(f => { if (c.por[f]) { const s = el('div', 'background:' + FASE[f][1] + ';width:' + (c.por[f] * 100 / c.total) + '%'); s.title = FASE[f][0] + ': ' + c.por[f]; barra.appendChild(s); } }); w.appendChild(barra);
+    const lg = el('div', 'display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;margin-bottom:6px'); FASES.forEach(f => { const i = el('span', 'display:inline-flex;gap:4px;align-items:center'); i.appendChild(el('span', 'width:10px;height:10px;border-radius:50%;display:inline-block;background:' + FASE[f][1])); i.appendChild(document.createTextNode(FASE[f][0] + ' ' + c.por[f])); lg.appendChild(i); }); w.appendChild(lg);
+    const lista = (titulo, arr, col, fx) => { const d = el('details', 'border:1px solid #334155;border-left:4px solid ' + col + ';border-radius:6px;padding:5px 8px;margin:5px 0'); d.open = arr.length > 0 && arr.length <= 6; d.appendChild(el('summary', 'cursor:pointer;font-weight:bold', titulo + ' (' + arr.length + ')')); arr.slice(0, 12).forEach(l => { const r = el('div', 'padding:3px 4px;margin-top:3px;background:#1e293b;border-radius:3px;cursor:pointer;font-size:12px'); r.appendChild(el('b', '', l.nombre)); r.appendChild(el('span', 'color:#94a3b8', ' · ' + (l.localidad || '') + (fx ? ' · ' + fx(l) : ''))); r.onclick = () => volarA(l); d.appendChild(r); }); if (arr.length > 12) d.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:3px', '+ ' + (arr.length - 12) + ' más (use el filtro de Locales)')); if (!arr.length) d.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin-top:3px', 'Ninguno.')); return d; };
+    w.appendChild(lista('⚠ Incidentes abiertos', c.inc, '#dc2626', l => l.incidente)); w.appendChild(lista('⏰ Con retraso', c.ret, '#ef4444', l => 'previsto ' + hhmm(l.prevista) + ', ' + FASE[l.fase][0])); w.appendChild(lista('⛈ Bajo aviso meteorológico', c.met, '#7c3aed', l => FASE[l.fase][0]));
+    const ta = el('table', 'width:100%;border-collapse:collapse;font-size:12px;margin-top:8px'); const hr = el('tr'); ['Acceso', 'Locales', 'Entregados'].forEach(t => hr.appendChild(el('th', 'text-align:left;border-bottom:1px solid #475569;padding:3px', t))); ta.appendChild(hr);
+    Object.keys(ACC).forEach(a => { const ls = locales.filter(l => l.acceso === a); if (!ls.length) return; const r = el('tr'); [ACC[a][0] + ' ' + ACC[a][1], ls.length, ls.filter(l => idx(l) >= 3).length + ' de ' + ls.length].forEach(t => r.appendChild(el('td', 'padding:3px;border-bottom:1px solid #1e293b', String(t)))); ta.appendChild(r); }); w.appendChild(ta);
+    const cp = el('button', btnCss + ';margin-top:8px', '📋 Copiar resumen de situación'), ms = el('div', 'font-size:11px;color:#86efac;min-height:14px;margin-top:3px'); cp.type = 'button';
+    cp.onclick = async () => { const t = resumen(); try { await navigator.clipboard.writeText(t); ms.textContent = 'Resumen copiado.'; } catch (_) { const ta2 = el('textarea', 'width:100%;height:140px;margin-top:4px;font-size:11px'); ta2.value = t; ta2.readOnly = true; w.appendChild(ta2); ta2.select(); ms.textContent = 'Copie el texto con Ctrl+C.'; } };
+    w.append(cp, ms);
+    const vc = el('label', 'display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:#94a3b8'), vk = el('input'); vk.type = 'checkbox'; vk.checked = visible; vk.onchange = () => { visible = vk.checked; lsSet('vis', visible ? 1 : 0); dibujar(); }; vc.append(vk, el('span', '', 'Mostrar los locales en el mapa')); w.appendChild(vc);
+  }
+  function pLocales() {
+    const w = panel, fi = estiloSel(el('input')); fi.placeholder = 'Buscar local o localidad'; fi.value = filtro.q; fi.style.cssText += ';width:100%;box-sizing:border-box'; fi.oninput = () => { filtro.q = fi.value; refrescarLista(); };
+    const sf = estiloSel(el('select')); const o0 = el('option', '', 'Todas las fases'); o0.value = ''; sf.appendChild(o0); FASES.forEach(f => { const o = el('option', '', FASE[f][0]); o.value = f; sf.appendChild(o); }); sf.value = filtro.fase; sf.onchange = () => { filtro.fase = sf.value; refrescarLista(); };
+    const sa = estiloSel(el('select')); const a0 = el('option', '', 'Todo acceso'); a0.value = ''; sa.appendChild(a0); Object.keys(ACC).forEach(a => { const o = el('option', '', ACC[a][0] + ' ' + ACC[a][1]); o.value = a; sa.appendChild(o); }); sa.value = filtro.acceso; sa.onchange = () => { filtro.acceso = sa.value; refrescarLista(); };
+    const nv = el('label', 'display:flex;gap:4px;align-items:center;font-size:12px'), nk = el('input'); nk.type = 'checkbox'; nk.checked = filtro.novedades; nk.onchange = () => { filtro.novedades = nk.checked; refrescarLista(); }; nv.append(nk, el('span', '', 'Solo con novedades'));
+    const fila = el('div', 'display:flex;gap:6px;flex-wrap:wrap;margin:5px 0'); fila.append(sf, sa, nv); w.append(fi, fila);
+    const lista = el('div'); lista.id = 'el-lista'; w.appendChild(lista); refrescarLista();
+  }
+  function refrescarLista() {
+    const lista = $('el-lista'); if (!lista) return; lista.textContent = ''; const q = filtro.q.trim().toLowerCase(), av = avisosMeteo();
+    const ls = locales.filter(l => (!q || (l.nombre + ' ' + l.localidad).toLowerCase().indexOf(q) >= 0) && (!filtro.fase || l.fase === filtro.fase) && (!filtro.acceso || l.acceso === filtro.acceso) && (!filtro.novedades || l.incidente || retrasado(l) || meteoDe(l, av)))
+      .sort((a, b) => (b.incidente ? 1 : 0) - (a.incidente ? 1 : 0) || (retrasado(b) ? 1 : 0) - (retrasado(a) ? 1 : 0) || a.nombre.localeCompare(b.nombre, 'es'));
+    lista.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:3px 0', ls.length + ' de ' + locales.length + ' locales' + (ls.length > 100 ? ' (se muestran 100; afine el filtro)' : '')));
+    ls.slice(0, 100).forEach(l => { const f = FASE[l.fase] || FASE.PENDIENTE, r = el('div', 'display:flex;gap:6px;align-items:center;background:#1e293b;border-left:4px solid ' + f[1] + ';border-radius:4px;padding:4px 6px;margin:3px 0;cursor:pointer'); const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-size:12px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', (l.simulacro ? '🧪 ' : '') + l.nombre)); t.appendChild(el('div', 'font-size:11px;color:#94a3b8', [l.localidad, l.mesas + ' mesas', (ACC[l.acceso] || ACC.TERRESTRE)[0], l.responsable].filter(Boolean).join(' · '))); r.appendChild(t);
+      const fl = (l.incidente ? '⚠' : '') + (retrasado(l) ? '⏰' : '') + (meteoDe(l, av) ? '⛈' : ''); if (fl) r.appendChild(el('span', 'font-size:13px', fl)); r.appendChild(el('span', 'font-size:11px;color:#fff;background:' + f[1] + ';border-radius:3px;padding:1px 5px;white-space:nowrap', f[0])); r.onclick = () => volarA(l); lista.appendChild(r); });
+  }
+
+  /* ---------- Gestion (Administrador / Planificador) ---------- */
+  const COLS = ['nombre', 'tipo', 'localidad', 'provincia', 'lat', 'lon', 'mesas', 'acceso', 'prevista', 'medio'];
+  function parseFecha(t) { t = String(t || '').trim(); if (!t) return ''; const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(t); if (!m) return NaN; const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]); return (isNaN(d) || d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) ? NaN : d.getTime(); }
+  function parseCSV(txt) {
+    const lineas = String(txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean); if (!lineas.length) return { filas: [], errores: ['No hay texto para cargar.'] };
+    const sep = lineas[0].indexOf('\t') >= 0 ? '\t' : lineas[0].indexOf(';') >= 0 ? ';' : ','; let ini = 0; const primera = lineas[0].toLowerCase().split(sep).map(s => s.trim()); let cols = COLS;
+    if (primera.indexOf('nombre') >= 0 && primera.indexOf('lat') >= 0) { cols = primera; ini = 1; }
+    const filas = [], errores = [];
+    lineas.slice(ini).forEach((ln, i) => { const p = ln.split(sep).map(s => s.trim().replace(/^"|"$/g, '')), o = {}; cols.forEach((c, j) => { o[c] = p[j] === undefined ? '' : p[j]; });
+      o.lat = String(o.lat).replace(',', '.'); o.lon = String(o.lon).replace(',', '.'); const pf = parseFecha(o.prevista); if (o.prevista && isNaN(pf)) { errores.push('Línea ' + (i + 1 + ini) + ': la hora prevista debe ser AAAA-MM-DD HH:MM'); return; } o.prevista = pf === '' ? '' : pf; filas.push(o); });
+    return { filas: filas, errores: errores };
+  }
+  async function enviarLotes(filas, sim) {
+    let cargados = 0, repetidos = 0, rechazados = 0; const errores = [];
+    for (let i = 0; i < filas.length; i += 500) { const r = await api('ELEC_IMPORTAR', { locales: filas.slice(i, i + 500), simulacro: !!sim }); if (r.status !== 'success') { errores.push(r.message || 'Error'); break; } cargados += r.cargados; repetidos += r.repetidos; rechazados += r.rechazados; (r.errores || []).forEach(e => errores.push(e)); }
+    return { cargados: cargados, repetidos: repetidos, rechazados: rechazados, errores: errores };
+  }
+  function resumenCarga(r) { return r.cargados + ' cargados' + (r.repetidos ? ', ' + r.repetidos + ' ya existían' : '') + (r.rechazados ? ', ' + r.rechazados + ' rechazados' : '') + (r.errores.length ? '. ' + r.errores.slice(0, 4).join(' | ') : '.'); }
+  async function generarSimulacro(n, estado) {
+    const t = teatro(); if (!t || !isFinite(t.lat) || !isFinite(t.lon)) throw new Error('El teatro no tiene centro definido.');
+    const km = Math.max(10, Math.min(120, Number(t.radio) || 100)); estado('Consultando escuelas en OpenStreetMap (radio ' + km + ' km)…');
+    const q = '[out:json][timeout:40];nwr["amenity"="school"]["name"](around:' + (km * 1000) + ',' + t.lat + ',' + t.lon + ');out center tags 600;';
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 50000); let els;
+    try { const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctl.signal }); if (!r.ok) throw new Error('OpenStreetMap respondió ' + r.status + '. Reintente en un minuto.'); els = (await r.json()).elements || []; }
+    catch (e) { throw new Error(e && e.name === 'AbortError' ? 'OpenStreetMap tardó demasiado. Reintente o cargue una lista propia.' : (e && e.message) || 'No se pudo consultar OpenStreetMap.'); } finally { clearTimeout(to); }
+    const vistos = {}, pool = []; els.forEach(e => { const la = e.lat !== undefined ? e.lat : e.center && e.center.lat, lo = e.lon !== undefined ? e.lon : e.center && e.center.lon, tg = e.tags || {}; if (la === undefined || lo === undefined || !tg.name) return; const k = tg.name.toLowerCase() + '|' + la.toFixed(3) + '|' + lo.toFixed(3); if (vistos[k]) return; vistos[k] = 1; pool.push({ la: la, lo: lo, tg: tg }); });
+    if (!pool.length) throw new Error('No se encontraron escuelas con nombre en esa zona.');
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const x = pool[i]; pool[i] = pool[j]; pool[j] = x; }
+    const base = Date.now(), sorteo = () => { const r = Math.random(); return r < 0.68 ? 'TERRESTRE' : r < 0.9 ? 'AEREO' : r < 0.97 ? 'FLUVIAL' : 'ANIMAL'; };
+    const filas = pool.slice(0, n).map(p => { const nm = String(p.tg.name).slice(0, 80), sec = /secundari|colegio|t[eé]cnic|bachiller|polimodal|comercial|normal/i.test(nm); return { nombre: nm, tipo: sec ? 'SECUNDARIO' : 'PRIMARIO', localidad: String(p.tg['addr:city'] || p.tg['addr:suburb'] || '').slice(0, 60), provincia: String(p.tg['addr:state'] || '').slice(0, 40), lat: p.la, lon: p.lo, mesas: 2 + Math.floor(Math.random() * 13), acceso: sorteo(), prevista: base + Math.round((1 + Math.random() * 7) * 3600000), medio: '' }; });
+    estado('Cargando ' + filas.length + ' locales de simulacro…'); return enviarLotes(filas, true);
+  }
+  /* Demostracion: avanza solos algunos locales de simulacro, con incidentes ocasionales. Solo para presentar. */
+  async function pasoDemo() {
+    const cand = locales.filter(l => l.simulacro && idx(l) < FASES.length - 1); if (!cand.length) return false;
+    const l = cand[Math.floor(Math.random() * cand.length)];
+    if (l.incidente && Math.random() < 0.6) { await api('ELEC_INCIDENTE', { id: l.id, texto: '' }); }
+    else if (!l.incidente && idx(l) >= 1 && idx(l) <= 3 && Math.random() < 0.08) { await api('ELEC_INCIDENTE', { id: l.id, texto: INCIDENTES_DEMO[Math.floor(Math.random() * INCIDENTES_DEMO.length)] }); }
+    else { const r = await api('ELEC_FASE', { id: l.id, fase: FASES[idx(l) + 1], nota: 'Demostración' }); if (r.status !== 'success') return true; }
+    await cargar(true); return true;
+  }
+  function pararDemo() { if (demo) { clearInterval(demo.t); demo = null; } }
+  function pGestion() {
+    const w = panel, msg = el('div', 'font-size:12px;min-height:16px;margin:4px 0;color:' + msgGColor, msgG); msg.id = 'el-msg';
+    const say = (t, col) => { msgG = t; msgGColor = col || '#94a3b8'; const m = $('el-msg'); if (m) { m.textContent = t; m.style.color = msgGColor; } };
+    const sec = (t, open) => { const d = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:6px 0'); d.open = !!open; d.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', t)); return d; };
+    if (editando) { const l = locales.find(x => x.id === editando); if (l) { w.appendChild(formEditar(l, say)); w.appendChild(msg); return; } editando = null; }
+    w.appendChild(msg);
+    // importar
+    const im = sec('📥 Importar lista de locales', true);
+    im.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:3px 0', 'Una línea por local, separada por punto y coma, coma o tabulación. Columnas: ' + COLS.join('; ') + '. La hora prevista es AAAA-MM-DD HH:MM. Tipo: PRIMARIO, SECUNDARIO o MIXTO. Acceso: TERRESTRE, AEREO, FLUVIAL o ANIMAL. Máximo 1500 locales por teatro.'));
+    const ta = estiloSel(el('textarea')); ta.rows = 5; ta.style.cssText += ';width:100%;box-sizing:border-box;font-family:monospace;font-size:11px'; ta.placeholder = 'Escuela N° 12;PRIMARIO;Goya;Corrientes;-29.14;-59.26;6;TERRESTRE;2026-11-07 08:00;'; ta.id = 'el-csv'; im.appendChild(ta);
+    const sk = el('label', 'display:flex;gap:6px;align-items:center;font-size:12px;margin:4px 0'), ck = el('input'); ck.type = 'checkbox'; ck.id = 'el-sim'; ck.checked = true; sk.append(ck, el('span', '', 'Marcar como simulacro 🧪 (se puede borrar de una vez)')); im.appendChild(sk);
+    const bi = el('button', btnCss + ';background:#15803d;border-color:#15803d', '📥 Cargar locales'); bi.type = 'button'; bi.id = 'el-importar';
+    bi.onclick = async () => { const p = parseCSV(ta.value); if (!p.filas.length) { say(p.errores[0] || 'No hay filas para cargar.', '#fca5a5'); return; } if (p.errores.length) { say(p.errores.slice(0, 3).join(' | '), '#fca5a5'); return; } bi.disabled = true; say('Cargando…'); try { const r = await enviarLotes(p.filas, ck.checked); await cargar(true); say(resumenCarga(r), r.cargados ? '#86efac' : '#fca5a5'); if (r.cargados) ta.value = ''; } catch (_) { say('Sin conexión con el servidor.', '#fca5a5'); } bi.disabled = false; };
+    im.appendChild(bi); w.appendChild(im);
+    // simulacro
+    const sm = sec('🧪 Simulacro', true);
+    sm.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:3px 0', 'Genera locales de ejemplo con escuelas reales de OpenStreetMap dentro del radio del teatro (hasta 120 km). Los datos quedan marcados como simulacro; no son un padrón.'));
+    const nI = estiloSel(el('input')); nI.type = 'number'; nI.min = 5; nI.max = 150; nI.value = 40; nI.style.width = '70px'; nI.id = 'el-n';
+    const bg = el('button', btnCss, '🧪 Generar'); bg.type = 'button'; bg.id = 'el-generar';
+    bg.onclick = async () => { const n = Math.max(5, Math.min(150, Math.round(Number(nI.value) || 40))); bg.disabled = true; try { const r = await generarSimulacro(n, t => say(t)); await cargar(true); say(resumenCarga(r), r.cargados ? '#86efac' : '#fca5a5'); } catch (e) { say((e && e.message) || 'No se pudo generar.', '#fca5a5'); } bg.disabled = false; };
+    const f1 = el('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap'); f1.append(el('span', 'font-size:12px', 'Cantidad:'), nI, bg); sm.appendChild(f1);
+    const f2 = el('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'); const hayS = locales.some(l => l.simulacro);
+    const bd = el('button', btnCss + (demo ? ';background:#b45309' : ''), demo ? '⏹ Detener demostración' : '▶ Demostración automática'); bd.type = 'button'; bd.id = 'el-demo'; bd.disabled = !hayS && !demo; bd.title = 'Avanza solos locales de simulacro, con incidentes de vez en cuando, para presentar el sistema';
+    bd.onclick = () => { if (demo) { pararDemo(); say('Demostración detenida.'); pintar(); return; } const t = setInterval(async () => { if (demo.corriendo) return; demo.corriendo = true; try { const sigue = await pasoDemo(); if (!sigue) { pararDemo(); say('La demostración terminó: no quedan locales por avanzar.', '#86efac'); if (panel) pintar(); } } catch (_) { /* reintenta */ } if (demo) demo.corriendo = false; }, 3500); demo = { t: t, corriendo: false }; say('Demostración en marcha: un local avanza cada pocos segundos.', '#86efac'); pintar(); };
+    const bb = el('button', btnCss + ';color:#fca5a5', '🗑 Borrar datos de simulacro'); bb.type = 'button'; bb.id = 'el-borrar-sim'; bb.disabled = !hayS;
+    bb.onclick = async () => { if (!confirm('¿Borrar todos los locales marcados como simulacro y su historial? Los datos reales no se tocan.')) return; pararDemo(); try { const r = await api('ELEC_BORRAR', { soloSimulacro: true }); if (r.status !== 'success') { say(r.message, '#fca5a5'); return; } await cargar(true); say('Se borraron ' + r.borrados + ' locales de simulacro.', '#86efac'); pintar(); } catch (_) { say('Sin conexión con el servidor.', '#fca5a5'); } };
+    f2.append(bd, bb); sm.appendChild(f2); w.appendChild(sm);
+    // editar un local
+    const ed = sec('✏️ Editar un local', false); const sl = estiloSel(el('select')); const o0 = el('option', '', 'Elija un local…'); o0.value = ''; sl.appendChild(o0); locales.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).slice(0, 400).forEach(l => { const o = el('option', '', (l.simulacro ? '🧪 ' : '') + l.nombre + (l.localidad ? ' — ' + l.localidad : '')); o.value = l.id; sl.appendChild(o); });
+    sl.onchange = () => { if (sl.value) { editando = sl.value; pintar(); } }; ed.appendChild(sl); w.appendChild(ed);
+  }
+  function formEditar(l, say) {
+    const d = el('div', 'border:1px solid #334155;border-radius:6px;padding:8px;margin:6px 0'); d.appendChild(el('b', '', '✏️ Editar local'));
+    const c = {}, fila = (t, n, tipo, val, extra) => { const lb = el('label', 'display:block;margin:5px 0'); lb.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); const i = estiloSel(el('input')); i.type = tipo || 'text'; i.value = val === undefined || val === null ? '' : val; i.style.width = '100%'; i.style.boxSizing = 'border-box'; if (extra) Object.assign(i, extra); lb.appendChild(i); c[n] = i; d.appendChild(lb); };
+    const selector = (t, n, opts, val) => { const lb = el('label', 'display:block;margin:5px 0'); lb.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); const s = estiloSel(el('select')); opts.forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; s.appendChild(op); }); s.value = val; lb.appendChild(s); c[n] = s; d.appendChild(lb); };
+    fila('Nombre', 'nombre', 'text', l.nombre, { maxLength: 80 }); selector('Tipo', 'tipo', [['PRIMARIO', 'Primario'], ['SECUNDARIO', 'Secundario'], ['MIXTO', 'Mixto']], l.tipo); fila('Localidad', 'localidad', 'text', l.localidad, { maxLength: 60 }); fila('Provincia', 'provincia', 'text', l.provincia, { maxLength: 40 });
+    fila('Latitud', 'lat', 'text', l.lat); fila('Longitud', 'lon', 'text', l.lon); fila('Mesas', 'mesas', 'number', l.mesas, { min: 0, max: 200 }); selector('Acceso', 'acceso', Object.keys(ACC).map(a => [a, ACC[a][0] + ' ' + ACC[a][1]]), l.acceso);
+    const fp = l.prevista ? new Date(l.prevista - new Date(l.prevista).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''; fila('Entrega prevista', 'prevista', 'datetime-local', fp); fila('Medio asignado (aeronave, vehículo, embarcación)', 'medio', 'text', l.medio, { maxLength: 40 });
+    selector('Responsable (informa el avance)', 'resp', [['', '(sin responsable)']].concat(miembros.map(m => [m.email, m.nombre + ' — ' + m.rol])), l.responsableEmail);
+    const nt = estiloSel(el('textarea')); nt.rows = 2; nt.maxLength = 200; nt.value = l.notas; nt.style.width = '100%'; nt.style.boxSizing = 'border-box'; const lbn = el('label', 'display:block;margin:5px 0'); lbn.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Notas')); lbn.appendChild(nt); d.appendChild(lbn);
+    const fa = el('div', 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px'), bt = (t, fn, css) => { const b = el('button', btnCss + (css || ''), t); b.type = 'button'; b.onclick = fn; return b; };
+    fa.append(bt('💾 Guardar', async function () { const lat = Number(String(c.lat.value).replace(',', '.')), lon = Number(String(c.lon.value).replace(',', '.')), pf = c.prevista.value ? new Date(c.prevista.value).getTime() : ''; this.disabled = true; try { const r = await api('ELEC_GUARDAR', { id: l.id, nombre: c.nombre.value, tipo: c.tipo.value, localidad: c.localidad.value, provincia: c.provincia.value, lat: lat, lon: lon, mesas: c.mesas.value, acceso: c.acceso.value, prevista: pf, medio: c.medio.value, notas: nt.value, responsableEmail: c.resp.value }); if (r.status !== 'success') { say(r.message, '#fca5a5'); this.disabled = false; return; } editando = null; await cargar(true); say('Local actualizado.', '#86efac'); pintar(); } catch (_) { say('Sin conexión con el servidor.', '#fca5a5'); this.disabled = false; } }, ';background:#15803d;border-color:#15803d'),
+      bt('Cancelar', () => { editando = null; pintar(); }), bt('🗑 Borrar local', async () => { if (!confirm('¿Borrar «' + l.nombre + '» y su historial?')) return; try { const r = await api('ELEC_BORRAR', { id: l.id }); if (r.status !== 'success') { say(r.message, '#fca5a5'); return; } editando = null; await cargar(true); say('Local borrado.', '#86efac'); pintar(); } catch (_) { say('Sin conexión.', '#fca5a5'); } }, ';color:#fca5a5'));
+    d.appendChild(fa); return d;
+  }
+
+  /* ---------- Boton y arranque ---------- */
+  function boton() {
+    const b = $('btn-electoral'); if (!activa() || !tieneModulo()) { if (b) b.remove(); return; }
+    if (b) return; const ref = $('btn-territorio') || $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🗳 Operativo Electoral'); n.id = 'btn-electoral'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Locales de votación, fases del operativo y novedades'; n.onclick = () => abrir(false); ref.parentNode.insertBefore(n, ref);
+  }
+  function reiniciar() { cerrarPanel(); capa = quitar(capa); pulsos = quitar(pulsos); rend = null; const b = $('btn-electoral'); if (b) b.remove(); locales = []; ver = ''; puedeGestionar = false; miembros = []; desfase = 0; filtro = { q: '', fase: '', acceso: '', novedades: false }; msgG = ''; }
+  setInterval(() => {
+    if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
+    const mp = mapa(); if (!mp || !teatro()) return;
+    const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
+    if (!iniciado || tid !== ultimoTeatro) { if (iniciado) reiniciar(); iniciado = true; ultimoTeatro = tid; visible = lsGet('vis', '1') !== '0'; if (tieneModulo()) cargar(true); }
+    else boton();
+  }, 2000);
+  setInterval(() => { if (activa() && iniciado && tieneModulo() && !document.hidden) cargar(false); }, 20000);
+  setInterval(() => { if (activa() && iniciado && locales.length) { dibujar(); if (panel && tab === 'tablero') pintar(); } }, 60000);       // retrasos y avisos meteorologicos se reevaluan solos
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado && tieneModulo()) cargar(false); });
+  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV };
+})();
+</script>
+<!-- ===== FIN BLOQUE ELECTORAL ===== -->
 </body>
 </html>
