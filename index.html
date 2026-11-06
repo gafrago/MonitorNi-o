@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-n</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-o</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -6418,7 +6418,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -7043,7 +7043,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const SEV_ORDEN = ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'];
   const MAX_BYTES = 44000, ESTE = /^(?:TORMENTA|LLUVIA|CRECIDA|INUNDACION|VIENTO|NIEBLA|TEMPERATURA|OTRO)$/;
   let areas = [], ver = '', desfase = 0, capa = null, ctrl = null, ctrlDiv = null, panel = null, previa = null, borrador = null, dib = null, barra = null, iniciado = false, ultimoTeatro = '', ocupado = false;
-  let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true;
+  let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true, depsOSM = null;
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
   const teatro = () => window.ARES_TEATRO || null;
@@ -7230,7 +7230,23 @@ window.addEventListener('DOMContentLoaded', () => {
     const rad = estiloSel(el('input')); rad.type = 'number'; rad.min = 5; rad.max = 400; rad.value = b.radio; rad.style.width = '70px'; rad.oninput = () => { b.radio = rad.value; };
     const deps = departamentos(), sec = (teatro() && teatro().sectores || []).filter(s => isFinite(s.lat) && isFinite(s.lon)), zs = (window.aresMeteo && window.aresMeteo.zonas && window.aresMeteo.zonas()) || [];
     if (deps.length) { const sd = estiloSel(el('select')); const o0 = el('option', '', '🏛 Agregar departamento…'); o0.value = ''; sd.appendChild(o0); deps.forEach((d, i) => { const o = el('option', '', d.nombre); o.value = String(i); sd.appendChild(o); }); sd.onchange = () => { if (sd.value === '') return; const d = deps[+sd.value]; const ps = polisDe(d.f.geometry); sd.value = ''; if (!ps.length) return; agregarParte('Departamento ' + d.nombre, ps, d.nombre); }; fm.appendChild(el('div', 'margin-top:6px')).appendChild(sd); }
-    else fm.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'La lista de departamentos solo está disponible donde el teatro tiene su mapa político cargado; use dibujar, círculo, sector o buscar lugar.'));
+    if (window.aresTerritorio && window.aresTerritorio.departamentos) {                        // departamentos de cualquier provincia (OpenStreetMap, se piden al tocar)
+      const cd = el('div', 'margin-top:6px'), md = el('div', 'font-size:11px;min-height:13px;color:#94a3b8');
+      const poner = lista => {
+        cd.textContent = ''; const sd = estiloSel(el('select')); const o0 = el('option', '', '🏛 Departamento / partido (todo el país)…'); o0.value = ''; sd.appendChild(o0);
+        lista.forEach((d, i) => { const o = el('option', '', d.nombre + (d.prov ? ' (' + d.prov + ')' : '')); o.value = String(i); sd.appendChild(o); });
+        sd.onchange = async () => { if (sd.value === '') return; const d = lista[+sd.value]; sd.value = ''; md.style.color = '#94a3b8'; md.textContent = 'Descargando el límite de ' + d.nombre + '…'; try { const ps = await window.aresTerritorio.poligonosDepto(d.id); md.textContent = ''; agregarParte('Departamento ' + d.nombre, ps, d.nombre + (d.prov ? ' (' + d.prov + ')' : '')); } catch (e) { md.style.color = '#fca5a5'; md.textContent = (e && e.message) || 'No se pudo obtener el límite.'; } };
+        cd.append(sd, md);
+      };
+      if (depsOSM && depsOSM.length) poner(depsOSM);
+      else {
+        const bl = el('button', btnCss, '🏛 Cargar departamentos del teatro'); bl.type = 'button';
+        bl.onclick = async () => { bl.disabled = true; md.style.color = '#94a3b8'; md.textContent = 'Consultando OpenStreetMap…'; try { const l = await window.aresTerritorio.departamentos(); if (!l.length) { md.style.color = '#fca5a5'; md.textContent = 'No se encontraron departamentos. Dibuje el área o use un círculo.'; bl.disabled = false; return; } depsOSM = l; poner(l); } catch (e) { md.style.color = '#fca5a5'; md.textContent = (e && e.message) || 'No se pudo consultar OpenStreetMap.'; bl.disabled = false; } };
+        cd.append(bl, md);
+      }
+      fm.appendChild(cd);
+    }
+    if (!deps.length && !(window.aresTerritorio && window.aresTerritorio.departamentos)) fm.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'La lista de departamentos solo está disponible donde el teatro tiene su mapa político cargado; use dibujar, círculo, sector o buscar lugar.'));
     if (sec.length || zs.length) {
       const ss = estiloSel(el('select')); const o0 = el('option', '', '📌 Agregar sector o zona (círculo)…'); o0.value = ''; ss.appendChild(o0);
       sec.forEach((s, i) => { const o = el('option', '', 'Sector ' + s.nombre); o.value = 's' + i; ss.appendChild(o); }); zs.forEach((z, i) => { const o = el('option', '', 'Zona ' + z.nombre + ' (' + z.radio + ' km)'); o.value = 'z' + i; ss.appendChild(o); });
@@ -7345,7 +7361,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function reiniciar() {
     cerrarPanel(); capa = quitar(capa); if (ctrl) { try { ctrl.remove(); } catch (_) { /* nada */ } ctrl = null; ctrlDiv = null; } const b = $('btn-capa-meteo'); if (b) b.remove();
-    areas = []; ver = ''; borrador = null; puedeEditar = false; puedeBorrarTodas = false; desfase = 0;
+    areas = []; ver = ''; borrador = null; depsOSM = null; puedeEditar = false; puedeBorrarTodas = false; desfase = 0;
   }
   setInterval(() => {
     if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
@@ -7361,5 +7377,218 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE CAPA METEO ===== -->
+<!-- ===== INICIO BLOQUE TERRITORIO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: capas territoriales de todo el pais, por teatro, en vivo desde OpenStreetMap (Overpass).
+   Provincias, departamentos, rutas nacionales y provinciales, puentes, estaciones de servicio, salud, policia, bomberos, escuelas y aerodromos.
+   - Cada capa se pide solo cuando se la tilda, solo para la zona del teatro (o la vista del mapa) y se guarda 7 dias en este equipo (IndexedDB).
+   - Las consultas van de a una (cola) y reintentan una vez si el servicio esta ocupado.
+   - Todo texto de OpenStreetMap se muestra con textContent (nunca como HTML).
+   - Ofrece la lista de departamentos de cualquier provincia al panel "Mi capa" del Meteorologo (window.aresTerritorio). */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const OVERPASS = 'https://overpass-api.de/api/interpreter', TTL = 7 * 86400000, MAX_PUNTOS = 6000, MAX_VIAS = 8000;
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const teatro = () => window.ARES_TEATRO || null;
+  const tid = () => { try { return sesionActiva.teatro || (teatro() && teatro().id) || 'x'; } catch (_) { return 'x'; } };
+  /* ---- Definicion de capas ---- */
+  const CAPAS = [
+    { k: 'prov', g: 'Límites', n: 'Provincias', tipo: 'lineas', color: '#7c2d12', peso: 3, dash: '10 6', q: bb => 'relation["boundary"="administrative"]["admin_level"="4"]["ISO3166-2"~"^AR-"](' + bb + ');out geom(' + bb + ');', rel: true },
+    { k: 'dep', g: 'Límites', n: 'Departamentos / partidos', tipo: 'lineas', color: '#9a3412', peso: 1.5, dash: '4 4', q: bb => 'relation["boundary"="administrative"]["admin_level"="5"](' + bb + ');out geom(' + bb + ');', rel: true },
+    { k: 'rutaN', g: 'Rutas', n: 'Rutas nacionales y autopistas', tipo: 'lineas', color: '#dc2626', peso: 3, q: bb => 'way["highway"~"^(motorway|trunk|primary)$"](' + bb + ');out geom qt;' },
+    { k: 'rutaP', g: 'Rutas', n: 'Rutas provinciales (secundarias)', tipo: 'lineas', color: '#f59e0b', peso: 2, q: bb => 'way["highway"="secondary"](' + bb + ');out geom qt;' },
+    { k: 'puentes', g: 'Rutas', n: 'Puentes en rutas', tipo: 'puntos', color: '#475569', ico: '🌉', q: bb => 'way["bridge"="yes"]["highway"~"^(motorway|trunk|primary|secondary)$"](' + bb + ');out center tags qt;' },
+    { k: 'combustible', g: 'Servicios', n: 'Estaciones de servicio', tipo: 'puntos', color: '#ca8a04', ico: '⛽', q: bb => 'nwr["amenity"="fuel"](' + bb + ');out center tags qt;' },
+    { k: 'salud', g: 'Servicios', n: 'Hospitales y centros de salud', tipo: 'puntos', color: '#e11d48', ico: '🏥', q: bb => 'nwr["amenity"~"^(hospital|clinic)$"](' + bb + ');out center tags qt;' },
+    { k: 'policia', g: 'Servicios', n: 'Policía y gendarmería', tipo: 'puntos', color: '#2563eb', ico: '🚓', q: bb => 'nwr["amenity"="police"](' + bb + ');out center tags qt;' },
+    { k: 'bomberos', g: 'Servicios', n: 'Bomberos', tipo: 'puntos', color: '#ea580c', ico: '🚒', q: bb => 'nwr["amenity"="fire_station"](' + bb + ');out center tags qt;' },
+    { k: 'escuelas', g: 'Servicios', n: 'Escuelas (posibles refugios)', tipo: 'puntos', color: '#16a34a', ico: '🏫', q: bb => 'nwr["amenity"="school"](' + bb + ');out center tags qt;' },
+    { k: 'aero', g: 'Servicios', n: 'Aeródromos y helipuertos', tipo: 'puntos', color: '#0284c7', ico: '🛩', q: bb => 'nwr["aeroway"~"^(aerodrome|helipad)$"](' + bb + ');out center tags qt;' }
+  ];
+  const porK = {}; CAPAS.forEach(c => { porK[c.k] = c; });
+  const estado = {};            // k -> { grupo, datos, msg }
+  let panel = null, area = 'teatro', rend = null, iniciado = false, ultimoTeatro = '', cola = Promise.resolve();
+  let listaDeps = null;         // [{id, nombre, lat, lon, prov}] (departamentos de la zona, solo nombres: liviano)
+
+  /* ---- Zona de consulta ---- */
+  const R1 = v => Math.round(v * 10) / 10;
+  function bboxTeatro() {
+    const t = teatro() || {}, lat = isFinite(t.lat) ? Number(t.lat) : -27.45, lon = isFinite(t.lon) ? Number(t.lon) : -58.9, r = Math.min(300, Math.max(30, isFinite(t.radio) && Number(t.radio) > 0 ? Number(t.radio) : 250));
+    const dLat = r / 111, dLon = r / (111 * Math.max(0.3, Math.cos(lat * Math.PI / 180))); return [lat - dLat, lon - dLon, lat + dLat, lon + dLon];
+  }
+  function bboxVista() { const mp = mapa(); if (!mp) return bboxTeatro(); const b = mp.getBounds(); return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]; }
+  const bboxActual = () => (area === 'vista' ? bboxVista() : bboxTeatro()).map(v => Math.round(v * 1000) / 1000);
+  const claveBB = bb => bb.map(R1).join(',');
+  const grande = bb => (bb[2] - bb[0]) > 6.5 || (bb[3] - bb[1]) > 8;
+
+  /* ---- Cache local (IndexedDB; si no hay, memoria) ---- */
+  const mem = {};
+  function abrirDB() { return new Promise((res, rej) => { try { const r = indexedDB.open('ares_territorio', 1); r.onupgradeneeded = () => { r.result.createObjectStore('c'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); }
+  async function cGet(k) { if (mem[k]) return mem[k]; try { const d = await abrirDB(); return await new Promise(res => { const q = d.transaction('c').objectStore('c').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (_) { return null; } }
+  async function cSet(k, v) { mem[k] = v; try { const d = await abrirDB(); await new Promise(res => { const q = d.transaction('c', 'readwrite').objectStore('c').put(v, k); q.onsuccess = q.onerror = () => res(); }); } catch (_) { /* sin almacenamiento: queda en memoria */ } }
+  async function cBorrar() { Object.keys(mem).forEach(k => { delete mem[k]; }); try { const d = await abrirDB(); await new Promise(res => { const q = d.transaction('c', 'readwrite').objectStore('c').clear(); q.onsuccess = q.onerror = () => res(); }); } catch (_) { /* nada */ } }
+
+  /* ---- Overpass: una consulta por vez, con un reintento ---- */
+  function overpass(consulta) {
+    const correr = async () => {
+      const q = '[out:json][timeout:90];' + consulta;
+      for (let intento = 0; intento < 2; intento++) {
+        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 110000);
+        try {
+          const r = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
+          if (r.status === 429 || r.status === 504 || r.status === 503) { if (intento === 0) { await new Promise(s => setTimeout(s, 4000)); continue; } throw new Error('El servicio de OpenStreetMap está ocupado. Reintente en unos minutos.'); }
+          if (!r.ok) throw new Error('OpenStreetMap respondió ' + r.status + '.');
+          const j = await r.json(); if (j.remark && /timed out|out of memory/i.test(j.remark) && !(j.elements || []).length) throw new Error('La zona es muy grande para una sola consulta. Elija "Vista actual del mapa" y acerque el mapa.');
+          return j.elements || [];
+        } catch (e) { if (e && e.name === 'AbortError') { if (intento === 0) continue; throw new Error('OpenStreetMap tardó demasiado. Pruebe con una zona más chica.'); } if (intento === 0 && !(e && e.message && /OpenStreetMap|zona/.test(e.message))) { await new Promise(s => setTimeout(s, 3000)); continue; } throw e; }
+        finally { clearTimeout(to); }
+      }
+      return [];
+    };
+    const p = cola.then(correr, correr); cola = p.catch(() => null); return p;
+  }
+
+  /* ---- Geometria ---- */
+  function pd(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1]; if (!dx && !dy) return Math.hypot(p[0] - a[0], p[1] - a[1]); let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy); t = Math.max(0, Math.min(1, t)); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); }
+  function dp(pts, tol) { if (pts.length <= 2) return pts.slice(); const k = new Uint8Array(pts.length); k[0] = k[pts.length - 1] = 1; const st = [[0, pts.length - 1]]; while (st.length) { const s = st.pop(), a = s[0], b = s[1]; let md = 0, mi = -1; for (let i = a + 1; i < b; i++) { const d = pd(pts[i], pts[a], pts[b]); if (d > md) { md = d; mi = i; } } if (md > tol && mi > 0) { k[mi] = 1; st.push([a, mi], [mi, b]); } } return pts.filter((_, i) => k[i]); }
+  const R5 = v => Math.round(v * 1e5) / 1e5;
+  const lineaDe = g => (g || []).filter(p => p && isFinite(p.lat) && isFinite(p.lon)).map(p => [R5(p.lon), R5(p.lat)]);
+  const eq = (a, b) => Math.abs(a[0] - b[0]) < 1e-7 && Math.abs(a[1] - b[1]) < 1e-7;
+  function anillos(miembros, rol) {                              // une los tramos de una relacion en anillos cerrados
+    const segs = (miembros || []).filter(m => m.role === rol && m.geometry && m.geometry.length > 1).map(m => lineaDe(m.geometry)), out = [];
+    while (segs.length) {
+      let ring = segs.shift(), g = 0;
+      while (!eq(ring[0], ring[ring.length - 1]) && g++ < 8000) {
+        let i = segs.findIndex(s => eq(s[0], ring[ring.length - 1])); if (i >= 0) { ring = ring.concat(segs.splice(i, 1)[0].slice(1)); continue; }
+        i = segs.findIndex(s => eq(s[s.length - 1], ring[ring.length - 1])); if (i >= 0) { ring = ring.concat(segs.splice(i, 1)[0].reverse().slice(1)); continue; }
+        break;
+      }
+      if (ring.length >= 4 && eq(ring[0], ring[ring.length - 1])) out.push(ring);
+    }
+    return out;
+  }
+  function dentro(pt, ring) { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pt[1]) !== (b[1] > pt[1]) && pt[0] < (b[0] - a[0]) * (pt[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+  function poligonosDe(rel) {                                    // relacion OSM -> [[anilloExterior, ...huecos], ...]
+    const ext = anillos(rel.members, 'outer'), hue = anillos(rel.members, 'inner');
+    return ext.map(e => [e].concat(hue.filter(h => dentro(h[0], e))));
+  }
+
+  /* ---- Dibujo ---- */
+  const nombreDe = t => (t && (t.name || t['name:es'] || t.ref || t.operator || t.brand)) || '';
+  function popupDe(c, tags, extra) {
+    const d = el('div', 'font:12px sans-serif;max-width:240px'); d.appendChild(el('b', '', (c.ico ? c.ico + ' ' : '') + (nombreDe(tags) || c.n)));
+    d.appendChild(el('div', 'color:#475569', c.n)); [['ref', 'Ruta'], ['operator', 'Operador'], ['brand', 'Marca'], ['addr:street', 'Calle'], ['phone', 'Tel.'], ['opening_hours', 'Horario'], ['emergency', 'Emergencias'], ['iata', 'IATA'], ['icao', 'OACI']].forEach(([k, r]) => { if (tags && tags[k]) d.appendChild(el('div', '', r + ': ' + String(tags[k]).slice(0, 120))); });
+    if (extra) d.appendChild(el('div', 'color:#64748b;font-size:11px;margin-top:3px', extra)); return d;
+  }
+  function dibujarCapa(c, datos) {
+    const mp = mapa(); if (!mp) return null; if (!rend) rend = L.canvas({ padding: 0.4 }); const g = L.layerGroup();
+    if (c.tipo === 'lineas') {
+      (datos.vias || []).forEach(v => { const ll = v.l.map(p => [p[1], p[0]]); if (ll.length < 2) return; const pl = L.polyline(ll, { color: c.color, weight: c.peso, dashArray: c.dash || null, opacity: 0.85, renderer: rend }); if (v.t && (v.t.ref || v.t.name)) pl.bindPopup(() => popupDe(c, v.t)); pl.addTo(g); });
+    } else {
+      (datos.pts || []).forEach(p => { const m = L.circleMarker([p.la, p.lo], { radius: 5, color: '#fff', weight: 1.5, fillColor: c.color, fillOpacity: 0.95, renderer: rend }); m.bindPopup(() => popupDe(c, p.t)); m.bindTooltip(nombreDe(p.t) || c.n, { direction: 'top', opacity: 0.9 }); m.addTo(g); });
+    }
+    g.addTo(mp); return g;
+  }
+  function compactar(c, els) {                                   // reduce lo descargado a lo minimo util (y entra en la cache)
+    if (c.tipo === 'lineas') {
+      const vias = []; let n = 0;
+      els.forEach(e => {
+        if (n >= MAX_VIAS) return; const tags = e.tags ? { name: e.tags.name, ref: e.tags.ref } : {};
+        if (e.type === 'relation') { (e.members || []).forEach(m => { if (!m.geometry || m.geometry.length < 2 || n >= MAX_VIAS) return; const l = dp(lineaDe(m.geometry), 0.0006); if (l.length >= 2) { vias.push({ l: l, t: tags }); n++; } }); }
+        else if (e.geometry && e.geometry.length > 1) { const l = dp(lineaDe(e.geometry), 0.0003); if (l.length >= 2) { vias.push({ l: l, t: tags }); n++; } }
+      });
+      return { vias: vias, recortado: n >= MAX_VIAS };
+    }
+    const pts = [], vistos = {}; let corte = false;
+    els.forEach(e => {
+      const la = e.lat !== undefined ? e.lat : e.center && e.center.lat, lo = e.lon !== undefined ? e.lon : e.center && e.center.lon; if (!isFinite(la) || !isFinite(lo)) return;
+      if (pts.length >= MAX_PUNTOS) { corte = true; return; } const k = e.type + e.id; if (vistos[k]) return; vistos[k] = 1;
+      const t = e.tags || {}; pts.push({ la: R5(la), lo: R5(lo), t: { name: t.name, operator: t.operator, brand: t.brand, ref: t.ref, 'addr:street': t['addr:street'], phone: t.phone, opening_hours: t.opening_hours, emergency: t.emergency, iata: t.iata, icao: t.icao } });
+    });
+    return { pts: pts, recortado: corte };
+  }
+
+  /* ---- Activar / actualizar una capa ---- */
+  function msg(k, t, color) { const e = $('terr-msg-' + k); if (e) { e.textContent = t; e.style.color = color || '#94a3b8'; } }
+  function cuentaDe(c, d) { return c.tipo === 'lineas' ? (d.vias || []).length : (d.pts || []).length; }
+  async function activar(k, forzar) {
+    const c = porK[k]; if (!c) return; const bb = bboxActual(); if (grande(bb)) { msg(k, '⚠ La zona es muy grande. Elija "Vista actual del mapa" y acerque el mapa.', '#fca5a5'); const ck = $('terr-ck-' + k); if (ck) ck.checked = false; return; }
+    const clave = 'v1|' + tid() + '|' + k + '|' + claveBB(bb); let datos = null, origen = '';
+    if (estado[k] && estado[k].grupo) { try { estado[k].grupo.remove(); } catch (_) { /* nada */ } estado[k].grupo = null; }
+    if (!forzar) { const hit = await cGet(clave); if (hit && Date.now() - hit.t < TTL) { datos = hit.d; origen = 'caché del ' + new Date(hit.t).toLocaleDateString('es-AR'); } }
+    if (!datos) {
+      msg(k, '⏳ Consultando OpenStreetMap…'); let els;
+      try { els = await overpass(c.q(bb.join(','))); } catch (e) { msg(k, '⚠ ' + (e && e.message || 'No se pudo consultar OpenStreetMap.'), '#fca5a5'); const ck = $('terr-ck-' + k); if (ck) ck.checked = false; return; }
+      datos = compactar(c, els); origen = 'en vivo'; await cSet(clave, { t: Date.now(), d: datos });
+      if (k === 'dep') { listaDeps = null; }
+    }
+    const ck = $('terr-ck-' + k); if (ck && !ck.checked) return;                       // la destildaron mientras cargaba
+    estado[k] = { grupo: dibujarCapa(c, datos), datos: datos, msg: '' };
+    msg(k, '✅ ' + cuentaDe(c, datos) + (c.tipo === 'lineas' ? ' tramos' : ' lugares') + ' · ' + origen + (datos.recortado ? ' · ⚠ se muestran los primeros (acerque el mapa para ver el resto)' : ''), '#86efac');
+  }
+  function desactivar(k) { if (estado[k] && estado[k].grupo) { try { estado[k].grupo.remove(); } catch (_) { /* nada */ } estado[k].grupo = null; } msg(k, ''); }
+  function limpiarTodo() { Object.keys(estado).forEach(desactivar); listaDeps = null; }
+
+  /* ---- Departamentos de cualquier provincia (para el panel "Mi capa") ---- */
+  async function departamentos() {
+    if (listaDeps) return listaDeps; const bb = bboxTeatro().map(v => Math.round(v * 1000) / 1000); if (grande(bb)) return [];
+    const clave = 'v1|' + tid() + '|deplista|' + claveBB(bb), hit = await cGet(clave);
+    if (hit && Date.now() - hit.t < TTL) { listaDeps = hit.d; return listaDeps; }
+    const els = await overpass('relation["boundary"="administrative"]["admin_level"="5"](' + bb.join(',') + ');out tags center;');
+    listaDeps = els.filter(e => e.tags && e.tags.name && e.center).map(e => ({ id: e.id, nombre: e.tags.name, lat: e.center.lat, lon: e.center.lon, prov: e.tags['is_in:state'] || e.tags['is_in:province'] || '' })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    await cSet(clave, { t: Date.now(), d: listaDeps }); return listaDeps;
+  }
+  async function poligonosDepto(id) {                            // geometria completa de UN departamento (se pide solo al elegirlo)
+    const clave = 'v1|poli|' + id, hit = await cGet(clave); if (hit && Date.now() - hit.t < TTL * 4) return hit.d;
+    const els = await overpass('relation(' + Number(id) + ');out geom;'); const rel = els.filter(e => e.type === 'relation')[0]; if (!rel) throw new Error('No se encontró el departamento en OpenStreetMap.');
+    const p = poligonosDe(rel); if (!p.length) throw new Error('El límite de ese departamento está incompleto en OpenStreetMap. Dibújelo a mano.');
+    await cSet(clave, { t: Date.now(), d: p }); return p;
+  }
+
+  /* ---- Panel ---- */
+  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } }
+  function abrir() {
+    if (panel) { cerrarPanel(); return; }
+    const izq = window.innerWidth > 1000 ? 420 : 10;
+    panel = el('div', 'position:fixed;left:' + izq + 'px;top:56px;width:min(380px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'terr-panel';
+    const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗺 Territorio · ' + ((teatro() && teatro().nombre) || 'Teatro')));
+    const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
+    panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:2px 0 6px', 'Datos de OpenStreetMap de todo el país, pedidos solo para su zona y guardados 7 días en este equipo. Pueden estar incompletos: verifique lo crítico con la fuente oficial.'));
+    const zona = el('label', 'display:block;margin:4px 0'); zona.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Zona a consultar'));
+    const sz = el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;width:100%'); [['teatro', 'Todo el teatro'], ['vista', 'Vista actual del mapa (más rápido)']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sz.appendChild(o); }); sz.value = area;
+    sz.onchange = () => { area = sz.value; limpiarTodo(); CAPAS.forEach(c => { const ck = $('terr-ck-' + c.k); if (ck) ck.checked = false; }); }; zona.appendChild(sz); panel.appendChild(zona);
+    let grupo = '';
+    CAPAS.forEach(c => {
+      if (c.g !== grupo) { grupo = c.g; panel.appendChild(el('div', 'margin:8px 0 2px;font-weight:bold;color:#38bdf8', grupo)); }
+      const fila = el('div', 'margin:3px 0'), l = el('label', 'display:flex;gap:6px;align-items:center;cursor:pointer'), ck = el('input'); ck.type = 'checkbox'; ck.id = 'terr-ck-' + c.k; ck.checked = !!(estado[c.k] && estado[c.k].grupo);
+      ck.onchange = () => { if (ck.checked) activar(c.k, false); else desactivar(c.k); };
+      const pt = el('span', 'width:11px;height:11px;border-radius:' + (c.tipo === 'puntos' ? '50%' : '2px') + ';background:' + c.color + ';display:inline-block;border:1px solid #fff4'); l.append(ck, pt, document.createTextNode((c.ico ? c.ico + ' ' : '') + c.n));
+      const re = el('button', 'margin-left:auto;background:none;border:0;color:#94a3b8;cursor:pointer;font-size:12px', '↻'); re.type = 'button'; re.title = 'Volver a pedir los datos a OpenStreetMap'; re.onclick = e => { e.preventDefault(); ck.checked = true; activar(c.k, true); }; l.appendChild(re);
+      fila.appendChild(l); const m = el('div', 'font-size:11px;color:#94a3b8;margin-left:22px'); m.id = 'terr-msg-' + c.k; fila.appendChild(m); panel.appendChild(fila);
+    });
+    const pie = el('div', 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap'), bo = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px', 'Ocultar todo'); bo.type = 'button'; bo.onclick = () => { limpiarTodo(); CAPAS.forEach(c => { const ck = $('terr-ck-' + c.k); if (ck) ck.checked = false; }); };
+    const bc = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px', 'Borrar datos guardados'); bc.type = 'button'; bc.onclick = async () => { await cBorrar(); listaDeps = null; alert('Datos guardados borrados. Se volverán a pedir al activar cada capa.'); };
+    pie.append(bo, bc); panel.appendChild(pie); document.body.appendChild(panel);
+    CAPAS.forEach(c => { if (estado[c.k] && estado[c.k].grupo) msg(c.k, '✅ ' + cuentaDe(c, estado[c.k].datos) + (c.tipo === 'lineas' ? ' tramos' : ' lugares'), '#86efac'); });
+  }
+
+  /* ---- Boton y arranque ---- */
+  function boton() {
+    if (!activa()) { const x = $('btn-territorio'); if (x) x.remove(); return false; }
+    if ($('btn-territorio')) return true; const ref = $('btn-trazos') || $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return false;
+    const b = el('button', 'margin-right:6px', '🗺 Territorio'); b.id = 'btn-territorio'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.title = 'Provincias, departamentos, rutas y servicios de todo el país'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref); return true;
+  }
+  setInterval(() => {
+    if (!activa()) { if (iniciado) { iniciado = false; limpiarTodo(); cerrarPanel(); Object.keys(estado).forEach(k => { delete estado[k]; }); } boton(); return; }
+    if (!boton()) return; const t = tid();
+    if (!iniciado || t !== ultimoTeatro) { if (iniciado) { limpiarTodo(); cerrarPanel(); } iniciado = true; ultimoTeatro = t; area = 'teatro'; }
+  }, 2000);
+  window.aresTerritorio = { abrir: abrir, activar: activar, desactivar: desactivar, departamentos: departamentos, poligonosDepto: poligonosDepto, capas: () => CAPAS.map(c => c.k), borrarCache: cBorrar, _anillos: anillos, _poligonosDe: poligonosDe };
+})();
+</script>
+<!-- ===== FIN BLOQUE TERRITORIO ===== -->
 </body>
 </html>
