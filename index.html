@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-o</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-p</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwpICvqlM2klUECP_hMwsuDnZDnlrZPb4XkuCC4Q7tS1k1RmCRkdK-2S8VhwaLXjaq0PQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxGbG85skON8udPwf-mivKsGSQ53jzDGcFX0fGHjJbELj1N7R29Wnu8Xt5BqhynYyScrg/exec";
 
 
 ;
@@ -7041,8 +7041,34 @@ window.addEventListener('DOMContentLoaded', () => {
   const TIPOS = { TORMENTA: ['⛈', 'Tormenta / granizo / ráfagas', '#7c3aed'], LLUVIA: ['🌧', 'Lluvias', '#2563eb'], CRECIDA: ['🌊', 'Crecida de río', '#0891b2'], INUNDACION: ['🟦', 'Inundación / anegamiento', '#0e7490'], VIENTO: ['💨', 'Viento', '#0d9488'], NIEBLA: ['🌫', 'Niebla', '#64748b'], TEMPERATURA: ['🌡', 'Temperatura extrema', '#ea580c'], OTRO: ['⚠', 'Otro fenómeno', '#475569'] };
   const SEV = { INFO: ['Informativo', '#2563eb', 1.5, '6 4', 0.12], PRECAUCION: ['Precaución', '#d97706', 2.5, '', 0.2], ALERTA: ['Alerta', '#ea580c', 3.5, '', 0.3], CRITICA: ['Crítica', '#b91c1c', 5, '', 0.42] };
   const SEV_ORDEN = ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'];
+  /* Catalogo de iconos meteorologicos: [clave, emoji, nombre, fenomeno por defecto]. Las claves son las mismas que acepta el servidor. */
+  const ICONOS = [
+    ['rayo', '⚡', 'Rayos', 'TORMENTA'], ['tormenta_electrica', '⛈', 'Tormenta eléctrica', 'TORMENTA'], ['tormenta_rayos', '🌩', 'Nube con rayos', 'TORMENTA'], ['granizo', '🧊', 'Granizo', 'TORMENTA'], ['tornado', '🌪', 'Tornado / tromba', 'TORMENTA'], ['ciclon', '🌀', 'Ciclón / sistema de baja', 'TORMENTA'],
+    ['lluvia', '🌧', 'Lluvia', 'LLUVIA'], ['llovizna', '🌦', 'Llovizna / chaparrones', 'LLUVIA'], ['chubasco', '☔', 'Chubascos', 'LLUVIA'], ['lluvia_intensa', '💧', 'Lluvia intensa', 'LLUVIA'],
+    ['viento', '💨', 'Viento', 'VIENTO'], ['rafagas', '🎐', 'Ráfagas', 'VIENTO'], ['viento_fuerte', '🚩', 'Viento fuerte', 'VIENTO'],
+    ['niebla', '🌫', 'Niebla', 'NIEBLA'], ['bruma', '🌁', 'Bruma / baja visibilidad', 'NIEBLA'], ['polvo', '🏜', 'Polvo / tierra en suspensión', 'NIEBLA'],
+    ['calor', '🌡', 'Calor', 'TEMPERATURA'], ['ola_calor', '🥵', 'Ola de calor', 'TEMPERATURA'], ['frio', '⛄', 'Frío intenso', 'TEMPERATURA'], ['helada', '🥶', 'Helada', 'TEMPERATURA'], ['nieve', '🌨', 'Nieve', 'TEMPERATURA'], ['nevada', '❄', 'Nevada intensa', 'TEMPERATURA'], ['sequia', '🌵', 'Sequía', 'TEMPERATURA'],
+    ['crecida', '🌊', 'Crecida de río', 'CRECIDA'], ['desborde', '🏞', 'Desborde / río en alerta', 'CRECIDA'], ['inundacion', '🟦', 'Inundación', 'INUNDACION'], ['anegamiento', '🏘', 'Anegamiento urbano', 'INUNDACION'],
+    ['sol', '☀', 'Sol', 'OTRO'], ['despejado', '🌤', 'Mayormente despejado', 'OTRO'], ['parcial', '⛅', 'Parcialmente nublado', 'OTRO'], ['nublado', '☁', 'Nublado', 'OTRO'], ['luna', '🌙', 'Despejado de noche', 'OTRO'], ['arcoiris', '🌈', 'Mejora del tiempo', 'OTRO'],
+    ['incendio', '🔥', 'Incendio / foco de calor', 'OTRO'], ['ruta_cortada', '🚧', 'Ruta cortada', 'OTRO'], ['puente', '🌉', 'Puente afectado', 'OTRO'], ['evacuacion', '🚨', 'Evacuación / emergencia', 'OTRO'], ['aviso', '📢', 'Aviso', 'OTRO'], ['otro', '⚠', 'Otro fenómeno', 'OTRO']
+  ];
+  const ICO = {}; ICONOS.forEach(i => { ICO[i[0]] = i; });
+  const emojiDe = a => (a.icono && ICO[a.icono]) ? ICO[a.icono][1] : (TIPOS[a.tipo] || TIPOS.OTRO)[0];
+  const nombreIcono = a => (a.icono && ICO[a.icono]) ? ICO[a.icono][2] : (TIPOS[a.tipo] || TIPOS.OTRO)[1];
+  /* Animacion segun severidad: INFO fija; PRECAUCION pulso lento; ALERTA parpadeo + pulso; CRITICA parpadeo rapido + pulso rapido (y destello propio para el rayo). */
+  const CSS_ANIM = '.ares-ic{position:relative;width:34px;height:34px}.ares-ic-ring{position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;border:3px solid var(--c);box-sizing:border-box;opacity:0;pointer-events:none}'
+    + '.ares-ic-face{position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;background:#fff;border:3px solid var(--c);box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;box-shadow:0 0 6px #0008}'
+    + '@keyframes aresPulso{0%{transform:scale(.9);opacity:.85}100%{transform:scale(2.4);opacity:0}}@keyframes aresParpadeo{0%,100%{opacity:1}50%{opacity:.25}}@keyframes aresRayo{0%,86%,100%{filter:none}90%,94%{filter:brightness(2.2) drop-shadow(0 0 8px #fde047)}92%{filter:none}}'
+    + '.ares-anim .ares-s-PRECAUCION .ares-ic-ring{animation:aresPulso 3s ease-out infinite}'
+    + '.ares-anim .ares-s-ALERTA .ares-ic-ring{animation:aresPulso 1.8s ease-out infinite}.ares-anim .ares-s-ALERTA .ares-ic-face{animation:aresParpadeo 1.3s ease-in-out infinite}'
+    + '.ares-anim .ares-s-CRITICA .ares-ic-ring{animation:aresPulso 1s ease-out infinite}.ares-anim .ares-s-CRITICA .ares-ic-face{animation:aresParpadeo .7s steps(2,jump-none) infinite}'
+    + '.ares-anim .ares-rayo .ares-ic-face span{display:inline-block;animation:aresRayo 3.2s linear infinite}'
+    + '@media (prefers-reduced-motion:reduce){.ares-ic-ring,.ares-ic-face,.ares-ic-face span{animation:none!important}}';
+  function css() { if (document.getElementById('ares-capa-css')) return; const s = document.createElement('style'); s.id = 'ares-capa-css'; s.textContent = CSS_ANIM; document.head.appendChild(s); }
+  function iconoHtml(a, s, t) { const k = SEV_ORDEN.indexOf(a.sev) >= 0 ? a.sev : 'INFO'; return '<div class="ares-ic ares-s-' + k + (a.icono === 'rayo' || a.icono === 'tormenta_electrica' || a.icono === 'tormenta_rayos' ? ' ares-rayo' : '') + '" style="--c:' + s[1] + '"><div class="ares-ic-ring"></div><div class="ares-ic-face"><span>' + emojiDe(a) + '</span></div></div>'; }
   const MAX_BYTES = 44000, ESTE = /^(?:TORMENTA|LLUVIA|CRECIDA|INUNDACION|VIENTO|NIEBLA|TEMPERATURA|OTRO)$/;
   let areas = [], ver = '', desfase = 0, capa = null, ctrl = null, ctrlDiv = null, panel = null, previa = null, borrador = null, dib = null, barra = null, iniciado = false, ultimoTeatro = '', ocupado = false;
+  let anim = true, previaPt = null;
   let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true, depsOSM = null;
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
@@ -7095,8 +7121,9 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- Capa en el mapa (la ven todos) ---------- */
   function popupArea(a) {
     const d = el('div', 'font:12px sans-serif;max-width:250px'), t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO;
-    const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1;font-size:13px', t[0] + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); d.appendChild(h);
-    d.appendChild(el('div', 'color:#475569;margin-top:2px', t[1]));
+    const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1;font-size:13px', emojiDe(a) + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); d.appendChild(h);
+    d.appendChild(el('div', 'color:#475569;margin-top:2px', nombreIcono(a) + (a.icono && nombreIcono(a) !== t[1] ? ' · ' + t[1] : '')));
+    if (a.punto) d.appendChild(el('div', 'color:#64748b;font-size:11px', 'Punto: ' + a.punto.lat.toFixed(3) + ', ' + a.punto.lon.toFixed(3)));
     if (a.lugares) d.appendChild(el('div', 'margin-top:3px', '📍 ' + a.lugares));
     if (a.texto) d.appendChild(el('div', 'white-space:pre-wrap;margin-top:4px', a.texto));
     d.appendChild(el('div', 'color:#64748b;font-size:11px;margin-top:4px', (a.autor || 'Meteorólogo') + ' · actualizado ' + fechaHora(a.ts) + ' · vigente hasta ' + fechaHora(a.vence)));
@@ -7109,21 +7136,24 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function dibujar(sinPanel) {
     const mp = mapa(); if (!mp) return; if (!capa) capa = L.layerGroup();
-    capa.clearLayers();
+    css(); capa.clearLayers(); try { mp.getContainer().classList.toggle('ares-anim', anim); } catch (_) { /* nada */ }
     vigentes().slice().sort((x, y) => ordenSev(x) - ordenSev(y) || x.ts - y.ts).forEach(a => {
       const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO;
       try {
-        const g = L.geoJSON(a.geom, { style: { color: s[1], weight: s[2], dashArray: s[3], fillColor: t[2], fillOpacity: s[4], opacity: 0.95 } });
-        g.bindPopup(() => popupArea(a)); g.addTo(capa);
-        const c = g.getBounds().getCenter();
-        L.marker(c, { icon: L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14], html: '<div style="width:28px;height:28px;border-radius:50%;background:#fff;border:3px solid ' + s[1] + ';display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 6px #0008">' + t[0] + '</div>' }), title: t[1] + ': ' + a.titulo, keyboard: false }).bindPopup(() => popupArea(a)).addTo(capa);
+        let c = a.punto ? L.latLng(a.punto.lat, a.punto.lon) : null;
+        if (a.geom) {
+          const g = L.geoJSON(a.geom, { style: { color: s[1], weight: s[2], dashArray: s[3], fillColor: t[2], fillOpacity: s[4], opacity: 0.95 } });
+          g.bindPopup(() => popupArea(a)); g.addTo(capa); if (!c) c = g.getBounds().getCenter();
+        }
+        if (!c) return;
+        L.marker(c, { icon: L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: iconoHtml(a, s, t) }), title: nombreIcono(a) + ': ' + a.titulo, keyboard: false, zIndexOffset: 400 * (ordenSev(a) + 1) }).bindPopup(() => popupArea(a)).addTo(capa);
       } catch (_) { /* un area danada no frena a las demas */ }
     });
     if (visible && !dib) { if (!mp.hasLayer(capa)) capa.addTo(mp); } else if (mp.hasLayer(capa)) mp.removeLayer(capa);
     leyenda(); if (panel && !dib && !sinPanel) pintar();
   }
   function volarA(a) {
-    const mp = mapa(); if (!mp) return; try { const g = L.geoJSON(a.geom); mp.fitBounds(g.getBounds(), { padding: [30, 30], maxZoom: 9, animate: false }); } catch (_) { /* nada */ }
+    const mp = mapa(); if (!mp) return; try { if (a.geom) { const g = L.geoJSON(a.geom); mp.fitBounds(g.getBounds(), { padding: [30, 30], maxZoom: 9, animate: false }); } else if (a.punto) mp.setView([a.punto.lat, a.punto.lon], Math.max(mp.getZoom(), 9), { animate: false }); } catch (_) { /* nada */ }
     if (!visible) { visible = true; lsSet('vis', 1); dibujar(); }
   }
   function leyenda() {
@@ -7140,11 +7170,12 @@ window.addEventListener('DOMContentLoaded', () => {
     cab.append(k, el('span', 'flex:1', '🌦 Capa del Meteorólogo (' + v.length + ')'), el('span', 'width:10px;height:10px;border-radius:50%;background:' + mx + ';display:inline-block'));
     const tog = el('button', 'background:none;border:0;color:#94a3b8;cursor:pointer;font-size:12px;padding:0 2px', listaAbierta ? '▾' : '▸'); tog.type = 'button'; tog.title = 'Mostrar u ocultar la lista'; tog.onclick = e => { e.preventDefault(); listaAbierta = !listaAbierta; lsSet('lista', listaAbierta ? 1 : 0); leyenda(); }; cab.appendChild(tog);
     ctrlDiv.appendChild(cab);
+    const ca = el('label', 'display:flex;gap:6px;align-items:center;cursor:pointer;font-size:11px;color:#94a3b8;margin-top:3px'), ka = el('input'); ka.type = 'checkbox'; ka.checked = anim; ka.onchange = () => { anim = ka.checked; lsSet('anim', anim ? 1 : 0); dibujar(true); }; ca.append(ka, el('span', '', 'Animar íconos según severidad')); ctrlDiv.appendChild(ca);
     if (!v.length) { ctrlDiv.appendChild(el('div', 'color:#94a3b8;margin-top:3px', 'Sin áreas vigentes.')); return; }
     if (!listaAbierta) return;
     v.slice(0, 8).forEach(a => {
       const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO, f = el('div', 'margin-top:4px;padding:3px 5px;border-left:4px solid ' + s[1] + ';background:#1e293b;border-radius:3px;cursor:pointer');
-      f.appendChild(el('div', 'font-weight:bold', t[0] + ' ' + a.titulo)); f.appendChild(el('div', 'font-size:11px;color:#94a3b8', s[0] + (a.lugares ? ' · ' + a.lugares : '') + ' · hasta ' + hhmm(a.vence)));
+      f.appendChild(el('div', 'font-weight:bold', emojiDe(a) + ' ' + a.titulo)); f.appendChild(el('div', 'font-size:11px;color:#94a3b8', s[0] + (a.lugares ? ' · ' + a.lugares : '') + ' · hasta ' + hhmm(a.vence)));
       f.onclick = () => { volarA(a); }; ctrlDiv.appendChild(f);
     });
     if (v.length > 8) ctrlDiv.appendChild(el('div', 'color:#94a3b8;font-size:11px;margin-top:3px', '+ ' + (v.length - 8) + ' más (toque el mapa para verlas)'));
@@ -7168,7 +7199,7 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- Panel del Meteorologo ---------- */
   const estiloSel = s => { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; };
   const btnCss = 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px';
-  const nuevoBorrador = () => ({ id: '', tipo: 'TORMENTA', sev: 'PRECAUCION', horas: 12, titulo: '', texto: '', lugares: '', partes: [], radio: 30 });
+  const nuevoBorrador = () => ({ id: '', tipo: 'TORMENTA', sev: 'PRECAUCION', horas: 12, titulo: '', texto: '', lugares: '', partes: [], radio: 30, icono: '', punto: null });
   function abrir() {
     if (panel) { cerrarPanel(); return; }
     if (!puedeEditar) return; if (!borrador) borrador = nuevoBorrador();
@@ -7187,10 +7218,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function todasLasPolys() { return [].concat.apply([], borrador.partes.map(p => p.polys)); }
   function vistaPrevia(ajustar) {
-    previa = quitar(previa); const mp = mapa(); if (!mp || !borrador) return; const ps = todasLasPolys(); if (!ps.length) return;
-    const t = TIPOS[borrador.tipo] || TIPOS.OTRO, s = SEV[borrador.sev] || SEV.INFO;
-    previa = L.geoJSON({ type: 'MultiPolygon', coordinates: ps }, { style: { color: s[1], weight: 3, dashArray: '8 6', fillColor: t[2], fillOpacity: 0.25 }, interactive: false }).addTo(mp);
-    if (ajustar) { try { mp.fitBounds(previa.getBounds(), { padding: [40, 40], maxZoom: 9, animate: false }); } catch (_) { /* nada */ } }
+    previa = quitar(previa); previaPt = null; const mp = mapa(); if (!mp || !borrador) return; const ps = todasLasPolys(); if (!ps.length && !borrador.punto) return;
+    const t = TIPOS[borrador.tipo] || TIPOS.OTRO, s = SEV[borrador.sev] || SEV.INFO; previa = L.featureGroup().addTo(mp);
+    if (ps.length) L.geoJSON({ type: 'MultiPolygon', coordinates: ps }, { style: { color: s[1], weight: 3, dashArray: '8 6', fillColor: t[2], fillOpacity: 0.25 }, interactive: false }).addTo(previa);
+    if (borrador.punto) { css(); try { mp.getContainer().classList.toggle('ares-anim', anim); } catch (_) { /* nada */ } L.marker([borrador.punto.lat, borrador.punto.lon], { icon: L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: iconoHtml({ icono: borrador.icono, tipo: borrador.tipo, sev: borrador.sev }, s, t) }), interactive: false, keyboard: false }).addTo(previa); }
+    if (ajustar) { try { if (ps.length) mp.fitBounds(previa.getBounds(), { padding: [40, 40], maxZoom: 9, animate: false }); else mp.setView([borrador.punto.lat, borrador.punto.lon], Math.max(mp.getZoom(), 9), { animate: false }); } catch (_) { /* nada */ } }
   }
   function pintar() {
     if (!panel) return; const st = panel.scrollTop; panel.textContent = ''; const b = borrador || (borrador = nuevoBorrador());
@@ -7203,7 +7235,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!v.length) caja.appendChild(el('div', 'color:#94a3b8;font-size:12px;margin:4px 0', 'No hay áreas vigentes.'));
     v.forEach(a => {
       const t = TIPOS[a.tipo] || TIPOS.OTRO, s = SEV[a.sev] || SEV.INFO, f = el('div', 'border-left:4px solid ' + s[1] + ';background:#1e293b;border-radius:4px;padding:5px 7px;margin:5px 0');
-      const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', t[0] + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); f.appendChild(h);
+      const h = el('div', 'display:flex;gap:6px;align-items:center'); h.appendChild(el('b', 'flex:1', emojiDe(a) + ' ' + a.titulo)); h.appendChild(el('span', 'color:#fff;background:' + s[1] + ';border-radius:3px;padding:0 5px;font-size:11px', s[0])); f.appendChild(h);
       f.appendChild(el('div', 'font-size:11px;color:#94a3b8', (a.lugares ? a.lugares + ' · ' : '') + 'hasta ' + fechaHora(a.vence) + ' · ' + (a.autor || '')));
       const fila = el('div', 'display:flex;gap:5px;margin-top:4px'), bs = (tx, fn, col) => { const q = el('button', btnCss + ';padding:1px 7px;font-size:11px;' + (col ? 'color:' + col : ''), tx); q.type = 'button'; q.onclick = fn; return q; };
       fila.appendChild(bs('Ver', () => volarA(a)));
@@ -7220,13 +7252,18 @@ window.addEventListener('DOMContentLoaded', () => {
     const hr = estiloSel(el('input')); hr.type = 'number'; hr.min = 1; hr.max = 168; hr.value = b.horas; hr.style.width = '70px'; hr.oninput = () => { b.horas = hr.value; };
     const rapidas = el('div', 'display:flex;gap:4px;margin-top:3px'); [3, 6, 12, 24, 48].forEach(n => { const q = el('button', btnCss + ';padding:1px 6px;font-size:11px', n + ' h'); q.type = 'button'; q.onclick = () => { b.horas = n; hr.value = n; }; rapidas.appendChild(q); });
     const f1 = el('div', 'display:flex;gap:8px;flex-wrap:wrap'); const lh = lab('Vigencia (horas, 1–168)', hr); lh.appendChild(rapidas); f1.append(lab('Fenómeno', sT), lab('Severidad', sS), lh); fm.appendChild(f1);
+    const gi = el('div', 'margin:5px 0'); gi.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Ícono (' + ICONOS.length + ' disponibles; el predeterminado sigue al fenómeno)'));
+    const rej = el('div', 'display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:3px;margin-top:3px;max-height:150px;overflow:auto;border:1px solid #334155;border-radius:4px;padding:3px');
+    const nom = el('div', 'font-size:11px;color:#7dd3fc;min-height:14px;margin-top:2px', b.icono && ICO[b.icono] ? ICO[b.icono][2] : 'Predeterminado: ' + (TIPOS[b.tipo] || TIPOS.OTRO)[1]);
+    const ib = (k, em, tx) => { const q = el('button', 'font-size:18px;line-height:1;padding:3px 0;border-radius:4px;cursor:pointer;border:2px solid ' + ((b.icono || '') === k ? '#38bdf8' : '#334155') + ';background:' + ((b.icono || '') === k ? '#0c4a6e' : '#1e293b'), em); q.type = 'button'; q.title = tx; q.setAttribute('aria-label', tx); q.dataset.icono = k; q.onclick = () => { b.icono = k; if (k && ICO[k]) b.tipo = ICO[k][3]; vistaPrevia(false); pintar(); }; return q; };
+    rej.appendChild(ib('', (TIPOS[b.tipo] || TIPOS.OTRO)[0], 'Predeterminado del fenómeno')); ICONOS.forEach(i => rej.appendChild(ib(i[0], i[1], i[2]))); gi.append(rej, nom); fm.appendChild(gi);
     const ti = estiloSel(el('input')); ti.maxLength = 80; ti.style.cssText += ';width:100%;box-sizing:border-box'; ti.placeholder = 'Ej: Tormentas fuertes con granizo'; ti.value = b.titulo; ti.oninput = () => { b.titulo = ti.value; };
     const tx = estiloSel(el('textarea')); tx.rows = 3; tx.maxLength = 600; tx.style.cssText += ';width:100%;box-sizing:border-box'; tx.placeholder = 'Qué se espera, cuándo y qué recomienda al personal.'; tx.value = b.texto; tx.oninput = () => { b.texto = tx.value; };
     fm.append(lab('Título', ti), lab('Texto', tx));
     // donde
     fm.appendChild(el('div', 'margin:8px 0 3px;font-weight:bold;color:#7dd3fc', 'Dónde está el fenómeno'));
     const fb = el('div', 'display:flex;gap:6px;flex-wrap:wrap'), bb = (t, fn, tt) => { const q = el('button', btnCss, t); q.type = 'button'; q.onclick = fn; if (tt) q.title = tt; return q; };
-    fb.append(bb('✏️ Dibujar área', () => iniciarDibujo('poly'), 'Marque los vértices sobre el mapa'), bb('⭕ Círculo en el mapa', () => iniciarDibujo('circ'), 'Centro y radio con dos clics')); fm.appendChild(fb);
+    fb.append(bb('📍 Punto con ícono', () => iniciarDibujo('punto'), 'Coloque el ícono elegido en un punto del mapa (sin dibujar un área)'), bb('✏️ Dibujar área', () => iniciarDibujo('poly'), 'Marque los vértices sobre el mapa'), bb('⭕ Círculo en el mapa', () => iniciarDibujo('circ'), 'Centro y radio con dos clics')); fm.appendChild(fb);
     const rad = estiloSel(el('input')); rad.type = 'number'; rad.min = 5; rad.max = 400; rad.value = b.radio; rad.style.width = '70px'; rad.oninput = () => { b.radio = rad.value; };
     const deps = departamentos(), sec = (teatro() && teatro().sectores || []).filter(s => isFinite(s.lat) && isFinite(s.lon)), zs = (window.aresMeteo && window.aresMeteo.zonas && window.aresMeteo.zonas()) || [];
     if (deps.length) { const sd = estiloSel(el('select')); const o0 = el('option', '', '🏛 Agregar departamento…'); o0.value = ''; sd.appendChild(o0); deps.forEach((d, i) => { const o = el('option', '', d.nombre); o.value = String(i); sd.appendChild(o); }); sd.onchange = () => { if (sd.value === '') return; const d = deps[+sd.value]; const ps = polisDe(d.f.geometry); sd.value = ''; if (!ps.length) return; agregarParte('Departamento ' + d.nombre, ps, d.nombre); }; fm.appendChild(el('div', 'margin-top:6px')).appendChild(sd); }
@@ -7268,7 +7305,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const fq = el('div', 'display:flex;gap:5px;margin-top:6px'); fq.append(bq, bb('🔎 Buscar', buscar)); fm.append(fq, mq, lugares);
     fm.appendChild(lab('Radio para sector, zona o lugar (km)', rad));
     // partes agregadas
-    const lp = el('div', 'margin:6px 0'); if (!b.partes.length) lp.appendChild(el('div', 'font-size:12px;color:#fbbf24', 'Aún no marcó ninguna zona.')); else lp.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Zonas marcadas (' + contarV(todasLasPolys()) + ' vértices):'));
+    const lp = el('div', 'margin:6px 0'); if (b.punto) { const f = el('div', 'display:flex;gap:6px;align-items:center;background:#1e293b;border-radius:4px;padding:3px 6px;margin:3px 0'); f.appendChild(el('span', 'flex:1;font-size:12px', '📍 Ícono en ' + b.punto.lat.toFixed(3) + ', ' + b.punto.lon.toFixed(3))); const q = el('button', btnCss + ';padding:0 6px', '✕'); q.type = 'button'; q.title = 'Quitar el punto'; q.onclick = () => { b.punto = null; vistaPrevia(false); pintar(); }; f.appendChild(q); lp.appendChild(f); }
+    if (!b.partes.length && !b.punto) lp.appendChild(el('div', 'font-size:12px;color:#fbbf24', 'Aún no marcó nada: coloque un ícono, dibuje o elija una zona.')); else if (b.partes.length) lp.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Zonas marcadas (' + contarV(todasLasPolys()) + ' vértices):'));
     b.partes.forEach((p, i) => { const f = el('div', 'display:flex;gap:6px;align-items:center;background:#1e293b;border-radius:4px;padding:3px 6px;margin:3px 0'); f.appendChild(el('span', 'flex:1;font-size:12px', '▪ ' + p.txt)); const q = el('button', btnCss + ';padding:0 6px', '✕'); q.type = 'button'; q.title = 'Quitar'; q.onclick = () => { b.partes.splice(i, 1); vistaPrevia(false); pintar(); }; f.appendChild(q); lp.appendChild(f); });
     fm.appendChild(lp);
     const lg = estiloSel(el('input')); lg.maxLength = 240; lg.style.cssText += ';width:100%;box-sizing:border-box'; lg.placeholder = 'Ej: Dptos. San Fernando y Bermejo (Chaco)'; lg.value = b.lugares; lg.oninput = () => { b.lugares = lg.value; };
@@ -7279,11 +7317,11 @@ window.addEventListener('DOMContentLoaded', () => {
     pub.onclick = async () => {
       if (!b.titulo.trim()) { res.style.color = '#fca5a5'; res.textContent = 'Escriba un título.'; return; }
       const h = Math.round(Number(b.horas)); if (!(h >= 1 && h <= 168)) { res.style.color = '#fca5a5'; res.textContent = 'La vigencia debe estar entre 1 y 168 horas.'; return; }
-      if (!b.partes.length) { res.style.color = '#fca5a5'; res.textContent = 'Marque dónde está el fenómeno: dibuje, elija un departamento, un sector o busque un lugar.'; return; }
-      const g = geomFinal(todasLasPolys()); if (!g) { res.style.color = '#fca5a5'; res.textContent = 'La zona marcada no es válida. Vuelva a marcarla.'; return; } if (g.demasiado) { res.style.color = '#fca5a5'; res.textContent = 'La zona es demasiado compleja. Quite departamentos o dibuje un área más simple.'; return; }
+      if (!b.partes.length && !b.punto) { res.style.color = '#fca5a5'; res.textContent = 'Marque dónde está el fenómeno: coloque un punto, dibuje, elija un departamento, un sector o busque un lugar.'; return; }
+      const g = b.partes.length ? geomFinal(todasLasPolys()) : { json: '' }; if (!g) { res.style.color = '#fca5a5'; res.textContent = 'La zona marcada no es válida. Vuelva a marcarla.'; return; } if (g.demasiado) { res.style.color = '#fca5a5'; res.textContent = 'La zona es demasiado compleja. Quite departamentos o dibuje un área más simple.'; return; }
       pub.disabled = true; res.style.color = '#94a3b8'; res.textContent = 'Publicando…';
       try {
-        const r = await api('MET_AREA_GUARDAR', { id: b.id, tipo: b.tipo, sev: b.sev, titulo: b.titulo.trim(), texto: b.texto.trim(), lugares: b.lugares.trim(), horas: h, geom: g.json });
+        const r = await api('MET_AREA_GUARDAR', { id: b.id, tipo: b.tipo, sev: b.sev, titulo: b.titulo.trim(), texto: b.texto.trim(), lugares: b.lugares.trim(), horas: h, geom: g.json || undefined, icono: b.icono || '', punto: b.punto || undefined });
         if (r.status !== 'success') { res.style.color = '#fca5a5'; res.textContent = r.message || 'No se pudo publicar.'; pub.disabled = false; return; }
         await cargar(true); previa = quitar(previa); borrador = nuevoBorrador(); pintar();
         const m2 = $('capa-panel') && $('capa-panel').querySelector('#capa-res'); if (m2) { m2.style.color = '#86efac'; m2.textContent = '✅ Publicado. Todos lo ven en el Visor Táctico (se renueva cada 60 s).'; }
@@ -7294,7 +7332,7 @@ window.addEventListener('DOMContentLoaded', () => {
     panel.appendChild(fm); panel.scrollTop = st;
   }
   function editar(a) {
-    borrador = { id: a.id, tipo: a.tipo, sev: a.sev, horas: Math.max(1, Math.min(168, Math.round((a.vence - ahora()) / 3600000) || 12)), titulo: a.titulo, texto: a.texto, lugares: a.lugares, radio: 30, partes: [{ txt: 'Zona publicada (' + contarV(polisDe(a.geom)) + ' vértices)', polys: polisDe(a.geom) }] };
+    borrador = { id: a.id, tipo: a.tipo, sev: a.sev, horas: Math.max(1, Math.min(168, Math.round((a.vence - ahora()) / 3600000) || 12)), titulo: a.titulo, texto: a.texto, lugares: a.lugares, radio: 30, icono: a.icono || '', punto: a.punto ? { lat: a.punto.lat, lon: a.punto.lon } : null, partes: a.geom ? [{ txt: 'Zona publicada (' + contarV(polisDe(a.geom)) + ' vértices)', polys: polisDe(a.geom) }] : [] };
     vistaPrevia(true); pintar(); if (panel) panel.scrollTop = 1e6;
   }
 
@@ -7309,7 +7347,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const bt = (t, fn) => { const q = el('button', 'background:#0c4a6e;border:1px solid #7dd3fc;color:#fff;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px', t); q.type = 'button'; q.onclick = fn; return q; };
     if (modo === 'poly') barra.append(bt('Deshacer', deshacer), bt('Terminar', terminarPoly));
     barra.appendChild(bt('Cancelar', () => finDibujo(true))); document.body.appendChild(barra);
-    info(modo === 'poly' ? 'Clic para agregar vértices (mínimo 3). Doble clic o Enter para terminar. Retroceso deshace. Esc cancela.' : 'Clic en el centro; mueva el cursor y haga clic otra vez para fijar el radio. Esc cancela.');
+    info(modo === 'punto' ? 'Haga clic en el mapa donde va el ícono. Esc cancela.' : modo === 'poly' ? 'Clic para agregar vértices (mínimo 3). Doble clic o Enter para terminar. Retroceso deshace. Esc cancela.' : 'Clic en el centro; mueva el cursor y haga clic otra vez para fijar el radio. Esc cancela.');
     mp.on('click', alClic); mp.on('mousemove', alMover); mp.on('dblclick', alDoble); try { mp.doubleClickZoom.disable(); } catch (_) { /* nada */ }
     document.addEventListener('keydown', alTecla, true);
   }
@@ -7332,6 +7370,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function alClic(e) {
     if (!dib) return; const mp = mapa();
+    if (dib.modo === 'punto') { terminarPunto(e.latlng); return; }
     if (dib.modo === 'poly') { const u = dib.pts[dib.pts.length - 1]; if (u && mp.latLngToContainerPoint(u).distanceTo(mp.latLngToContainerPoint(e.latlng)) < 4) return; dib.pts.push(e.latlng); actualizarBorrador(null); }
     else if (!dib.centro) { dib.centro = e.latlng; dib.capas.push(L.circleMarker(e.latlng, { radius: 5, color: '#fff', weight: 2, fillColor: '#f59e0b', fillOpacity: 1, interactive: false }).addTo(mp)); actualizarBorrador(e.latlng); }
     else { const km = mp.distance(dib.centro, e.latlng) / 1000; if (km < 1) return; terminarCirculo(dib.centro, km); }
@@ -7346,6 +7385,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!dib || dib.pts.length < 3) { info('Marque al menos 3 vértices.'); return; }
     const ring = dib.pts.map(p => [R4(p.lng), R4(p.lat)]); ring.push(ring[0].slice()); const c = L.polygon(dib.pts).getBounds().getCenter(), lg = lugarDe(c.lat, c.lng);
     finDibujo(true); agregarParte('Área dibujada (' + (ring.length - 1) + ' vértices)', [[ring]], lg ? 'cerca de ' + lg : '');
+  }
+  function terminarPunto(ll) {
+    const lat = R4(ll.lat), lon = R4(ll.lng), lg = lugarDe(lat, lon); finDibujo(true);
+    borrador.punto = { lat: lat, lon: lon }; if (lg) { const l = borrador.lugares.split(/\s*,\s*/).filter(Boolean), z = 'cerca de ' + lg; if (l.indexOf(z) < 0 && !borrador.partes.length) l.push(z); borrador.lugares = l.join(', ').slice(0, 240); }
+    vistaPrevia(false); pintar();
   }
   function terminarCirculo(c, km) {
     const lg = lugarDe(c.lat, c.lng), poly = circulo(c.lat, c.lng, km); finDibujo(true);
@@ -7367,13 +7411,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
     const mp = mapa(); if (!mp) return;
     const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
-    if (!iniciado || tid !== ultimoTeatro) { if (iniciado) reiniciar(); iniciado = true; ultimoTeatro = tid; visible = lsGet('vis', '1') !== '0'; listaAbierta = lsGet('lista', '1') !== '0'; cargar(true); }
+    if (!iniciado || tid !== ultimoTeatro) { if (iniciado) reiniciar(); iniciado = true; ultimoTeatro = tid; visible = lsGet('vis', '1') !== '0'; listaAbierta = lsGet('lista', '1') !== '0'; anim = lsGet('anim', '1') !== '0'; cargar(true); }
     else boton();
   }, 2000);
   setInterval(() => { if (activa() && iniciado && !document.hidden) cargar(false); }, 60000);
   setInterval(() => { if (activa() && iniciado && areas.length && !dib) dibujar(true); }, 45000);            // las vencidas dejan de verse sin esperar al servidor
   document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado) cargar(false); });
-  window.aresCapaMeteo = { abrir: abrir, recargar: () => cargar(true), areas: () => vigentes().slice(), geomFinal: geomFinal, circulo: circulo };
+  window.aresCapaMeteo = { iconos: () => ICONOS.map(i => i.slice()), abrir: abrir, recargar: () => cargar(true), areas: () => vigentes().slice(), geomFinal: geomFinal, circulo: circulo };
 })();
 </script>
 <!-- ===== FIN BLOQUE CAPA METEO ===== -->
