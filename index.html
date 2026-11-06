@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-q</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-r</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -7680,5 +7680,56 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE TERRITORIO ===== -->
+<!-- ===== INICIO BLOQUE MAPAS BASE: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: mapas base gratuitos para planificar misiones y operativos en el Visor Tactico.
+   - Calles (OpenStreetMap, el que ya estaba), Satelite (Esri World Imagery), Terreno con curvas de nivel (OpenTopoMap)
+     y Satelite Sentinel-2 de 10 m (EOX). Mas dos superposiciones de nombres y rutas para usar sobre el satelite.
+   - Se elige con el control de capas arriba a la derecha; el navegador recuerda la eleccion.
+   - Los mapas base quedan SIEMPRE debajo de las demas capas (zIndex 0). No se guardan teselas en el dispositivo (solo las de OSM, como antes).
+   - Cada tesela se pide directamente al proveedor: este ve la zona consultada y la IP. */
+(function () {
+  'use strict';
+  const LS = 'ares_mapa_base';
+  const lsGet = () => { try { return localStorage.getItem(LS) || ''; } catch (_) { return ''; } };
+  const lsSet = v => { try { localStorage.setItem(LS, v); } catch (_) { /* sin almacenamiento */ } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+  const ATR_ESRI = 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community';
+  let listo = false, ctrl = null, aviso = null, errores = 0, actual = '';
+  function osmExistente(mp) { let f = null; mp.eachLayer(l => { if (!f && l instanceof L.TileLayer && /tile\.openstreetmap\.org/.test(l._url || '')) f = l; }); return f; }
+  function avisar(mp, texto) {
+    if (!aviso) { aviso = document.createElement('div'); aviso.id = 'mapa-base-aviso'; aviso.style.cssText = 'position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:1000;background:#7f1d1d;color:#fff;padding:5px 10px;border-radius:5px;font:12px sans-serif;max-width:80%;box-shadow:0 2px 8px #0008;display:none'; mp.getContainer().appendChild(aviso); }
+    aviso.textContent = texto || ''; aviso.style.display = texto ? 'block' : 'none';
+  }
+  function iniciar() {
+    const mp = mapa(); if (!mp || listo) return; listo = true;
+    const osm = osmExistente(mp) || L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' });
+    try { osm.setZIndex(0); } catch (_) { /* nada */ }
+    const mk = (url, o) => L.tileLayer(url, Object.assign({ zIndex: 0, maxZoom: 19, crossOrigin: false }, o));
+    const bases = {
+      '🗺 Calles (OpenStreetMap)': osm,
+      '🛰 Satélite (Esri)': mk(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 17, attribution: ATR_ESRI }),
+      '⛰ Terreno con curvas de nivel (OpenTopoMap)': mk('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { subdomains: 'abc', maxNativeZoom: 17, attribution: 'Map data © OpenStreetMap contributors, SRTM · Map style © OpenTopoMap (CC-BY-SA)' }),
+      '🛰 Satélite Sentinel-2, 10 m (EOX)': mk('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg', { maxNativeZoom: 14, attribution: 'Sentinel-2 cloudless — https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)' })
+    };
+    const sup = {
+      '🏷 Nombres y límites (sobre satélite)': mk(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { zIndex: 3, maxNativeZoom: 17, attribution: ATR_ESRI }),
+      '🛣 Rutas y calles (sobre satélite)': mk(ESRI + 'Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { zIndex: 3, maxNativeZoom: 17, attribution: ATR_ESRI })
+    };
+    // los errores de carga de teselas avisan en pantalla (sin conexion, proveedor caido)
+    Object.keys(bases).forEach(n => bases[n].on('tileerror', () => { errores++; if (errores === 8) avisar(mp, 'No se pudo cargar el mapa base. Revise la conexión o cambie a "Calles".'); }));
+    Object.keys(bases).forEach(n => bases[n].on('tileload', () => { if (errores) { errores = Math.max(0, errores - 1); if (!errores) avisar(mp, ''); } }));
+    // eleccion guardada
+    const guardada = lsGet(); let sel = osm;
+    if (guardada && bases[guardada] && bases[guardada] !== osm) { try { mp.removeLayer(osm); } catch (_) { /* nada */ } sel = bases[guardada]; sel.addTo(mp); actual = guardada; } else { actual = '🗺 Calles (OpenStreetMap)'; }
+    ctrl = L.control.layers(bases, sup, { position: 'topright', collapsed: true, autoZIndex: false }).addTo(mp);
+    mp.on('baselayerchange', e => { actual = e.name; lsSet(e.name); errores = 0; avisar(mp, ''); });
+    window.aresMapasBase = { actual: () => actual, bases: () => Object.keys(bases), superposiciones: () => Object.keys(sup), elegir: n => { if (bases[n]) { Object.keys(bases).forEach(k => { if (k !== n && mp.hasLayer(bases[k])) mp.removeLayer(bases[k]); }); bases[n].addTo(mp); mp.fire('baselayerchange', { name: n, layer: bases[n] }); } } };
+  }
+  const t = setInterval(() => { if (mapa()) { clearInterval(t); iniciar(); } }, 800);
+})();
+</script>
+<!-- ===== FIN BLOQUE MAPAS BASE ===== -->
 </body>
 </html>
