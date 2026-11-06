@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-p</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-q</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -1362,7 +1362,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
 <script>
 (function () {
   'use strict';
-  const BBOX = [-62.8, -30.9, -55.5, -24.0]; 
+  const BBOX = [-74.0, -56.0, -53.0, -21.5];            // todo el pais (continental + Tierra del Fuego)
   const GEOREF = 'https://apis.datos.gob.ar/georef/api/v2.0';
   const PHOTON = 'https://photon.komoot.io/api/';
   const LS_LOC = 'cop_gaz_localidades_v1';
@@ -1461,7 +1461,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     if (abortFoto) abortFoto.abort(); abortFoto = new AbortController();
     let sesgo = '';
     if (typeof mapTactico !== 'undefined' && mapTactico && mapTactico.getCenter) { const c = mapTactico.getCenter(); sesgo = `&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`; }
-    const j = await (await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=8&bbox=${BBOX.join(',')}${sesgo}`, { signal: abortFoto.signal })).json();
+    const j = await (await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=10&bbox=${BBOX.join(',')}${sesgo}`, { signal: abortFoto.signal })).json();
     const res = (j.features || []).map(f => {
       const p = f.properties || {}, g = (f.geometry && f.geometry.coordinates) || [];
       const lon = g[0], lat = g[1]; if (lat == null || lon == null || !dentroNEA(lat, lon)) return null;
@@ -1479,19 +1479,51 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     cacheFoto.set(k, res); return res;
   }
 
-  async function buscarDireccionGeoref(q) {
+  const cacheDir = new Map(), cacheLoc = new Map(), cacheAero = new Map();
+  async function buscarDireccionGeoref(q) {                      // todo el pais: Georef elige la provincia por el texto (ej: "Av. Corrientes 1500, CABA")
+    const k = norm(q); if (cacheDir.has(k)) return cacheDir.get(k);
     const out = [];
-    for (const prov of ['chaco', 'corrientes']) {
-      try {
-        const j = await (await fetch(`${GEOREF}/direcciones?direccion=${encodeURIComponent(q)}&provincia=${prov}&max=2`)).json();
-        (j.direcciones || []).forEach(d => {
-          const u = d.ubicacion || {}; if (u.lat == null || u.lon == null) return;
-          const nom = d.nomenclatura || (d.calle && d.calle.nombre) || q;
-          out.push({ n: titulo(nom.split(',')[0]), sub: nom.split(',').slice(1).map(s => titulo(s.trim())).join(', ') || titulo(prov), label: nom.split(',').map(s => titulo(s.trim())).join(', '), lat: u.lat, lon: u.lon, tipo: 'calle' });
-        });
-      } catch (_) { }
-    }
-    return out;
+    try {
+      const j = await (await fetch(`${GEOREF}/direcciones?direccion=${encodeURIComponent(q)}&max=4`)).json();
+      (j.direcciones || []).forEach(d => {
+        const u = d.ubicacion || {}; if (u.lat == null || u.lon == null) return;
+        const nom = d.nomenclatura || (d.calle && d.calle.nombre) || q;
+        out.push({ n: titulo(nom.split(',')[0]), sub: nom.split(',').slice(1).map(s => titulo(s.trim())).join(', ') || 'Argentina', label: nom.split(',').map(s => titulo(s.trim())).join(', '), lat: u.lat, lon: u.lon, tipo: 'calle' });
+      });
+    } catch (_) { }
+    cacheDir.set(k, out); return out;
+  }
+  async function buscarLocalidadesGeoref(q) {                    // ciudades y localidades de todo el pais, consulta en vivo
+    const k = norm(q); if (k.length < 3) return [];
+    if (cacheLoc.has(k)) return cacheLoc.get(k);
+    const out = [];
+    const j = await (await fetch(`${GEOREF}/localidades?nombre=${encodeURIComponent(q)}&campos=nombre,centroide,departamento,provincia&max=6&orden=nombre`)).json();
+    (j.localidades || []).forEach(l => {
+      const lat = l.centroide && l.centroide.lat, lon = l.centroide && l.centroide.lon; if (lat == null || lon == null) return;
+      const dep = titulo(l.departamento && l.departamento.nombre), pr = titulo(l.provincia && l.provincia.nombre);
+      out.push({ n: titulo(l.nombre), sub: [dep, pr].filter(Boolean).join(', '), label: [titulo(l.nombre), dep, pr].filter(Boolean).join(', '), lat, lon, tipo: 'loc' });
+    });
+    cacheLoc.set(k, out); return out;
+  }
+  const RE_AERO = /\b(aeropuertos?|aer[oó]dromos?|aeroparque|helipuertos?|pista)\b/gi;
+  const quitarAero = q => q.replace(RE_AERO, ' ').replace(/\b(de|del|la|el)\s*$/i, '').replace(/\s+/g, ' ').trim();
+  async function aeropuertosCerca(lat, lon, km, ref) {           // aeropuertos y aerodromos alrededor de una ciudad (OpenStreetMap)
+    const k = lat.toFixed(2) + ',' + lon.toFixed(2) + ',' + km; if (cacheAero.has(k)) return cacheAero.get(k);
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
+    try {
+      const body = `[out:json][timeout:10];nwr["aeroway"~"^(aerodrome|heliport)$"](around:${km * 1000},${lat},${lon});out center tags 12;`;
+      const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(body), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: c.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json(), out = [];
+      (j.elements || []).forEach(e => {
+        const la = e.lat != null ? e.lat : e.center && e.center.lat, lo = e.lon != null ? e.lon : e.center && e.center.lon, tg = e.tags || {};
+        if (la == null || lo == null || !(tg.name || tg.icao || tg.iata)) return;
+        const d = Math.hypot((la - lat) * 111.32, (lo - lon) * 111.32 * Math.cos(lat * Math.PI / 180)), cod = [tg.icao, tg.iata].filter(Boolean).join(' / ');
+        const heli = tg.aeroway === 'heliport';
+        out.push({ n: tg.name || ('Aeródromo ' + cod), sub: [heli ? 'Helipuerto' : 'Aeropuerto / aeródromo', cod, 'a ' + d.toFixed(0) + ' km de ' + ref].filter(Boolean).join(' · '), label: tg.name || ('Aeródromo ' + cod), lat: la, lon: lo, tipo: 'avion', d, heli });
+      });
+      out.sort((a, b) => (a.heli - b.heli) || a.d - b.d); cacheAero.set(k, out); return out;
+    } finally { clearTimeout(t); }
   }
 
   async function resolverPunto(texto, input) {
@@ -1503,6 +1535,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     if (loc && norm(loc.n) === norm(nt)) return { lat: loc.lat, lon: loc.lon };
     if (/\d/.test(nt)) { const d = await buscarDireccionGeoref(nt); if (d[0]) return { lat: d[0].lat, lon: d[0].lon }; }
     try { const r = await buscarPhoton(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { }
+    try { const r = await buscarLocalidadesGeoref(nt); if (r[0]) return { lat: r[0].lat, lon: r[0].lon }; } catch (_) { }
     return loc ? { lat: loc.lat, lon: loc.lon } : null;
   }
 
@@ -1522,7 +1555,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     for (const e of extra) {
       const nn = norm(e.n);
       if (out.some(o => norm(o.n) === nn && cerca(o, e, e.tipo === 'loc' ? 0.05 : 0.003))) continue;
-      out.push(e); if (out.length >= 9) break;
+      out.push(e); if (out.length >= 12) break;
     }
     return out;
   }
@@ -1530,7 +1563,7 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
     if (!st.items.length && !st.nota) { st.box.style.display = 'none'; return; }
     st.box.innerHTML = st.items.map((it, i) =>
       `<div class="gs-item${i === st.act ? ' gs-activo' : ''}" data-i="${i}"><span class="gs-ico">${ICO[it.tipo] || '📍'}</span><div><div class="gs-main">${resaltar(it.n, q)}</div><div class="gs-sub">${escH(it.sub || '')}</div></div></div>`
-    ).join('') + `<div class="gs-foot">${escH(st.nota || '© OpenStreetMap · Georef (datos.gob.ar)')}</div>`;
+    ).join('') + `<div class="gs-foot">${escH(st.nota || '© OpenStreetMap · Georef (datos.gob.ar) · todo el país')}</div>`;
     st.box.style.display = 'block';
     const a = st.box.querySelector('.gs-activo'); if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
   }
@@ -1566,15 +1599,28 @@ setInterval(() => { if(sesionActiva.autenticado) cargarCaudalesGloFAS(); }, 3600
       st.items = buscarLocal(q); st.act = st.items.length ? 0 : -1; pintar(st, q);
       if (q.length < 3) return;
       st.t = setTimeout(async () => {
-        const conNum = /\d/.test(q);
-        const [foto, dirs] = await Promise.allSettled([buscarPhoton(q), conNum ? buscarDireccionGeoref(q) : Promise.resolve([])]);
+        const conNum = /\d/.test(q), qa = quitarAero(q), pideAero = qa !== q.trim() && qa.length >= 3, ql = pideAero ? qa : q;
+        const [foto, dirs, locs] = await Promise.allSettled([buscarPhoton(q), conNum ? buscarDireccionGeoref(q) : Promise.resolve([]), conNum ? Promise.resolve([]) : buscarLocalidadesGeoref(ql)]);
         if (mi !== st.seq) return; 
         if (foto.status === 'rejected' && foto.reason && foto.reason.name === 'AbortError') return;
-        const extra = [...(dirs.status === 'fulfilled' ? dirs.value : []), ...(foto.status === 'fulfilled' ? foto.value : [])];
-        if (foto.status === 'rejected') st.nota = 'Sin conexión al buscador en línea: solo resultados locales';
+        const val = r => r.status === 'fulfilled' ? r.value : [];
+        const lista = val(locs);
+        const extra = [...val(dirs), ...lista, ...val(foto)];
+        if (foto.status === 'rejected' && locs.status === 'rejected') st.nota = 'Sin conexión al buscador en línea: solo resultados locales';
         st.items = mezclar(st.items, extra);
         if (st.act < 0 && st.items.length) st.act = 0;
         pintar(st, q);
+        // aeropuertos cercanos a la ciudad buscada (ej: "comodoro rivadavia" -> Aeropuerto Gral. Mosconi)
+        const ciudad = (lista.concat(buscarLocal(ql, 3).filter(x => x.tipo === 'loc')))[0], nciudad = ciudad && norm(ciudad.n), nql = norm(ql);
+        if (!ciudad || conNum || nql.length < 4 || !(pideAero || nciudad.indexOf(nql) === 0 || nql.indexOf(nciudad) === 0)) return;
+        try {
+          const av = (await aeropuertosCerca(ciudad.lat, ciudad.lon, pideAero ? 60 : 30, ciudad.n)).filter(x => pideAero || !x.heli);
+          if (mi !== st.seq || !av.length) return;
+          const dup = it => av.some(a => norm(a.n) === norm(it.n) && cerca(a, it, 0.01));
+          const resto = st.items.filter(it => !dup(it)), tope = av.slice(0, 4);
+          st.items = (pideAero ? tope.concat(resto) : resto.slice(0, 5).concat(tope, resto.slice(5))).slice(0, 14); st.act = 0;
+          pintar(st, q);
+        } catch (_) { /* sin Overpass: quedan los resultados de ciudad y direccion */ }
       }, 280);
     };
     input.addEventListener('input', buscar);
