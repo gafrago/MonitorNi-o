@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-05-s</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-t</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbz1Qi38mHPzjCPtce4ma_hvP_2sXj8gJYliRXA3ujyaCqohl45axjDO_wKrZssp3BVhhQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzRjgP0cCBijhbFvNJKJdwZawSh9W5njaKT9HByiBckj3MxI2vltekOq1czPtANQBSFVg/exec";
 
 
 ;
@@ -4021,11 +4021,13 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     function formAcceso(t) {
       modal('👥 Accesos al teatro ' + t.nombre, (c, msg, cerrar) => {
-        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + ')').join(', ') || 'ninguno')));
+        c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usuarios con acceso: ' + ((t.usuarios || []).map(u => u.email + ' (' + u.rol + (u.jefe ? ' · JEFE' : '') + ')').join(', ') || 'ninguno') + (t.creador ? ' · creado por ' + t.creador : '')));
         const us = campo(c, 'Usuario', 'select', '', undefined, i => { (usuariosTodos.length ? usuariosTodos : []).forEach(u => i.add(new Option(u.email + (u.nombre ? ' — ' + u.nombre : ''), u.email))); });
         const rol = campo(c, 'Rol en este teatro', 'select', '', undefined, i => { ['Operador', 'Planificador', 'Administrador', 'Meteorologo'].forEach(r => i.add(new Option(r === 'Meteorologo' ? 'Meteorólogo' : r, r))); });
         const quitar = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const qk = el('input'); qk.type = 'checkbox'; quitar.append(qk, document.createTextNode('Quitarle el acceso a este teatro')); c.appendChild(quitar);
-        botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked }), cerrar); }, cerrar);
+        const jefeL = el('label', 'display:flex;gap:7px;align-items:center;margin-top:8px;font-size:12.5px'); const jk = el('input'); jk.type = 'checkbox'; jk.id = 'adm-jefe'; jefeL.append(jk, document.createTextNode('Jefe de Teatro (administra este teatro y puede crear teatros de ejercicio; solo con rol Administrador)')); c.appendChild(jefeL);
+        const sinc = () => { const u = (t.usuarios || []).filter(x => x.email.toLowerCase() === String(us.value).toLowerCase())[0]; jk.checked = !!(u && u.jefe); }; us.addEventListener('change', sinc); sinc();
+        botones(c, 'Guardar acceso', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await admin('MIEMBRO', { correo: us.value, teatro: t.id, rol: rol.value, activo: !qk.checked, jefe: jk.checked }), cerrar); }, cerrar);
       });
     }
     function formMedios(t) {
@@ -4174,7 +4176,7 @@ window.addEventListener('DOMContentLoaded', () => {
         [['Misiones', t.misionesActivas], ['Unidades', t.unidades], ['Aeronaves', t.aeronaves], ['Eventos', t.eventosAbiertos]].forEach(([k, v]) => { const x = el('div', 'background:#0b1220;border-radius:5px;padding:6px 2px'); x.append(el('div', 'font-weight:bold;font-size:17px', String(v)), el('div', 'font-size:10px;color:#94a3b8', k)); m.appendChild(x); });
         c.appendChild(m);
         if ((t.misiones || []).length) { const l = el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px'); l.appendChild(el('div', 'color:#94a3b8;font-size:10.5px', 'Misiones activas')); t.misiones.forEach(x => l.appendChild(el('div', '', '• ' + x.tipo + ' · ' + x.medio + ' · ' + x.estado + (x.fecha ? ' · ' + x.fecha : '')))); c.appendChild(l); }
-        const u = el('div', 'font-size:11px;color:#94a3b8'); u.textContent = '👥 ' + (t.usuarios || []).length + ' usuario(s): ' + (t.usuarios || []).map(x => x.email + ' (' + x.rol + ')').join(', '); c.appendChild(u);
+        const u = el('div', 'font-size:11px;color:#94a3b8'); u.textContent = '👥 ' + (t.usuarios || []).length + ' usuario(s): ' + (t.usuarios || []).map(x => x.email + ' (' + x.rol + (x.jefe ? ' · JEFE' : '') + ')').join(', ') + (t.creador ? ' · creado por ' + t.creador : ''); c.appendChild(u);
         c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', '🧭 ' + (t.modelos || 0) + ' modelo(s) habilitado(s) · ' + (t.medios || 0) + ' unidad(es) cargada(s)'));
         const bar = el('div', 'display:flex;gap:6px;margin-top:10px');
         const be = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '✏️ Editar / módulos'), ba = el('button', 'flex:1;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px', '👥 Accesos');
@@ -8013,5 +8015,191 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE ELECTORAL ===== -->
+<!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: Gestión del Jefe de Teatro ("🏛 Mi unidad").
+   El Jefe de Teatro es un Administrador que el superadministrador marcó como jefe. Desde acá administra SUS teatros de forma independiente:
+   crea teatros de EJERCICIO, elige módulos y sectores, da de alta personas con clave temporal y les asigna rol.
+   Todo lo valida el servidor contra la planilla en cada llamada; este panel solo muestra lo que el servidor le informa.
+   El botón aparece solo si el servidor confirma que la persona es jefe de al menos un teatro. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const esAdmin = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()) && !window.__super; };
+  const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
+    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral']];
+  let datos = null, panel = null, esJefe = false, probado = '', ocupado = false;
+
+  async function api(op, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'JEFE', op: op, email: s.email, pin: s.pin }, extra || {})) })).json();
+    return r;
+  }
+  function modal(titulo, armar) {
+    const f = el('div', 'position:fixed;inset:0;z-index:2147483500;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:10px'); f.className = 'jf-modal';
+    const c = el('div', 'background:#1e293b;border:1px solid #475569;border-radius:8px;padding:18px;width:min(560px,96vw);max-height:92vh;overflow:auto;color:#f8fafc;font-size:13px');
+    c.appendChild(el('h3', 'margin:0 0 10px;font-size:16px', titulo));
+    const msg = el('div', 'margin:10px 0;font-size:12.5px;min-height:16px'); msg.className = 'jf-msg';
+    armar(c, msg, () => f.remove()); c.appendChild(msg); f.appendChild(c); document.body.appendChild(f); return f;
+  }
+  const campo = (c, rot, tipo, ph, val) => {
+    const l = el('label', 'display:block;margin-top:8px;font-size:11.5px;color:#94a3b8', rot);
+    const i = tipo === 'select' ? el('select') : tipo === 'area' ? el('textarea') : el('input'); if (tipo !== 'select' && tipo !== 'area') i.type = tipo;
+    i.style.cssText = 'display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px' + (tipo === 'area' ? ';min-height:70px;font-family:monospace' : '');
+    if (ph) i.placeholder = ph; if (val !== undefined && val !== null) i.value = val; l.appendChild(i); c.appendChild(l); return i;
+  };
+  const btn = (txt, fondo, fn) => { const b = el('button', 'padding:6px 12px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12.5px', txt); b.type = 'button'; b.onclick = fn; return b; };
+  const botones = (c, txtOk, fnOk, cerrar) => { const f = el('div', 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px'); f.appendChild(btn('Cancelar', '#475569', cerrar)); const ok = btn(txtOk, '#16a34a', fnOk); ok.className = 'jf-ok'; f.appendChild(ok); c.appendChild(f); return ok; };
+  const resultado = (msg, r, cerrar, despues) => {
+    if (r && r.status === 'success') { msg.style.color = '#86efac'; msg.textContent = r.message || 'Listo.'; recargar(); if (despues) despues(r); else if (cerrar) setTimeout(cerrar, 700); }
+    else { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + ((r && r.message) || 'No se pudo completar.'); }
+  };
+  const claveAzar = () => { const A = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', v = new Uint32Array(10); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(v) : v.forEach((_, i) => { v[i] = Math.floor(Math.random() * 4e9); }); return Array.from(v, x => A[x % A.length]).join(''); };
+
+  /* ---------- formulario de teatro ---------- */
+  function formTeatro(t) {
+    const nuevo = !t; t = t || { id: '', nombre: '', lat: '', lon: '', zoom: 8, radio: 150, modulos: ['METEO', 'ZONAS'], sectores: [], activo: true };
+    modal(nuevo ? '➕ Nuevo teatro (ejercicio)' : '✏️ Editar ' + t.id, (c, msg, cerrar) => {
+      c.appendChild(el('div', 'font-size:11.5px;color:#fcd34d;background:#422006;border-radius:4px;padding:6px 8px', 'Los teatros que usted crea son siempre de EJERCICIO (muestran franja de simulación). Para un teatro REAL o para habilitar modelos de medios, consulte al superadministrador.'));
+      const id = campo(c, 'Código (2 a 20 letras, números, guion; no se puede cambiar después)', 'text', 'UNI-BA-01', t.id); if (!nuevo) id.disabled = true;
+      const nom = campo(c, 'Nombre', 'text', 'Unidad Buenos Aires', t.nombre);
+      const fila = el('div', 'display:flex;gap:8px'); c.appendChild(fila);
+      const la = campo(fila, 'Latitud', 'number', '-34.60', t.lat), lo = campo(fila, 'Longitud', 'number', '-58.40', t.lon); la.step = lo.step = 'any'; la.parentNode.style.flex = lo.parentNode.style.flex = '1';
+      const bc = btn('📍 Usar el centro del mapa', '#1d4ed8', () => { try { const p = mapTactico.getCenter(); la.value = p.lat.toFixed(4); lo.value = p.lng.toFixed(4); } catch (_) { msg.style.color = '#fca5a5'; msg.textContent = 'El mapa todavía no está listo.'; } }); bc.style.marginTop = '6px'; c.appendChild(bc);
+      const fila2 = el('div', 'display:flex;gap:8px'); c.appendChild(fila2);
+      const zo = campo(fila2, 'Zoom inicial', 'number', '8', t.zoom), ra = campo(fila2, 'Radio de trabajo (km)', 'number', '150', t.radio); zo.parentNode.style.flex = ra.parentNode.style.flex = '1';
+      c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Módulos del teatro'));
+      const cks = {}; MODS.filter(m => (datos.modulosDisponibles || []).indexOf(m[0]) >= 0).forEach(m => { const l = el('label', 'display:block;margin-top:3px'); const k = el('input'); k.type = 'checkbox'; k.checked = (t.modulos || []).indexOf(m[0]) >= 0; cks[m[0]] = k; l.append(k, document.createTextNode(' ' + m[1])); c.appendChild(l); });
+      const sec = campo(c, 'Sectores (uno por línea: nombre;lat;lon;radio_km — el radio es opcional)', 'area', 'Base Norte;-34.5;-58.5;80', (t.sectores || []).map(s => [s.nombre, s.lat, s.lon].concat(s.radio ? [s.radio] : []).join(';')).join('\n'));
+      let pl = null, auto = null;
+      if (nuevo) {
+        c.appendChild(el('div', 'margin-top:10px;font-size:11.5px;color:#94a3b8', 'Dónde se guardan los datos del teatro'));
+        const l1 = el('label', 'display:block;margin-top:3px'); auto = el('input'); auto.type = 'radio'; auto.name = 'jf-pl'; auto.checked = true; l1.append(auto, document.createTextNode(' Crear una planilla nueva automáticamente (la guarda la cuenta del sistema)')); c.appendChild(l1);
+        const l2 = el('label', 'display:block;margin-top:3px'); const own = el('input'); own.type = 'radio'; own.name = 'jf-pl'; l2.append(own, document.createTextNode(' Usar mi propia planilla de Google (vacía)')); c.appendChild(l2);
+        pl = campo(c, 'ID de su planilla (texto largo de la URL entre /d/ y /edit). Compártala con permiso de EDITOR con la cuenta del sistema; el superadministrador le indica cuál.', 'text', 'ID de la planilla'); pl.disabled = true; pl.parentNode.style.display = 'none';
+        own.onchange = auto.onchange = () => { pl.disabled = auto.checked; pl.parentNode.style.display = auto.checked ? 'none' : 'block'; };
+      } else {
+        const l = el('label', 'display:block;margin-top:10px'); var act = el('input'); act.type = 'checkbox'; act.checked = t.activo !== false; l.append(act, document.createTextNode(' Teatro activo (si se desmarca, nadie entra hasta reactivarlo)')); c.appendChild(l);
+      }
+      botones(c, nuevo ? 'Crear teatro' : 'Guardar cambios', async () => {
+        const secs = []; for (const ln of sec.value.split('\n').map(x => x.trim()).filter(Boolean)) { const p = ln.split(';').map(x => x.trim()); if (p.length < 3) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ Sector mal escrito: «' + ln + '». Use nombre;lat;lon;radio.'; return; } secs.push({ nombre: p[0], lat: Number(p[1]), lon: Number(p[2]), radio: p[3] ? Number(p[3]) : null }); }
+        const tt = { id: id.value.trim(), nombre: nom.value.trim(), lat: la.value, lon: lo.value, zoom: zo.value, radio: ra.value, modulos: Object.keys(cks).filter(k => cks[k].checked), sectores: secs };
+        if (nuevo) { if (auto.checked) tt.crear = true; else tt.sheetId = pl.value.trim(); } else tt.activo = act.checked;
+        msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await api('TEATRO', { t: tt }), cerrar);
+      }, cerrar);
+    });
+  }
+  /* ---------- usuarios ---------- */
+  function formUsuario(t) {
+    modal('👤 Nueva persona en ' + t.id, (c, msg, cerrar) => {
+      c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Se crea la cuenta con una clave temporal. La persona debe cambiarla en su primer ingreso. Entregue la clave en mano, nunca por mensaje.'));
+      const nom = campo(c, 'Nombre y rango', 'text', 'Sgto. Pérez'), em = campo(c, 'Correo', 'email', 'nombre@dominio');
+      const rol = campo(c, 'Rol en este teatro', 'select'); (datos.rolesDisponibles || []).forEach(r => { const o = el('option', '', r); o.value = r; rol.appendChild(o); }); rol.value = 'Operador';
+      const pin = campo(c, 'Clave temporal (6 a 12 letras o números)', 'text', '', claveAzar()); pin.style.fontFamily = 'monospace';
+      const g = btn('🎲 Otra clave', '#475569', () => { pin.value = claveAzar(); }); g.style.marginTop = '6px'; c.appendChild(g);
+      botones(c, 'Crear', async () => {
+        msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…';
+        const clave = pin.value.trim();
+        resultado(msg, await api('USUARIO', { correo: em.value.trim(), nombre: nom.value.trim(), pinNuevo: clave, teatro: t.id, rol: rol.value }), cerrar, () => {
+          const caja = el('div', 'margin-top:10px;background:#0f172a;border:1px solid #16a34a;border-radius:4px;padding:10px'); caja.className = 'jf-clave';
+          caja.append(el('div', 'font-size:11.5px;color:#94a3b8', 'Clave temporal de ' + em.value.trim() + ' (se muestra solo ahora):'), el('b', 'font-family:monospace;font-size:18px;letter-spacing:1px', clave));
+          msg.parentNode.insertBefore(caja, msg.nextSibling);
+        });
+      }, cerrar);
+    });
+  }
+  function formReclave(t, m) {
+    modal('🔑 Nueva clave temporal para ' + m.email, (c, msg, cerrar) => {
+      c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Solo es posible mientras la persona no haya elegido su propia clave.'));
+      const pin = campo(c, 'Clave temporal (6 a 12 letras o números)', 'text', '', claveAzar()); pin.style.fontFamily = 'monospace';
+      botones(c, 'Restablecer', async () => {
+        msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; const clave = pin.value.trim();
+        resultado(msg, await api('USUARIO', { correo: m.email, nombre: m.nombre || m.email, pinNuevo: clave, teatro: t.id, rol: m.rol }), cerrar, () => { msg.append(document.createElement('br'), document.createTextNode('Clave: ' + clave)); });
+      }, cerrar);
+    });
+  }
+  function formAgregar(t) {
+    modal('➕ Agregar a ' + t.id + ' a una persona que ya tiene cuenta', (c, msg, cerrar) => {
+      c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Su clave no se toca. Solo se le da acceso a este teatro con el rol que elija.'));
+      const em = campo(c, 'Correo', 'email', 'nombre@dominio'); const rol = campo(c, 'Rol en este teatro', 'select');
+      (datos.rolesDisponibles || []).forEach(r => { const o = el('option', '', r); o.value = r; rol.appendChild(o); }); rol.value = 'Operador';
+      botones(c, 'Agregar', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await api('MIEMBRO', { correo: em.value.trim(), teatro: t.id, rol: rol.value }), cerrar); }, cerrar);
+    });
+  }
+  async function cambiarRol(t, m, rol, quitar) {
+    const r = await api('MIEMBRO', { correo: m.email, teatro: t.id, rol: rol || m.rol, activo: !quitar });
+    const e = panel && panel.querySelector('.jf-aviso'); if (e) { e.style.color = r.status === 'success' ? '#86efac' : '#fca5a5'; e.textContent = (r.status === 'success' ? '' : '⚠ ') + (r.message || ''); }
+    if (r.status === 'success') recargar();
+  }
+
+  /* ---------- panel ---------- */
+  function pintar() {
+    if (!panel || !datos) return; const cuerpo = panel.querySelector('.jf-cuerpo'); cuerpo.textContent = '';
+    cuerpo.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Usted es Jefe de ' + datos.teatros.length + ' teatro(s). Teatros propios creados: ' + datos.cupo.teatros + ' de ' + datos.cupo.max + '.'));
+    const av = el('div', 'min-height:18px;margin:6px 0;font-size:12.5px'); av.className = 'jf-aviso'; cuerpo.appendChild(av);
+    datos.teatros.forEach(t => {
+      const tar = el('div', 'background:#111c33;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:14px'); tar.className = 'jf-teatro'; tar.dataset.id = t.id;
+      const cab = el('div', 'display:flex;gap:8px;align-items:center;flex-wrap:wrap');
+      cab.append(el('b', 'font-size:15px', t.nombre), el('span', 'font-size:11px;background:#7f1d1d;border-radius:3px;padding:1px 6px', t.tipo), el('span', 'font-size:11px;color:#94a3b8', t.id + (t.activo ? '' : ' · INACTIVO')));
+      const sp = el('span', 'flex:1'); cab.appendChild(sp); cab.append(btn('✏️ Editar teatro', '#475569', () => formTeatro(t)), btn('👤 Nueva persona', '#1d4ed8', () => formUsuario(t)), btn('➕ Ya tiene cuenta', '#4c1d95', () => formAgregar(t)));
+      tar.appendChild(cab);
+      tar.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin:6px 0', 'Módulos: ' + (t.modulos || []).join(', ') + ' · radio ' + t.radio + ' km · sectores: ' + ((t.sectores || []).map(s => s.nombre).join(', ') || 'ninguno')));
+      const tb = el('table', 'width:100%;border-collapse:collapse;font-size:12.5px');
+      const th = el('tr'); ['Persona', 'Rol', 'Estado', ''].forEach(h => th.appendChild(el('th', 'text-align:left;border-bottom:1px solid #334155;padding:4px;color:#94a3b8;font-weight:normal', h))); tb.appendChild(th);
+      t.miembros.sort((a, b) => (b.jefe - a.jefe) || a.email.localeCompare(b.email)).forEach(m => {
+        const tr = el('tr', m.activo ? '' : 'opacity:.55'); tr.className = 'jf-fila'; tr.dataset.email = m.email;
+        const td1 = el('td', 'padding:4px;border-bottom:1px solid #1e293b'); td1.append(el('div', '', m.nombre || m.email), el('div', 'font-size:11px;color:#94a3b8', m.email)); tr.appendChild(td1);
+        const td2 = el('td', 'padding:4px;border-bottom:1px solid #1e293b');
+        if (m.jefe || m.email === datos.yo) td2.textContent = m.rol + (m.jefe ? ' · Jefe de Teatro' : '');
+        else { const s = el('select', 'background:#0f172a;color:#fff;border:1px solid #475569;border-radius:4px;padding:3px'); (datos.rolesDisponibles || []).forEach(r => { const o = el('option', '', r); o.value = r; s.appendChild(o); }); s.value = m.rol; s.onchange = () => cambiarRol(t, m, s.value, false); td2.appendChild(s); }
+        tr.appendChild(td2);
+        tr.appendChild(el('td', 'padding:4px;border-bottom:1px solid #1e293b;font-size:11.5px', !m.activo ? 'Sin acceso' : m.pendiente ? '⏳ Aún no cambió la clave temporal' : 'Activo'));
+        const td4 = el('td', 'padding:4px;border-bottom:1px solid #1e293b;text-align:right;white-space:nowrap');
+        if (!m.jefe && m.email !== datos.yo) {
+          if (m.reseteable && m.activo) td4.appendChild(btn('🔑', '#475569', () => formReclave(t, m)));
+          td4.appendChild(document.createTextNode(' ')); const q = btn(m.activo ? 'Quitar acceso' : 'Reactivar', m.activo ? '#991b1b' : '#166534', () => { if (!m.activo || confirm('¿Quitar el acceso de ' + m.email + ' a ' + t.id + '?')) cambiarRol(t, m, m.rol, m.activo); }); td4.appendChild(q);
+        }
+        tr.appendChild(td4); tb.appendChild(tr);
+      });
+      tar.appendChild(tb); cuerpo.appendChild(tar);
+    });
+  }
+  async function recargar() {
+    if (ocupado) return; ocupado = true;
+    try { const r = await api('LISTAR'); if (r.status === 'success') { datos = r; esJefe = true; if (panel) pintar(); } else if (panel) { const c = panel.querySelector('.jf-cuerpo'); c.textContent = ''; c.appendChild(el('div', 'color:#fca5a5', '⚠ ' + (r.message || 'No se pudo cargar.'))); } }
+    catch (e) { if (panel) { const c = panel.querySelector('.jf-cuerpo'); c.textContent = ''; c.appendChild(el('div', 'color:#fca5a5', '⚠ No se pudo conectar.')); } }
+    finally { ocupado = false; }
+  }
+  function abrir() {
+    if (panel) return; if (!esJefe) return;
+    panel = el('div', 'position:fixed;inset:0;z-index:2147483100;background:#0b1220;color:#e2e8f0;overflow:auto;font-family:sans-serif'); panel.id = 'jf-panel';
+    const cab = el('div', 'position:sticky;top:0;z-index:2;background:#0f172a;border-bottom:2px solid #2563eb;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap');
+    cab.appendChild(el('b', 'font-size:15px;flex:1;min-width:200px', '🏛 MI UNIDAD — JEFE DE TEATRO'));
+    cab.append(btn('➕ Nuevo teatro', '#15803d', () => formTeatro(null)), btn('↻ Actualizar', '#334155', () => recargar()), btn('Cerrar', '#dc2626', cerrar));
+    panel.appendChild(cab); const cu = el('div', 'padding:14px 16px;max-width:1100px;margin:0 auto'); cu.className = 'jf-cuerpo'; panel.appendChild(cu);
+    document.body.appendChild(panel); if (datos) pintar(); recargar();
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } }
+
+  /* ---------- botón y arranque ---------- */
+  function boton() {
+    const b = $('btn-jefe'); if (!esAdmin() || !esJefe) { if (b) b.remove(); return; }
+    if (b) return; const ref = $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🏛 Mi unidad'); n.id = 'btn-jefe'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Gestión de sus teatros, personas y accesos (Jefe de Teatro)'; n.onclick = abrir;
+    ref.parentNode.insertBefore(n, ref);
+  }
+  function reiniciar() { cerrar(); const b = $('btn-jefe'); if (b) b.remove(); datos = null; esJefe = false; probado = ''; }
+  setInterval(async () => {
+    const s = sesion(); if (!s || !esAdmin()) { if (probado) { probado = ''; reiniciar(); } return; }
+    const clave = s.email + '|' + s.pin;
+    if (probado !== clave) { probado = clave; esJefe = false; try { const r = await api('LISTAR'); if (r.status === 'success') { datos = r; esJefe = true; } } catch (_) {} }
+    boton();
+  }, 2000);
+  window.aresJefe = { abrir: abrir, cerrar: cerrar, recargar: recargar, datos: () => datos, esJefe: () => esJefe };
+})();
+</script>
+<!-- ===== FIN BLOQUE JEFE DE TEATRO ===== -->
 </body>
 </html>
