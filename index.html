@@ -74,7 +74,7 @@ table.analytics-table th{background:#1e293b;color:#fff}
 <div id="modal-login" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; font-family: sans-serif;">
   <div style="background: #1e293b; padding: 2rem; border-radius: 8px; border: 1px solid #334155; width: 340px; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <h2 style="margin-top: 0; font-size: 1.25rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; text-align: center;">A.R.E.S. C4I</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-t</div>
+    <p style="font-size: 0.85rem; color: #94a3b8; text-align: center;">Acceso restringido · Personal autorizado</p><div style="text-align:center;font-size:10px;color:#475569;margin-top:-6px">versión 2026-11-06-u</div>
     
     <label style="font-size: 0.8rem; display: block; margin-top: 1rem;">Correo institucional / Usuario:</label>
     <input type="password" id="login-email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="********" onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus();" style="width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff;">
@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzRjgP0cCBijhbFvNJKJdwZawSh9W5njaKT9HByiBckj3MxI2vltekOq1czPtANQBSFVg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyh2UGhi_Aglsoun9q7Ti1gfP2bsfAjQ6d7ATMDTQyj-Gs87tzmlB0L_G0rvyiTdVcs_Q/exec";
 
 
 ;
@@ -8079,7 +8079,15 @@ window.addEventListener('DOMContentLoaded', () => {
         const l1 = el('label', 'display:block;margin-top:3px'); auto = el('input'); auto.type = 'radio'; auto.name = 'jf-pl'; auto.checked = true; l1.append(auto, document.createTextNode(' Crear una planilla nueva automáticamente (la guarda la cuenta del sistema)')); c.appendChild(l1);
         const l2 = el('label', 'display:block;margin-top:3px'); const own = el('input'); own.type = 'radio'; own.name = 'jf-pl'; l2.append(own, document.createTextNode(' Usar mi propia planilla de Google (vacía)')); c.appendChild(l2);
         pl = campo(c, 'ID de su planilla (texto largo de la URL entre /d/ y /edit). Compártala con permiso de EDITOR con la cuenta del sistema; el superadministrador le indica cuál.', 'text', 'ID de la planilla'); pl.disabled = true; pl.parentNode.style.display = 'none';
-        own.onchange = auto.onchange = () => { pl.disabled = auto.checked; pl.parentNode.style.display = auto.checked ? 'none' : 'block'; };
+        const ayuda = el('div', 'display:none;margin-top:6px;background:#0f172a;border-radius:4px;padding:8px;font-size:12px'); ayuda.id = 'jf-ayuda-pl'; c.appendChild(ayuda);
+        const cu = datos.cuentaSistema || ''; ayuda.appendChild(el('div', 'color:#94a3b8', '1) En su planilla: Compartir → agregue como EDITOR a esta cuenta (desactive el aviso por correo si quiere):'));
+        const lin = el('div', 'margin:4px 0'); const cb = el('b', 'font-family:monospace;user-select:all', cu || '(consulte al superadministrador cuál es la cuenta del sistema)'); lin.appendChild(cb);
+        if (cu) { const cp = btn('Copiar', '#475569', () => { try { navigator.clipboard.writeText(cu); cp.textContent = 'Copiada'; } catch (_) { /* nada */ } }); cp.style.marginLeft = '8px'; lin.appendChild(cp); } ayuda.appendChild(lin);
+        ayuda.appendChild(el('div', 'color:#94a3b8', '2) Pegue arriba el ID y compruebe que el sistema la puede abrir:'));
+        const rp = el('div', 'margin-top:4px;min-height:16px'); rp.className = 'jf-res-pl';
+        const cb2 = btn('Comprobar acceso', '#1d4ed8', async () => { rp.style.color = '#94a3b8'; rp.textContent = 'Comprobando…'; try { const r = await api('PLANILLA_PROBAR', { sheetId: pl.value.trim() }); rp.style.color = r.status === 'success' ? '#86efac' : '#fca5a5'; rp.textContent = (r.status === 'success' ? '✔ ' : '⚠ ') + r.message; } catch (e) { rp.style.color = '#fca5a5'; rp.textContent = '⚠ No se pudo comprobar.'; } });
+        cb2.style.marginTop = '4px'; ayuda.append(cb2, rp);
+        own.onchange = auto.onchange = () => { pl.disabled = auto.checked; pl.parentNode.style.display = auto.checked ? 'none' : 'block'; ayuda.style.display = auto.checked ? 'none' : 'block'; };
       } else {
         const l = el('label', 'display:block;margin-top:10px'); var act = el('input'); act.type = 'checkbox'; act.checked = t.activo !== false; l.append(act, document.createTextNode(' Teatro activo (si se desmarca, nadie entra hasta reactivarlo)')); c.appendChild(l);
       }
