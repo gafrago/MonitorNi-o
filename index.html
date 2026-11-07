@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbz1_hqDI42I424K1fybtfLPqs7jR7FjvyXO0CpJSNB7Z5lvVYRYEE7ESSNFkuwTJ0KuXw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyEQl5r7ys9_MZUbkgZEJpxUCEB0ewHivSQVpbDqDnKKf7BoQiWsaBRdaRrMZNCjOal9A/exec";
 
 
 ;
@@ -6466,7 +6466,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -8745,5 +8745,273 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE SIMULACION ===== -->
+<!-- ===== INICIO BLOQUE PLANIFICACION: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: planificación de ejercicios y operaciones. Con efectivos, materiales, tipo de operación (combate, emergencia, comicio electoral) y zona,
+   calcula agua, víveres, combustible, munición, sanidad, alojamiento, camiones y equipos, y los compara con lo disponible.
+   Los factores parten de estándares públicos (Sphere, FM 101-10-1/2, clases de suministro OTAN, manual electoral) y son editables por teatro.
+   El cálculo lo hace el servidor (una sola fórmula para todos). Este bloque solo captura datos y muestra resultados. Solo Administrador y Planificador. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const OPN = { COMBATE: 'Combate / ejercicio de combate', EMERGENCIA: 'Emergencia / catástrofe', ELECTORAL: 'Comicio electoral' };
+  const ZCOL = { LLANURA: '#65a30d', SELVA: '#15803d', HUMEDAL: '#0891b2', URBANA: '#64748b', MONTANA: '#7c3aed', DESIERTO: '#d97706' };
+  const GRUPOS = [['LOG', 'Logística general'], ['COMBATE', 'Combate'], ['EMERGENCIA', 'Emergencia'], ['ELECTORAL', 'Electoral'], ['ZONAS', 'Zonas'], ['TEATRO', 'Perfil del teatro'], ['MEDIOS', 'Medios'], ['ARMAS', 'Armas']];
+  const SCOL = { R: '#f59e0b', X: '#ef4444' };
+  let ini = null, ent = nueva('EMERGENCIA'), planId = '', planNom = '', res = null, panel = null, tab = 'planes', ultimo = '', capaZ = null, zf = vacioZ(), fac = null, grupo = 'LOG', ocupado = false, confirmar = '';
+
+  function nueva(op) { return { op: op, dias: '', intensidad: 'MEDIA', sectores: [sector(1)], medios: [], armas: [], stock: {} }; }
+  function sector(n) { return { nombre: 'Sector ' + n, zona: 'T:LLANURA', ef: '', pob: '', electores: '', mesas: '', estab: '', dist: '' }; }
+  function vacioZ() { return { id: '', nombre: '', tipo: 'LLANURA', lat: '', lon: '', radio: '' }; }
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const ESTIL_IN = 'display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px';
+  function campo(rot, tipo, val, fn, opc) {
+    const w = el('div', 'min-width:0'), l = el('label', 'display:block;margin-top:5px;font-size:11px;color:#94a3b8', rot); w.appendChild(l);
+    let i; if (tipo === 'select') { i = el('select'); (opc || []).forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); }); } else { i = el('input'); i.type = tipo; if (tipo === 'number') { i.min = '0'; i.step = 'any'; } if (opc && opc.ph) i.placeholder = opc.ph; }
+    i.style.cssText = ESTIL_IN; if (val !== undefined && val !== null) i.value = val; i.oninput = i.onchange = () => fn(i.value); w.appendChild(i); return w;
+  }
+  const fmt = n => (n === null || n === undefined || !isFinite(n)) ? '-' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 });
+  function aviso(t, ok) { const e = panel && panel.querySelector('.pl-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
+  const ztipos = () => (ini && ini.ztipos) || {};
+  const medCat = () => (ini ? ini.factores.filter(f => /^MED\./.test(f.k)) : []);
+  const armCat = () => (ini ? ini.factores.filter(f => /^ARM\./.test(f.k)) : []);
+  const zonaNom = id => { if (/^T:/.test(id)) return ztipos()[id.slice(2)] || id; const z = ((ini && ini.zonas) || []).filter(x => x.id === id)[0]; return z ? z.nombre + ' (' + (ztipos()[z.tipo] || z.tipo) + ')' : 'Zona borrada'; };
+  const opcionesZona = () => Object.keys(ztipos()).map(t => ['T:' + t, 'Tipo: ' + ztipos()[t]]).concat(((ini && ini.zonas) || []).map(z => [z.id, 'Zona: ' + z.nombre + ' (' + (ztipos()[z.tipo] || z.tipo) + ')']));
+
+  /* ---------- carga ---------- */
+  async function cargar() {
+    try { const r = await api('PLAN_INICIO'); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar'), false); return; } ini = r; fac = null; if (ini.ops.indexOf(ent.op) < 0) ent = nueva(ini.ops[0]); dibujarZonas(); pintar(); }
+    catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function calcular() {
+    if (ocupado) return; ocupado = true; aviso('Calculando…', true);
+    try { const r = await api('PLAN_CALCULAR', { entrada: ent }); if (r.status !== 'success') { aviso('⚠ ' + r.message, false); } else { res = r.resultado; aviso('Calculado.', true); } }
+    catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; pintar(); }
+  }
+  async function guardar() {
+    if (ocupado) return; if (!planNom.trim()) return aviso('⚠ Escriba un nombre para el plan.', false); ocupado = true;
+    try { const r = await api('PLAN_GUARDAR', { id: planId, nombre: planNom.trim(), entrada: ent }); if (r.status !== 'success') aviso('⚠ ' + r.message, false); else { planId = r.id; res = r.resultado; aviso('Plan guardado.', true); const l = await api('PLAN_INICIO'); if (l.status === 'success') { ini.planes = l.planes; } } }
+    catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; pintar(); }
+  }
+  async function abrirPlan(id) {
+    try { const r = await api('PLAN_VER', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); ent = Object.assign(nueva(r.entrada.op || 'EMERGENCIA'), r.entrada); planId = r.id; planNom = r.nombre; res = r.resultado; tab = 'calc'; pintar(); }
+    catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function recalcular(id) { const r = await api('PLAN_RECALCULAR', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); aviso('Recalculado con los factores actuales.', true); if (planId === id) res = r.resultado; await cargar(); }
+  async function borrarPlan(id) { if (confirmar !== 'p' + id) { confirmar = 'p' + id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; const r = await api('PLAN_BORRAR', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); if (planId === id) { planId = ''; res = null; } await cargar(); }
+
+  /* ---------- tablas ---------- */
+  function tabla(cab, filas, opc) {
+    const w = el('div', 'overflow-x:auto;margin:4px 0'), t = el('table', 'border-collapse:collapse;width:100%;font-size:11.5px'); const th = el('tr');
+    cab.forEach(c => th.appendChild(el('th', 'text-align:left;padding:3px 5px;background:#1e3a5f;color:#fff;white-space:nowrap', c))); t.appendChild(th);
+    filas.forEach(f => { const tr = el('tr'); f.forEach((c, i) => { const td = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;vertical-align:top;' + (i > 0 && opc && opc.num ? 'text-align:right;' : '')); if (c && c.nodeType) td.appendChild(c); else td.textContent = c; tr.appendChild(td); }); t.appendChild(tr); });
+    w.appendChild(t); return w;
+  }
+  const chip = (txt, col) => el('span', 'background:' + col + ';color:#fff;border-radius:8px;padding:1px 7px;font-size:11px;font-weight:bold', txt);
+  const ESTC = { OK: ['#15803d', 'Cubierto'], JUSTO: ['#b45309', 'Justo'], FALTA: ['#b91c1c', 'Falta'], SIN_DATO: ['#475569', 'Sin dato'] };
+
+  /* ---------- resultado ---------- */
+  function pintarRes(c, r) {
+    const caja = el('div', 'margin-top:10px;border-top:2px solid #1d4ed8;padding-top:6px'); caja.className = 'pl-res'; c.appendChild(caja);
+    caja.appendChild(el('div', 'font-weight:bold;font-size:13px', 'RESULTADO — ' + OPN[r.op] + ' · ' + r.dias + ' día(s)' + (r.intensidad ? ' · intensidad ' + r.intensidad : '')));
+    caja.appendChild(el('div', 'font-size:12px;color:#cbd5e1', fmt(r.tot.ef) + ' efectivos' + (r.tot.pob ? ' · ' + fmt(r.tot.pob) + ' personas afectadas' : '') + (r.tot.mesas ? ' · ' + fmt(r.tot.mesas) + ' mesas' : '') + ' · ' + fmt(r.tot.tTotal) + ' t de carga en total (' + fmt(r.tot.tDia) + ' t/día)'));
+    (r.avisos || []).forEach(a => caja.appendChild(el('div', 'background:#78350f;border-radius:4px;padding:3px 8px;font-size:11.5px;margin-top:3px', '⚠ ' + a)));
+    caja.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Suministros por clase (clases de suministro OTAN)'));
+    caja.appendChild(tabla(['Clase', 'Recurso', 'Total', 'Por día'], r.clases.map(x => [x.c, x.n, fmt(x.v) + ' ' + x.u, x.dia === null ? '-' : fmt(x.dia) + ' ' + x.u])));
+    if (r.equipos.length) { caja.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Medios y equipos necesarios')); caja.appendChild(tabla(['Medio', 'Cantidad', 'Nota'], r.equipos.map(x => [x.n, fmt(x.v) + ' ' + x.u, x.nota]))); }
+    caja.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Por sector'));
+    caja.appendChild(tabla(['Sector', 'Zona', 'Efect.', 'Agua L', 'Víveres kg', 'Comb. L', 'Mun. kg', 'Camiones', 'Viajes/día', 'Ciclo h'], r.sectores.map(s => [s.nombre, s.zonaNombre || s.tipoNombre, fmt(s.ef), fmt(s.agua), fmt(s.viv), fmt(s.comb), fmt(s.mun), fmt(s.camiones), String(s.viajes), fmt(s.ciclo)]), { num: false }));
+    if (r.cmp.length) {
+      caja.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Comparación con lo disponible'));
+      caja.appendChild(tabla(['Recurso', 'Necesita', 'Dispone', 'Cobertura', 'Falta', 'Estado'], r.cmp.map(x => [x.n, fmt(x.need) + ' ' + x.u, x.have === null ? '-' : fmt(x.have), x.cob === null ? '-' : x.cob + ' %', x.falta === null ? '-' : fmt(x.falta), chip(ESTC[x.est][1], ESTC[x.est][0])])));
+    }
+    const fila = el('div', 'margin-top:8px'); fila.appendChild(btn('⬇ Plan en PDF', '#1d4ed8', () => pdf(r), 'Descargar el plan')); caja.appendChild(fila);
+    caja.appendChild(el('div', 'font-size:10.5px;color:#94a3b8;margin-top:6px', 'Ayuda de decisión con factores públicos y estimaciones genéricas editables (pestaña Factores). Verifique contra la doctrina de la Fuerza antes de comprometer recursos.'));
+  }
+  function pdf(r) {
+    if (!(window.jspdf && window.jspdf.jsPDF)) return aviso('⚠ No se cargó el generador de PDF. Recargue la página.', false);
+    const { jsPDF } = window.jspdf, doc = new jsPDF(), teatro = (window.ARES_TEATRO && ARES_TEATRO.nombre) || '';
+    doc.setFontSize(15); doc.text('A.R.E.S. C4I — Plan de medios y recursos', 14, 16); doc.setFontSize(10);
+    doc.text('Teatro: ' + teatro + '   Plan: ' + (planNom || '(sin guardar)'), 14, 24); doc.text('Operación: ' + OPN[r.op] + '   Duración: ' + r.dias + ' día(s)' + (r.intensidad ? '   Intensidad: ' + r.intensidad : ''), 14, 30);
+    doc.text('Efectivos: ' + fmt(r.tot.ef) + (r.tot.pob ? '   Afectados: ' + fmt(r.tot.pob) : '') + '   Carga total: ' + fmt(r.tot.tTotal) + ' t', 14, 36);
+    let y = 42; const AT = (cab, filas) => { if (doc.autoTable) { doc.autoTable({ startY: y, head: [cab], body: filas, styles: { fontSize: 8.5 }, headStyles: { fillColor: [30, 58, 95] } }); y = doc.lastAutoTable.finalY + 6; } };
+    AT(['Clase', 'Recurso', 'Total', 'Por día'], r.clases.map(x => [x.c, x.n, fmt(x.v) + ' ' + x.u, x.dia === null ? '-' : fmt(x.dia) + ' ' + x.u]));
+    if (r.equipos.length) AT(['Medio', 'Cantidad', 'Nota'], r.equipos.map(x => [x.n, fmt(x.v) + ' ' + x.u, x.nota]));
+    AT(['Sector', 'Zona', 'Efect.', 'Agua L', 'Víveres kg', 'Comb. L', 'Mun. kg', 'Camiones'], r.sectores.map(s => [s.nombre, s.zonaNombre || s.tipoNombre, fmt(s.ef), fmt(s.agua), fmt(s.viv), fmt(s.comb), fmt(s.mun), fmt(s.camiones)]));
+    if (r.cmp.length) AT(['Recurso', 'Necesita', 'Dispone', 'Cobertura', 'Falta', 'Estado'], r.cmp.map(x => [x.n, fmt(x.need) + ' ' + x.u, x.have === null ? '-' : fmt(x.have), x.cob === null ? '-' : x.cob + ' %', x.falta === null ? '-' : fmt(x.falta), ESTC[x.est][1]]));
+    (r.avisos || []).slice(0, 12).forEach(a => { if (y > 270) { doc.addPage(); y = 16; } doc.setFontSize(8.5); doc.text(doc.splitTextToSize('Aviso: ' + a, 180), 14, y); y += 8; });
+    doc.setFontSize(8); doc.text('Ayuda de decisión: factores públicos (Sphere, FM 101-10-1/2, OTAN) y estimaciones genéricas editables. Verificar con la doctrina de la Fuerza.', 14, 287);
+    doc.save('Plan_' + (planNom || 'sin_nombre').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('PDF descargado.', true);
+  }
+
+  /* ---------- pestaña Planes ---------- */
+  function tabPlanes(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:6px', 'Un plan guarda sus datos de entrada y su resultado. «Recalcular» lo vuelve a calcular con los factores actuales del teatro.'));
+    c.appendChild(btn('+ Plan nuevo', '#15803d', () => { ent = nueva(ini.ops[0]); planId = ''; planNom = ''; res = null; tab = 'calc'; pintar(); }));
+    if (!ini.planes.length) c.appendChild(el('div', 'color:#94a3b8;padding:8px 0', 'Todavía no hay planes guardados.'));
+    ini.planes.forEach(p => {
+      const f = el('div', 'display:flex;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px solid #1e293b'); f.className = 'pl-plan'; f.dataset.id = p.id;
+      const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-weight:bold', p.nombre)); t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (OPN[p.op] || p.op) + ' · ' + p.estado + ' · ' + p.autor + ' · ' + new Date(p.ts).toLocaleString('es-AR'))); f.appendChild(t);
+      f.appendChild(btn('Abrir', '#1d4ed8', () => abrirPlan(p.id))); f.appendChild(btn('Recalcular', '#334155', () => recalcular(p.id), 'Con los factores actuales')); f.appendChild(btn(confirmar === 'p' + p.id ? '¿Seguro?' : '🗑', '#b91c1c', () => borrarPlan(p.id), 'Borrar')); c.appendChild(f);
+    });
+  }
+
+  /* ---------- pestaña Calculadora ---------- */
+  function tabCalc(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    const g = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px'); g.appendChild(campo('Nombre del plan', 'text', planNom, v => { planNom = v; }, { ph: 'Ej.: Apoyo inundación Costa' }));
+    g.appendChild(campo('Tipo de operación', 'select', ent.op, v => { const n = nueva(v); n.dias = ent.dias; n.stock = ent.stock; n.sectores = ent.sectores; if (v !== 'COMBATE') n.armas = []; ent = n; res = null; pintar(); }, ini.ops.map(o => [o, OPN[o]])));
+    g.appendChild(campo('Días de operación (vacío = valor por defecto)', 'number', ent.dias, v => { ent.dias = v; }, { ph: String((ini.factores.find(f => f.k === { COMBATE: 'C.dias', EMERGENCIA: 'E.dias', ELECTORAL: 'L.dias' }[ent.op]) || {}).v || '') }));
+    if (ent.op === 'COMBATE') g.appendChild(campo('Intensidad', 'select', ent.intensidad, v => { ent.intensidad = v; }, [['BAJA', 'Baja'], ['MEDIA', 'Media'], ['ALTA', 'Alta']])); c.appendChild(g);
+    // sectores
+    c.appendChild(el('div', 'font-weight:bold;margin-top:10px', 'Sectores (cada uno con su zona y distancia a la base logística)'));
+    ent.sectores.forEach((s, i) => {
+      const b = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px;margin-top:5px'); b.className = 'pl-sector'; const gg = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px');
+      gg.appendChild(campo('Nombre', 'text', s.nombre, v => { s.nombre = v; })); gg.appendChild(campo('Zona', 'select', s.zona, v => { s.zona = v; }, opcionesZona()));
+      gg.appendChild(campo('Efectivos' + (ent.op === 'ELECTORAL' ? ' (vacío = estimar por norma)' : ''), 'number', s.ef, v => { s.ef = v; }));
+      gg.appendChild(campo('Distancia a la base (km)', 'number', s.dist, v => { s.dist = v; }));
+      if (ent.op === 'EMERGENCIA') gg.appendChild(campo('Personas afectadas', 'number', s.pob, v => { s.pob = v; }));
+      if (ent.op === 'ELECTORAL') { gg.appendChild(campo('Establecimientos', 'number', s.estab, v => { s.estab = v; })); gg.appendChild(campo('Mesas', 'number', s.mesas, v => { s.mesas = v; })); gg.appendChild(campo('o electores (calcula mesas)', 'number', s.electores, v => { s.electores = v; })); }
+      b.appendChild(gg); if (ent.sectores.length > 1) { const q = btn('Quitar sector', '#b91c1c', () => { ent.sectores.splice(i, 1); ent.medios.forEach(m => { const n = Number(m.sector); if (m.sector !== '' && m.sector !== -1 && n === i) m.sector = -1; else if (n > i) m.sector = n - 1; }); ent.armas.forEach(m => { const n = Number(m.sector); if (m.sector !== '' && m.sector !== -1 && n === i) m.sector = -1; else if (n > i) m.sector = n - 1; }); pintar(); }); q.style.marginTop = '4px'; b.appendChild(q); } c.appendChild(b);
+    });
+    if (ent.sectores.length < ini.limites.sectores) c.appendChild(btn('+ Sector', '#334155', () => { ent.sectores.push(sector(ent.sectores.length + 1)); pintar(); }));
+    // medios y armas
+    const sectOpc = [['-1', 'Todos (se reparte por efectivos)']].concat(ent.sectores.map((s, i) => [String(i), s.nombre || ('Sector ' + (i + 1))]));
+    const filas = (tit, lista, cat, vacio) => {
+      c.appendChild(el('div', 'font-weight:bold;margin-top:10px', tit));
+      lista.forEach((m, i) => { const r = el('div', 'display:grid;grid-template-columns:2fr 1fr 2fr auto;gap:4px;align-items:end'); r.className = 'pl-fila';
+        r.appendChild(campo('Tipo', 'select', m.k, v => { m.k = v; }, cat.map(x => [x.k.replace(/^ARM\./, '').replace(/^MED\./, ''), x.n.replace(/ — disparos$/, '')]))); r.appendChild(campo('Cantidad', 'number', m.cant, v => { m.cant = v; }));
+        r.appendChild(campo('Sector', 'select', String(m.sector === undefined ? -1 : m.sector), v => { m.sector = Number(v); }, sectOpc)); const q = btn('✕', '#b91c1c', () => { lista.splice(i, 1); pintar(); }); q.style.marginBottom = '2px'; r.appendChild(q); c.appendChild(r); });
+      if (lista.length < ini.limites.filas && cat.length) c.appendChild(btn('+ ' + vacio, '#334155', () => { lista.push({ k: cat[0].k.replace(/^ARM\./, '').replace(/^MED\./, ''), cant: '', sector: -1 }); pintar(); }));
+    };
+    filas('Medios (consumen combustible)', ent.medios, medCat(), 'Medio');
+    if (ent.op === 'COMBATE') filas('Armas (consumen munición)', ent.armas, armCat(), 'Arma');
+    // disponible
+    c.appendChild(el('div', 'font-weight:bold;margin-top:10px', 'Lo que tengo disponible (opcional)'));
+    const d = ini.disponibles; c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Efectivos y vehículos se toman de los recursos de terreno del teatro (' + (d.efectivos === null ? 'sin datos' : fmt(d.efectivos) + ' efectivos, ' + fmt(d.vehiculos) + ' vehículos en ' + d.recursos + ' recursos') + '); escriba un número para reemplazarlos.'));
+    const sg = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px'); [['efectivos', 'Efectivos'], ['vehiculos', 'Vehículos'], ['agua', 'Agua (L)'], ['viv', 'Víveres (kg)'], ['comb', 'Combustible (L)'], ['mun', 'Munición (kg)'], ['san', 'Sanidad (kg)'], ['alo', 'Alojamiento (m²)']].forEach(([k, t]) => sg.appendChild(campo(t, 'number', ent.stock[k], v => { ent.stock[k] = v; }))); c.appendChild(sg);
+    const fb = el('div', 'margin-top:10px'); fb.appendChild(btn('▶ Calcular', '#15803d', calcular)); fb.appendChild(btn('💾 Guardar plan', '#1d4ed8', guardar)); c.appendChild(fb);
+    if (res) pintarRes(c, res);
+  }
+
+  /* ---------- pestaña Zonas ---------- */
+  const COLORZ = t => ZCOL[t] || '#64748b';
+  function limpiarZonas() { const M = mapa(); if (M && capaZ && M.hasLayer(capaZ)) M.removeLayer(capaZ); capaZ = null; }
+  function dibujarZonas() {
+    const M = mapa(); limpiarZonas(); if (!M || !panel || !ini) return; capaZ = L.layerGroup();
+    ini.zonas.forEach(z => { if (!isFinite(z.lat) || !isFinite(z.lon)) return; const c = L.circle([z.lat, z.lon], { radius: Math.max(z.radio, 0.3) * 1000, color: COLORZ(z.tipo), weight: 2, dashArray: '6 5', fillOpacity: .08 }); c.bindTooltip(el('span', '', z.nombre + ' — ' + (ztipos()[z.tipo] || z.tipo)), { permanent: true, direction: 'center', className: 'pl-tip' }); capaZ.addLayer(c); });
+    capaZ.addTo(M);
+  }
+  function tomarPunto() {
+    const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); aviso('Haga clic en el mapa para fijar el centro de la zona.', true); M.getContainer().style.cursor = 'crosshair';
+    M.once('click', e => { M.getContainer().style.cursor = ''; zf.lat = e.latlng.lat.toFixed(5); zf.lon = e.latlng.lng.toFixed(5); aviso('Punto fijado.', true); pintar(); });
+  }
+  async function guardarZona() {
+    try { const r = await api('PLAN_ZONA_GUARDAR', zf); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); ini.zonas = r.zonas; zf = vacioZ(); aviso('Zona guardada.', true); dibujarZonas(); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function borrarZona(id) {
+    if (confirmar !== 'z' + id) { confirmar = 'z' + id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = '';
+    try { const r = await api('PLAN_ZONA_BORRAR', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); ini.zonas = r.zonas; dibujarZonas(); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  function tabZonas(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:6px', 'Las zonas son áreas del teatro con un tipo de terreno y clima (selva, humedal, desierto…). Cada tipo ajusta agua, combustible, velocidad de convoy y alojamiento con los multiplicadores de la pestaña Factores. Se dibujan en el mapa.'));
+    ini.zonas.forEach(z => { const f = el('div', 'display:flex;gap:6px;align-items:center;padding:5px 2px;border-bottom:1px solid #1e293b'); f.className = 'pl-zona'; f.appendChild(el('span', 'width:12px;height:12px;border-radius:50%;background:' + COLORZ(z.tipo))); const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-weight:bold', z.nombre)); t.appendChild(el('div', 'font-size:11px;color:#94a3b8', (ztipos()[z.tipo] || z.tipo) + ' · radio ' + fmt(z.radio) + ' km · ' + z.lat.toFixed(3) + ', ' + z.lon.toFixed(3))); f.appendChild(t);
+      f.appendChild(btn('Editar', '#334155', () => { zf = { id: z.id, nombre: z.nombre, tipo: z.tipo, lat: z.lat, lon: z.lon, radio: z.radio }; pintar(); })); f.appendChild(btn('Ir', '#334155', () => { const M = mapa(); if (M) M.setView([z.lat, z.lon], 8); })); f.appendChild(btn(confirmar === 'z' + z.id ? '¿Seguro?' : '🗑', '#b91c1c', () => borrarZona(z.id))); c.appendChild(f); });
+    if (!ini.zonas.length) c.appendChild(el('div', 'color:#94a3b8;padding:6px 0', 'Todavía no hay zonas. Puede planificar igual eligiendo un tipo de terreno en cada sector.'));
+    c.appendChild(el('div', 'font-weight:bold;margin-top:10px', zf.id ? 'Editar zona' : 'Zona nueva'));
+    const g = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px'); g.appendChild(campo('Nombre', 'text', zf.nombre, v => { zf.nombre = v; }));
+    g.appendChild(campo('Tipo de terreno', 'select', zf.tipo, v => { zf.tipo = v; }, Object.keys(ztipos()).map(t => [t, ztipos()[t]]))); g.appendChild(campo('Latitud', 'text', zf.lat, v => { zf.lat = v; })); g.appendChild(campo('Longitud', 'text', zf.lon, v => { zf.lon = v; }));
+    g.appendChild(campo('Radio (km)', 'number', zf.radio, v => { zf.radio = v; })); c.appendChild(g);
+    const fb = el('div', 'margin-top:6px'); fb.appendChild(btn('📍 Tomar punto del mapa', '#334155', tomarPunto)); fb.appendChild(btn('💾 Guardar zona', '#15803d', guardarZona)); if (zf.id) fb.appendChild(btn('Cancelar', '#475569', () => { zf = vacioZ(); pintar(); })); c.appendChild(fb);
+  }
+
+  /* ---------- pestaña Factores ---------- */
+  function copiaFac() { if (!fac) { fac = { vals: {}, extra: ini.extra.map(x => Object.assign({}, x)) }; ini.factores.forEach(f => { if (!f.propio && f.cambiado) fac.vals[f.k] = f.v; }); } return fac; }
+  const valFac = f => { const F = copiaFac(); if (f.propio) { const x = F.extra.filter(e => e.k === f.k)[0]; return x ? x.v : f.v; } return F.vals[f.k] !== undefined ? F.vals[f.k] : f.base; };
+  async function guardarFac() {
+    const F = copiaFac(); try { const r = await api('PLAN_CFG_GUARDAR', { vals: F.vals, extra: F.extra }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); ini.factores = r.factores; ini.extra = r.extra; fac = null; aviso('Factores guardados. Los planes existentes usan los nuevos al recalcular.', true); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function restaurarFac() {
+    if (confirmar !== 'rf') { confirmar = 'rf'; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = '';
+    try { const r = await api('PLAN_CFG_GUARDAR', { vals: {}, extra: [] }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); ini.factores = r.factores; ini.extra = r.extra; fac = null; aviso('Se restauraron los valores base (se quitaron también los medios y armas propios).', true); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  const clave = n => String(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 14);
+  function tabFactores(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; } const F = copiaFac();
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:6px', 'Cada factor muestra su fuente. Verde/gris: estándar público verificado. Naranja (R): referencia habitual no verificada. Rojo (X): estimación genérica que debe reemplazar por su doctrina. Lo que cambie vale solo para este teatro.'));
+    const sel = el('div', 'margin-bottom:6px'); GRUPOS.forEach(([k, t]) => sel.appendChild(btn(t, grupo === k ? '#1d4ed8' : '#334155', () => { grupo = k; pintar(); }))); c.appendChild(sel);
+    const lista = ini.factores.filter(f => f.g === grupo), cuerpo = el('div'); c.appendChild(cuerpo);
+    lista.forEach(f => {
+      const fila = el('div', 'display:grid;grid-template-columns:1fr 90px;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b'); fila.className = 'pl-factor'; fila.dataset.k = f.k;
+      const t = el('div', 'min-width:0;font-size:12px'); const nombre = el('span', '', f.n); t.appendChild(nombre); t.appendChild(el('span', 'color:#94a3b8;font-size:10.5px', '  ' + f.u + (f.base !== null ? ' · base ' + f.base : ' · propio')));
+      const fu = ini.fuentes.filter(x => x.id === f.s)[0]; const tag = el('span', 'margin-left:5px;border-radius:6px;padding:0 5px;font-size:10px;color:#fff;background:' + (SCOL[f.s] || '#0f766e'), f.s); tag.title = fu ? fu.t : f.s; t.appendChild(tag); fila.appendChild(t);
+      const i = el('input'); i.type = 'number'; i.step = 'any'; i.min = '0'; i.style.cssText = ESTIL_IN + ';margin:0;text-align:right'; i.value = valFac(f); const marca = () => { const v = Number(i.value); i.style.borderColor = f.base !== null && v !== f.base ? '#facc15' : '#475569'; }; marca();
+      i.oninput = () => { const v = i.value === '' ? NaN : Number(i.value); if (f.propio) { const x = F.extra.filter(e => e.k === f.k)[0]; if (x) x.v = isFinite(v) ? v : 0; } else if (isFinite(v) && v !== f.base) F.vals[f.k] = v; else delete F.vals[f.k]; marca(); };
+      fila.appendChild(i);
+      if (f.propio) { const q = btn('quitar', '#b91c1c', () => { F.extra = F.extra.filter(e => e.k !== f.k && e.k !== f.k.replace(/^ARM\./, 'ARMKG.') && e.k !== f.k.replace(/^ARMKG\./, 'ARM.')); ini.factores = ini.factores.filter(x => x.k !== f.k && x.k !== f.k.replace(/^ARM\./, 'ARMKG.') && x.k !== f.k.replace(/^ARMKG\./, 'ARM.')); pintar(); }); q.style.gridColumn = '1 / span 2'; q.style.justifySelf = 'start'; fila.appendChild(q); }
+      cuerpo.appendChild(fila);
+    });
+    if (grupo === 'MEDIOS' || grupo === 'ARMAS') {
+      const g = el('div', 'margin-top:8px;border:1px dashed #475569;border-radius:6px;padding:6px'); g.appendChild(el('div', 'font-weight:bold;font-size:12px', grupo === 'MEDIOS' ? 'Agregar medio propio' : 'Agregar arma propia'));
+      const n = { nombre: '', a: '', b: '' }; const gg = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px'); gg.appendChild(campo('Nombre', 'text', '', v => { n.nombre = v; }));
+      if (grupo === 'MEDIOS') gg.appendChild(campo('Consumo (L/día/unidad)', 'number', '', v => { n.a = v; })); else { gg.appendChild(campo('Disparos por arma y día', 'number', '', v => { n.a = v; })); gg.appendChild(campo('Peso por disparo (kg)', 'number', '', v => { n.b = v; })); }
+      g.appendChild(gg); const b = btn('+ Agregar', '#15803d', () => {
+        const k = clave(n.nombre); if (k.length < 2) return aviso('⚠ Escriba un nombre (al menos 2 letras o números).', false); const pre = grupo === 'MEDIOS' ? 'MED.' : 'ARM.';
+        if (ini.factores.some(x => x.k === pre + k)) return aviso('⚠ Ya existe un elemento con ese nombre.', false); if (F.extra.length + (grupo === 'ARMAS' ? 2 : 1) > ini.limites.extra) return aviso('⚠ Se alcanzó el máximo de elementos propios.', false);
+        if (grupo === 'MEDIOS') { const x = { k: 'MED.' + k, n: n.nombre.slice(0, 40), u: 'L/día/unidad', v: Number(n.a) || 0 }; F.extra.push(x); ini.factores.push({ g: 'MEDIOS', k: x.k, n: x.n, u: x.u, s: 'X', base: null, v: x.v, cambiado: false, propio: true }); }
+        else { const x = { k: 'ARM.' + k, n: n.nombre.slice(0, 30) + ' — disparos', u: 'disp/arma/día', v: Number(n.a) || 0 }, y = { k: 'ARMKG.' + k, n: n.nombre.slice(0, 30) + ' — peso', u: 'kg/disparo', v: Number(n.b) || 0 }; F.extra.push(x, y); [x, y].forEach(z => ini.factores.push({ g: 'ARMAS', k: z.k, n: z.n, u: z.u, s: 'X', base: null, v: z.v, cambiado: false, propio: true })); }
+        pintar(); }); b.style.marginTop = '6px'; g.appendChild(b); c.appendChild(g);
+    }
+    const fb = el('div', 'margin-top:10px'); fb.appendChild(btn('💾 Guardar factores', '#15803d', guardarFac)); fb.appendChild(btn(confirmar === 'rf' ? '¿Seguro?' : 'Restaurar valores base', '#b91c1c', restaurarFac)); c.appendChild(fb);
+  }
+
+  /* ---------- pestaña Fuentes ---------- */
+  function tabFuentes(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px', 'De dónde salen los números. Cada factor de la pestaña Factores lleva la etiqueta de su fuente.'));
+    ini.fuentes.forEach(f => { const b = el('div', 'padding:5px 0;border-bottom:1px solid #1e293b;font-size:12px'); b.className = 'pl-fuente'; const tag = el('span', 'border-radius:6px;padding:0 6px;font-size:10.5px;color:#fff;margin-right:6px;background:' + (SCOL[f.id] || '#0f766e'), f.id); b.appendChild(tag); b.appendChild(document.createTextNode(f.t + ' '));
+      if (f.u) { const a = el('a', 'color:#7dd3fc', 'abrir'); a.href = f.u; a.target = '_blank'; a.rel = 'noopener noreferrer'; b.appendChild(a); } c.appendChild(b); });
+    c.appendChild(el('div', 'font-size:11px;color:#fbbf24;margin-top:8px', 'Los estándares humanitarios (Sphere) y los factores del Ejército de EE.UU. son referencias públicas, no doctrina argentina. Las estimaciones (X) son valores de partida para empezar a decidir rápido, no cifras oficiales.'));
+  }
+
+  /* ---------- panel ---------- */
+  function pintar() {
+    if (!panel) return; const tabs = panel.querySelector('.pl-tabs'), cu = panel.querySelector('.pl-cuerpo'), y = cu.scrollTop; tabs.textContent = ''; cu.textContent = '';
+    [['planes', 'Planes'], ['calc', 'Calculadora'], ['zonas', 'Zonas'], ['factores', 'Factores'], ['fuentes', 'Fuentes']].forEach(([k, t]) => tabs.appendChild(btn(t, tab === k ? '#1d4ed8' : '#334155', () => { tab = k; pintar(); })));
+    if (tab === 'planes') tabPlanes(cu); else if (tab === 'calc') tabCalc(cu); else if (tab === 'zonas') tabZonas(cu); else if (tab === 'factores') tabFactores(cu); else tabFuentes(cu); cu.scrollTop = y;
+  }
+  function css() { if ($('ares-pl-css')) return; const s = document.createElement('style'); s.id = 'ares-pl-css'; s.textContent = '.pl-tip{background:rgba(15,23,42,.8);color:#fff;border:none;box-shadow:none;font-weight:bold}'; document.head.appendChild(s); }
+  function abrir() {
+    if (panel) return; if (!rolOk()) return; css();
+    panel = el('div', 'position:fixed;top:70px;left:10px;width:min(620px,96vw);max-height:calc(100vh - 90px);display:flex;flex-direction:column;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-family:sans-serif;padding:10px'); panel.id = 'pl-panel';
+    const h = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); h.appendChild(el('b', 'flex:1;font-size:14px', '📐 PLANIFICACIÓN DE MEDIOS Y RECURSOS')); h.appendChild(btn('↻', '#334155', cargar, 'Actualizar')); h.appendChild(btn('✕', '#dc2626', cerrar, 'Cerrar')); panel.appendChild(h);
+    const tabs = el('div', 'margin-bottom:6px'); tabs.className = 'pl-tabs'; panel.appendChild(tabs); const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'pl-aviso'; panel.appendChild(av);
+    const cu = el('div', 'overflow:auto;flex:1'); cu.className = 'pl-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); pintar(); cargar();
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } limpiarZonas(); }
+  function boton() {
+    const b = $('btn-planificacion'); if (!rolOk()) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-fases') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '📐 Planificación'); n.id = 'btn-planificacion'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Calcular medios y recursos de un ejercicio u operación'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  function reiniciar() { cerrar(); ini = null; ent = nueva('EMERGENCIA'); planId = ''; planNom = ''; res = null; fac = null; zf = vacioZ(); tab = 'planes'; const b = $('btn-planificacion'); if (b) b.remove(); }
+  setInterval(() => {
+    const s = sesion(), k = s && rolOk() ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : '';
+    if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton();
+  }, 1500);
+  window.aresPlan = { abrir: abrir, cerrar: cerrar, estado: () => ({ ini: ini, ent: ent, res: res, planId: planId }), calcular: calcular, zonasEnMapa: () => capaZ ? capaZ.getLayers().length : 0 };
+})();
+</script>
+<!-- ===== FIN BLOQUE PLANIFICACION ===== -->
 </body>
 </html>
