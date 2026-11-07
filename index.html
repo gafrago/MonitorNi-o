@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyEQl5r7ys9_MZUbkgZEJpxUCEB0ewHivSQVpbDqDnKKf7BoQiWsaBRdaRrMZNCjOal9A/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyeu4pY1wUviXcXzOhpMpIkYiTEbwf5ZgQlthQVZ42xvNVuJU5G_lClVX1HXMWQ6H2Upg/exec";
 
 
 ;
@@ -3949,7 +3949,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -6466,7 +6466,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion', 'btn-sanidad'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -9013,5 +9013,272 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE PLANIFICACION ===== -->
+<!-- ===== INICIO BLOQUE SANIDAD: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: sanidad. (1) Módulo SANITARIO: registro de hospitales con camas, UTI, respiradores, oxígeno y personal, dibujados en el mapa.
+   (2) Módulo EPIDEMIA (solo teatros de EJERCICIO): simulación de una epidemia por zonas y por días (plantilla tipo COVID-19 con fuente, editable).
+   Conduce únicamente el superadministrador (árbitro): aplica medidas, envía insumos y avanza los días. Administrador y Planificador observan.
+   Todo el cálculo lo hace el servidor con semilla (mismos datos + misma semilla + mismas órdenes = mismo resultado); este bloque muestra y envía órdenes.
+   Es una herramienta de adiestramiento, no un pronóstico. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const mod = m => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf(m) >= 0); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const RN = { o2: 'oxígeno', vac: 'vacunas', tst: 'tests' };
+  const SCOL = { D: '#0f766e', X: '#ef4444' };
+  let panel = null, tab = 'hosp', ultimo = '', lista = null, hosp = null, hf = vacioH(), ejId = '', ej = null, base = null, act = null, ver = '', serie = null, sel = 0, eventos = [], nf = nuevoForm(), pEd = {}, capaH = null, capaZ = null, ocupado = false, confirmar = '', escala = 'T';
+  const puede = () => !!((ej && ej.puedeConducir) || (lista && lista.puedeConducir));
+
+  function vacioH() { return { id: '', nombre: '', tipo: 'General', localidad: '', lat: '', lon: '', camas: '', camasOcup: '', uti: '', utiOcup: '', resp: '', o2d: '', pers: '', estado: 'OPERATIVO', notas: '' }; }
+  function zonaNueva(n) { const M = mapa(), c = M ? M.getCenter() : { lat: '', lng: '' }; return { n: 'Zona ' + n, lat: c.lat === '' ? '' : Number(c.lat).toFixed(4), lon: c.lng === '' ? '' : Number(c.lng).toFixed(4), radio: 30, pob: 100000, inf0: 100, camas: 300, uti: 30, resp: 30, o2d: 1500, pers: '', o2: 50000, vac: 0, tst: 0 }; }
+  function nuevoForm() { return { nombre: '', semilla: '', desdeH: false, zonas: [zonaNueva(1)], dep: { o2: 100000, vac: 0, tst: 0 }, params: {} }; }
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const ESTIL_IN = 'display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px';
+  function campo(rot, tipo, val, fn, opc) {
+    const w = el('div', 'min-width:0'), l = el('label', 'display:block;margin-top:5px;font-size:11px;color:#94a3b8', rot); w.appendChild(l); let i;
+    if (tipo === 'select') { i = el('select'); (opc || []).forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); }); } else { i = el('input'); i.type = tipo; if (tipo === 'number') { i.min = '0'; i.step = 'any'; } if (opc && opc.ph) i.placeholder = opc.ph; }
+    i.style.cssText = ESTIL_IN; if (val !== undefined && val !== null) i.value = val; i.oninput = i.onchange = () => fn(i.value); w.appendChild(i); return w;
+  }
+  const fmt = n => (n === null || n === undefined || !isFinite(n)) ? '-' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 });
+  const ent = n => fmt(Math.round(n));
+  function aviso(t, ok) { const e = panel && panel.querySelector('.sn-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
+  const nomZ = i => (i >= 0 && base && base.zonas[i]) ? base.zonas[i].n : 'todas las zonas';
+  const activos = s => s.E + s.I + s.H + s.U;
+  const colorAct = f => 'hsl(' + Math.round(120 * (1 - Math.min(1, f / 0.1))) + ',75%,45%)';
+  function tabla(cab, filas, clk) {
+    const w = el('div', 'overflow-x:auto;margin:4px 0'), t = el('table', 'border-collapse:collapse;width:100%;font-size:11.5px'), th = el('tr');
+    cab.forEach(c => th.appendChild(el('th', 'text-align:left;padding:3px 5px;background:#1e3a5f;color:#fff;white-space:nowrap', c))); t.appendChild(th);
+    filas.forEach((f, i) => { const tr = el('tr', clk ? 'cursor:pointer' : ''); f.forEach(c => { const td = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;vertical-align:top'); if (c && c.nodeType) td.appendChild(c); else td.textContent = c; tr.appendChild(td); }); if (clk) tr.onclick = () => clk(i, tr); tr.className = 'sn-fila'; t.appendChild(tr); });
+    w.appendChild(t); return w;
+  }
+
+  /* ---------- mapa ---------- */
+  function limpiarMapa() { const M = mapa(); [capaH, capaZ].forEach(c => { if (M && c && M.hasLayer(c)) M.removeLayer(c); }); capaH = capaZ = null; }
+  function dibujar() {
+    const M = mapa(); limpiarMapa(); if (!M || !panel) return;
+    if (hosp && tab === 'hosp') { capaH = L.layerGroup(); hosp.forEach(h => { if (!isFinite(h.lat) || !isFinite(h.lon)) return; const f = h.camas > 0 ? h.camasOcup / h.camas : 0, u = h.uti > 0 ? h.utiOcup / h.uti : 0, m = Math.max(f, u);
+      const c = L.circleMarker([h.lat, h.lon], { radius: 9, color: '#fff', weight: 2, fillColor: h.estado === 'FUERA' ? '#64748b' : colorAct(Math.max(0, m - 0.6) * 0.25), fillOpacity: .95 });
+      c.bindPopup(() => { const d = el('div', 'font-size:12px'); d.appendChild(el('b', '', h.nombre)); d.appendChild(el('div', '', h.tipo + ' · ' + h.estado)); d.appendChild(el('div', '', 'Camas ' + h.camasOcup + '/' + h.camas + ' · UTI ' + h.utiOcup + '/' + h.uti + ' · Resp. ' + h.resp)); d.appendChild(el('div', '', 'Oxígeno ' + fmt(h.o2d) + ' u/día · Personal ' + h.pers)); return d; }); capaH.addLayer(c); }); capaH.addTo(M); }
+    if (base && act && ['conducir', 'curvas', 'informe', 'params'].indexOf(tab) >= 0) { capaZ = L.layerGroup(); base.zonas.forEach((z, i) => { const s = act.z[i]; if (!s) return; const f = activos(s) / z.pob, col = colorAct(f);
+      const c = L.circle([z.lat, z.lon], { radius: Math.max(z.radio, 1) * 1000, color: sel === i ? '#facc15' : col, weight: sel === i ? 4 : 2, fillColor: col, fillOpacity: .3 });
+      c.bindTooltip(el('span', '', z.n + ' — activos ' + ent(activos(s)) + ' · fallecidos ' + ent(s.D)), { permanent: true, direction: 'center', className: 'sn-tip' }); c.on('click', () => { sel = i; pintar(); dibujar(); }); capaZ.addLayer(c); }); capaZ.addTo(M); }
+  }
+  function tomarPunto(fn) {
+    const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); aviso('Haga clic en el mapa para fijar el punto.', true); M.getContainer().style.cursor = 'crosshair';
+    M.once('click', e => { M.getContainer().style.cursor = ''; fn(e.latlng.lat.toFixed(5), e.latlng.lng.toFixed(5)); aviso('Punto fijado.', true); pintar(); });
+  }
+
+  /* ---------- hospitales ---------- */
+  async function cargarHosp() { try { const r = await api('SAN_LISTAR'); if (r.status !== 'success') { aviso('⚠ ' + r.message, false); return; } hosp = r.hospitales; dibujar(); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function guardarH() { try { const r = await api('SAN_GUARDAR', hf); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); hosp = r.hospitales; hf = vacioH(); aviso('Establecimiento guardado.', true); dibujar(); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function borrarH(id) { if (confirmar !== 'h' + id) { confirmar = 'h' + id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; try { const r = await api('SAN_BORRAR', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); hosp = r.hospitales; dibujar(); pintar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  function tabHosp(c) {
+    if (!hosp) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    const T = hosp.reduce((t, h) => { t.c += h.camas; t.co += h.camasOcup; t.u += h.uti; t.uo += h.utiOcup; t.r += h.resp; return t; }, { c: 0, co: 0, u: 0, uo: 0, r: 0 });
+    c.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-bottom:6px', hosp.length + ' establecimiento(s) · camas ' + T.co + '/' + T.c + ' · UTI ' + T.uo + '/' + T.u + ' · respiradores ' + T.r));
+    hosp.forEach(h => { const f = el('div', 'display:flex;gap:6px;align-items:center;padding:5px 2px;border-bottom:1px solid #1e293b'); f.className = 'sn-hosp'; const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-weight:bold', h.nombre));
+      t.appendChild(el('div', 'font-size:11px;color:#94a3b8', h.tipo + ' · ' + h.estado + ' · camas ' + h.camasOcup + '/' + h.camas + ' · UTI ' + h.utiOcup + '/' + h.uti + ' · resp. ' + h.resp + ' · O₂ ' + fmt(h.o2d) + ' u/día · personal ' + h.pers)); f.appendChild(t);
+      f.appendChild(btn('Editar', '#334155', () => { hf = Object.assign(vacioH(), h); pintar(); })); f.appendChild(btn('Ir', '#334155', () => { const M = mapa(); if (M) M.setView([h.lat, h.lon], 12); })); f.appendChild(btn(confirmar === 'h' + h.id ? '¿Seguro?' : '🗑', '#b91c1c', () => borrarH(h.id))); c.appendChild(f); });
+    if (!hosp.length) c.appendChild(el('div', 'color:#94a3b8;padding:6px 0', 'Todavía no hay establecimientos cargados.'));
+    c.appendChild(el('div', 'font-weight:bold;margin-top:10px', hf.id ? 'Editar establecimiento' : 'Establecimiento nuevo'));
+    const g = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px'); const F = (k, rot, tipo, opc) => g.appendChild(campo(rot, tipo || 'number', hf[k], v => { hf[k] = v; }, opc));
+    F('nombre', 'Nombre', 'text'); F('tipo', 'Tipo', 'text'); F('localidad', 'Localidad', 'text'); F('lat', 'Latitud', 'text'); F('lon', 'Longitud', 'text');
+    g.appendChild(campo('Estado', 'select', hf.estado, v => { hf.estado = v; }, [['OPERATIVO', 'Operativo'], ['SATURADO', 'Saturado'], ['FUERA', 'Fuera de servicio']]));
+    F('camas', 'Camas'); F('camasOcup', 'Camas ocupadas'); F('uti', 'Camas de UTI'); F('utiOcup', 'UTI ocupadas'); F('resp', 'Respiradores'); F('o2d', 'Oxígeno (u/día)'); F('pers', 'Personal de salud'); F('notas', 'Notas', 'text'); c.appendChild(g);
+    const fb = el('div', 'margin-top:6px'); fb.appendChild(btn('📍 Tomar punto del mapa', '#334155', () => tomarPunto((a, o) => { hf.lat = a; hf.lon = o; }))); fb.appendChild(btn('💾 Guardar', '#15803d', guardarH)); if (hf.id) fb.appendChild(btn('Cancelar', '#475569', () => { hf = vacioH(); pintar(); })); c.appendChild(fb);
+  }
+
+  /* ---------- epidemia: carga y refresco ---------- */
+  async function cargarLista() { try { const r = await api('EPI_LISTAR'); if (r.status !== 'success') { aviso('⚠ ' + r.message, false); return; } lista = r; pintar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function refrescar(forzar) {
+    if (!ejId) return; try { const r = await api('EPI_ESTADO', { id: ejId, ver: forzar ? '' : ver }); if (r.status !== 'success') { aviso('⚠ ' + r.message, false); return; } if (r.sinCambios) return;
+      ver = r.ver; ej = Object.assign(r.ejercicio, { puedeConducir: r.puedeConducir }); base = r.base; act = r.act; if (sel >= base.zonas.length) sel = 0; serie = null; await cargarSerie(); pintar(); dibujar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function cargarSerie() { try { const r = await api('EPI_SERIE', { id: ejId }); if (r.status === 'success') { serie = r.serie; eventos = []; serie.forEach(x => (x.v.ev || []).forEach(e => eventos.push(Object.assign({ dia: x.d }, e)))); } } catch (_) { /* nada */ } }
+  function abrirEj(id) { ejId = id; ver = ''; ej = null; base = act = serie = null; sel = 0; tab = 'conducir'; pEd = {}; refrescar(true); pintar(); }
+  function cerrarEj() { ejId = ''; ej = null; base = act = serie = null; eventos = []; ver = ''; tab = 'ejercicios'; limpiarMapa(); cargarLista(); pintar(); }
+  async function orden(accion, extra, ok) {
+    if (ocupado) return; ocupado = true; try { const r = await api(accion, Object.assign({ id: ejId }, extra)); if (r.status !== 'success') aviso('⚠ ' + r.message, false); else { aviso(ok || 'Hecho.', true); await refrescar(true); } } catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; }
+  }
+  async function crear() {
+    if (ocupado) return; ocupado = true;
+    try { const r = await api('EPI_CREAR', { nombre: nf.nombre, semilla: nf.semilla, zonas: nf.zonas, desdeHospitales: nf.desdeH, deposito: nf.dep, params: nf.params }); if (r.status !== 'success') aviso('⚠ ' + r.message, false); else { aviso('Ejercicio creado' + (nf.desdeH ? ' (' + r.asignados + ' hospital(es) asignados)' : '') + '.', true); nf = nuevoForm(); abrirEj(r.id); } } catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; }
+  }
+  async function borrarEj(id) { if (confirmar !== 'e' + id) { confirmar = 'e' + id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; try { const r = await api('EPI_BORRAR', { id: id }); if (r.status !== 'success') return aviso('⚠ ' + r.message, false); cargarLista(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+
+  /* ---------- parámetros (campos con fuente) ---------- */
+  function camposParams(c, valor, fijar) {
+    const m = lista ? lista.meta : []; c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:4px', 'Plantilla tipo COVID-19. Etiqueta C1 = valor de la CDC; D = derivado; X (rojo) = estimación genérica que conviene reemplazar.'));
+    m.forEach(p => { const f = el('div', 'display:grid;grid-template-columns:1fr 90px;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b'); f.className = 'sn-param'; f.dataset.k = p.k; const t = el('div', 'min-width:0;font-size:12px'); t.appendChild(el('span', '', p.n)); t.appendChild(el('span', 'color:#94a3b8;font-size:10.5px', '  ' + p.u + ' · base ' + p.v));
+      const fu = lista.fuentes.filter(x => x.id === p.s)[0], tag = el('span', 'margin-left:5px;border-radius:6px;padding:0 5px;font-size:10px;color:#fff;background:' + (SCOL[p.s] || '#1d4ed8'), p.s); tag.title = fu ? fu.t : p.s; t.appendChild(tag); f.appendChild(t);
+      const i = el('input'); i.type = 'number'; i.step = 'any'; i.style.cssText = ESTIL_IN + ';margin:0;text-align:right'; i.value = valor(p); const marca = () => { i.style.borderColor = Number(i.value) !== p.v ? '#facc15' : '#475569'; }; marca(); i.oninput = () => { fijar(p.k, i.value); marca(); }; f.appendChild(i); c.appendChild(f); });
+  }
+
+  /* ---------- epidemia: pestañas ---------- */
+  function tabEjercicios(c) {
+    if (!lista) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:6px', 'Cada ejercicio simula una epidemia por zonas, día a día. ' + (lista.puedeConducir ? 'Usted es el árbitro.' : 'Usted observa: el árbitro conduce.')));
+    if (!lista.ejercicios.length) c.appendChild(el('div', 'color:#94a3b8;padding:6px 0', 'Todavía no hay ejercicios.'));
+    lista.ejercicios.forEach(x => { const f = el('div', 'display:flex;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px solid #1e293b'); f.className = 'sn-ej'; f.dataset.id = x.id; const t = el('div', 'flex:1;min-width:0'); t.appendChild(el('div', 'font-weight:bold', x.nombre)); t.appendChild(el('div', 'font-size:11px;color:#94a3b8', x.estado + ' · día ' + x.dia + ' · ' + x.autor)); f.appendChild(t);
+      f.appendChild(btn('Abrir', '#1d4ed8', () => abrirEj(x.id))); if (lista.puedeConducir) f.appendChild(btn(confirmar === 'e' + x.id ? '¿Seguro?' : '🗑', '#b91c1c', () => borrarEj(x.id), 'Borrar')); c.appendChild(f); });
+    if (!lista.puedeConducir) return;
+    c.appendChild(el('div', 'font-weight:bold;margin-top:12px;border-top:2px solid #1d4ed8;padding-top:6px', 'Ejercicio nuevo'));
+    const g = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px'); g.appendChild(campo('Nombre', 'text', nf.nombre, v => { nf.nombre = v; }, { ph: 'Ej.: Brote respiratorio NEA' })); g.appendChild(campo('Semilla (vacío = al azar)', 'number', nf.semilla, v => { nf.semilla = v; })); c.appendChild(g);
+    c.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Zonas'));
+    nf.zonas.forEach((z, i) => { const b = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px;margin-top:5px'); b.className = 'sn-zf'; const gg = el('div', 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px'); const F = (k, rot, tipo) => gg.appendChild(campo(rot, tipo || 'number', z[k], v => { z[k] = v; }));
+      F('n', 'Nombre', 'text'); F('lat', 'Latitud', 'text'); F('lon', 'Longitud', 'text'); F('radio', 'Radio (km)'); F('pob', 'Población'); F('inf0', 'Infectados iniciales'); F('camas', 'Camas'); F('uti', 'UTI'); F('resp', 'Respiradores'); F('o2d', 'Oxígeno prod./día'); F('pers', 'Personal (vacío = sin límite)'); F('o2', 'Stock de oxígeno'); F('vac', 'Vacunas'); F('tst', 'Tests'); b.appendChild(gg);
+      const fb = el('div', 'margin-top:4px'); fb.appendChild(btn('📍 Punto del mapa', '#334155', () => tomarPunto((a, o) => { z.lat = a; z.lon = o; }))); if (nf.zonas.length > 1) fb.appendChild(btn('Quitar', '#b91c1c', () => { nf.zonas.splice(i, 1); pintar(); })); b.appendChild(fb); c.appendChild(b); });
+    if (nf.zonas.length < lista.limites.zonas) c.appendChild(btn('+ Zona', '#334155', () => { nf.zonas.push(zonaNueva(nf.zonas.length + 1)); pintar(); }));
+    const lh = el('label', 'display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12px'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = nf.desdeH; cb.onchange = () => { nf.desdeH = cb.checked; }; lh.appendChild(cb); lh.appendChild(document.createTextNode('Tomar camas, UTI, respiradores, oxígeno y personal de los hospitales registrados dentro del radio de cada zona (' + lista.hospitales + ' registrados)')); c.appendChild(lh);
+    c.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Depósito central de insumos')); const gd = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px'); [['o2', 'Oxígeno (u)'], ['vac', 'Vacunas'], ['tst', 'Tests']].forEach(([k, t]) => gd.appendChild(campo(t, 'number', nf.dep[k], v => { nf.dep[k] = v; }))); c.appendChild(gd);
+    const det = el('details', 'margin-top:8px'); det.appendChild(el('summary', 'cursor:pointer;font-size:12px', 'Parámetros de la enfermedad (plantilla tipo COVID-19)')); camposParams(det, p => nf.params[p.k] !== undefined ? nf.params[p.k] : p.v, (k, v) => { nf.params[k] = v; }); c.appendChild(det);
+    const fb = el('div', 'margin-top:10px'); fb.appendChild(btn('Crear ejercicio', '#15803d', crear)); c.appendChild(fb);
+  }
+  function textoEv(e) {
+    const z = nomZ(e.z === undefined ? -1 : e.z);
+    switch (e.t) {
+      case 'LLEGO': return 'Llegó a ' + z + ': ' + ent(e.c) + ' ' + (RN[e.r] || e.r); case 'ENVIO': return 'Se envió a ' + z + ': ' + ent(e.c) + ' ' + (RN[e.r] || e.r) + ' (llega en ' + e.dias + ' día(s))';
+      case 'SAT_UTI': return '⚠ ' + z + ': UTI saturada; hay pacientes graves sin cama'; case 'SAT_SALA': return '⚠ ' + z + ': camas de sala saturadas'; case 'SIN_O2': return '⚠ ' + z + ': falta oxígeno'; case 'SIN_VAC': return '⚠ ' + z + ': se agotaron las vacunas'; case 'SIN_TEST': return '⚠ ' + z + ': faltan tests'; case 'FIN_EPI': return 'El brote se extinguió: casi no quedan casos activos';
+      case 'ORDEN': { const o = e.o || {}, p = []; if (o.cuar !== undefined) p.push('cuarentena ' + (o.cuar ? 'sí' : 'no')); if (o.restr !== undefined) p.push('restricción ' + (o.restr ? 'sí' : 'no')); if (o.test !== undefined) p.push('testeo nivel ' + o.test); if (o.vacT !== undefined) p.push('vacunación ' + ent(o.vacT) + '/día'); return 'Medidas en ' + z + ': ' + p.join(', '); }
+      case 'CAPACIDAD': return 'Se modificó la capacidad de ' + z; case 'DEPOSITO': return 'Se repuso el depósito central'; case 'PARAMS': return 'Se modificaron los parámetros'; case 'FIN': return 'El árbitro terminó el ejercicio'; default: return e.t;
+    }
+  }
+  function tabConducir(c) {
+    if (!ej || !base || !act) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    const cab = el('div', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap'); cab.appendChild(el('b', 'flex:1;font-size:13px', ej.nombre + ' — día ' + ej.dia + ' de ' + ej.maxDias + (ej.estado !== 'ACTIVO' ? ' (terminado)' : ''))); c.appendChild(cab);
+    if (puede() && ej.estado === 'ACTIVO') { const av = el('div', 'margin:4px 0'); av.className = 'sn-avance'; [[1, '+1 día'], [7, '+7 días'], [30, '+30 días']].forEach(([n, t]) => av.appendChild(btn(t, '#15803d', () => orden('EPI_AVANZAR', { dias: n }, 'Avanzó ' + t.slice(1))))); av.appendChild(btn('Terminar', '#b91c1c', () => orden('EPI_TERMINAR', {}, 'Ejercicio terminado.'))); c.appendChild(av); }
+    const dU = eventos.filter(e => e.dia >= Math.max(0, ej.dia - 1) && e.t !== 'PARAMS').slice(-8); if (dU.length) { const u = el('div', 'background:#1e293b;border-radius:4px;padding:4px 8px;font-size:11.5px;margin:4px 0'); u.className = 'sn-ultimo'; dU.forEach(e => u.appendChild(el('div', '', 'Día ' + e.dia + ': ' + textoEv(e)))); c.appendChild(u); }
+    const T = act.z.reduce((t, s) => { t.a += activos(s); t.d += s.D; t.c += s.C; return t; }, { a: 0, d: 0, c: 0 });
+    c.appendChild(el('div', 'font-size:12px;color:#cbd5e1', 'Total: activos ' + ent(T.a) + ' · casos acumulados ' + ent(T.c) + ' · fallecidos ' + ent(T.d) + ' · depósito: O₂ ' + ent(act.dep.o2) + ', vacunas ' + ent(act.dep.vac) + ', tests ' + ent(act.dep.tst)));
+    c.appendChild(tabla(['Zona', 'Población', 'Activos', 'Sala', 'UTI', 'Fallec.', 'Medidas'], base.zonas.map((z, i) => { const s = act.z[i], m = []; if (s.cuar) m.push('cuar.'); if (s.restr) m.push('restr.'); if (s.test) m.push('test ' + s.test); if (s.vacT) m.push('vac ' + ent(s.vacT)); const cu = Math.min(z.uti, z.resp);
+      return [(sel === i ? '▶ ' : '') + z.n, ent(z.pob), ent(activos(s)), ent(s.H) + '/' + ent(z.camas), ent(s.U) + '/' + ent(cu), ent(s.D), m.join(' ') || '-']; }), i => { sel = i; pintar(); dibujar(); }));
+    if (!puede() || ej.estado !== 'ACTIVO') return;
+    const z = base.zonas[sel], s = act.z[sel]; if (!z) return; const o = { cuar: s.cuar, restr: s.restr, test: s.test, vacT: s.vacT }; const cj = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px;margin-top:8px'); cj.className = 'sn-ordenes';
+    cj.appendChild(el('div', 'font-weight:bold', 'Medidas en ' + z.n)); const g = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px');
+    g.appendChild(campo('Cuarentena', 'select', String(o.cuar), v => { o.cuar = Number(v); }, [['0', 'No'], ['1', 'Sí']])); g.appendChild(campo('Restricción de movimiento', 'select', String(o.restr), v => { o.restr = Number(v); }, [['0', 'No'], ['1', 'Sí']]));
+    g.appendChild(campo('Testeo', 'select', String(o.test), v => { o.test = Number(v); }, [['0', 'Sin testeo'], ['1', 'Nivel 1'], ['2', 'Nivel 2']])); g.appendChild(campo('Vacunas por día', 'number', o.vacT, v => { o.vacT = v; })); cj.appendChild(g);
+    cj.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:3px', 'Stock en la zona: oxígeno ' + ent(s.o2) + ' · vacunas ' + ent(s.vac) + ' · tests ' + ent(s.tst))); const fb = el('div', 'margin-top:4px');
+    fb.appendChild(btn('Aplicar a ' + z.n, '#1d4ed8', () => orden('EPI_ORDEN', { zona: sel, cuar: o.cuar, restr: o.restr, test: o.test, vacT: o.vacT }, 'Medidas aplicadas.'))); fb.appendChild(btn('Aplicar a todas', '#334155', () => orden('EPI_ORDEN', { zona: '*', cuar: o.cuar, restr: o.restr, test: o.test, vacT: o.vacT }, 'Medidas aplicadas a todas las zonas.'))); cj.appendChild(fb);
+    cj.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Enviar insumos desde el depósito a ' + z.n)); const ev = { recurso: 'o2', cantidad: '' }; const ge = el('div', 'display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end'); ge.appendChild(campo('Recurso', 'select', ev.recurso, v => { ev.recurso = v; }, [['o2', 'Oxígeno'], ['vac', 'Vacunas'], ['tst', 'Tests']])); ge.appendChild(campo('Cantidad', 'number', ev.cantidad, v => { ev.cantidad = v; }));
+    const be = btn('Enviar', '#15803d', () => orden('EPI_ENVIAR', { zona: sel, recurso: ev.recurso, cantidad: ev.cantidad }, 'Envío en camino.')); be.style.marginBottom = '2px'; ge.appendChild(be); cj.appendChild(ge);
+    cj.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Capacidad de ' + z.n + ' (hospital de campaña, refuerzos)')); const cp = { camas: z.camas, uti: z.uti, resp: z.resp, pers: z.pers === null ? '' : z.pers, o2d: z.o2d }; const gc = el('div', 'display:grid;grid-template-columns:repeat(5,1fr);gap:6px');
+    [['camas', 'Camas'], ['uti', 'UTI'], ['resp', 'Respiradores'], ['pers', 'Personal'], ['o2d', 'O₂/día']].forEach(([k, t]) => gc.appendChild(campo(t, 'number', cp[k], v => { cp[k] = v; }))); cj.appendChild(gc); cj.appendChild(btn('Aplicar capacidad', '#1d4ed8', () => orden('EPI_CAPACIDAD', Object.assign({ zona: sel }, cp), 'Capacidad actualizada.')));
+    const rp = { o2: '', vac: '', tst: '' }; cj.appendChild(el('div', 'font-weight:bold;margin-top:8px', 'Reponer el depósito central')); const gr = el('div', 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:end'); [['o2', 'Oxígeno'], ['vac', 'Vacunas'], ['tst', 'Tests']].forEach(([k, t]) => gr.appendChild(campo(t, 'number', '', v => { rp[k] = v; })));
+    const br = btn('Reponer', '#334155', () => orden('EPI_DEPOSITO', rp, 'Depósito repuesto.')); br.style.marginBottom = '2px'; gr.appendChild(br); cj.appendChild(gr); c.appendChild(cj);
+  }
+
+  /* ---------- gráficos ---------- */
+  const NS = 'http://www.w3.org/2000/svg', sv = (t, a) => { const e = document.createElementNS(NS, t); Object.keys(a || {}).forEach(k => e.setAttribute(k, a[k])); return e; };
+  function grafico(titulo, dias, lineas, opc) {   // lineas: [{n, c, v:[...], d:'dash'}]
+    const W = 560, H = 190, m = { l: 52, r: 10, t: 24, b: 28 }, s = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', role: 'img', 'aria-label': titulo }); s.style.cssText = 'background:#fff;border-radius:6px;margin:4px 0;max-width:100%'; s.setAttribute('class', 'sn-graf');
+    s.appendChild(sv('rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' })); const tt = sv('text', { x: m.l, y: 15, 'font-size': 12, 'font-weight': 'bold', fill: '#0f172a' }); tt.textContent = titulo; s.appendChild(tt);
+    const nD = Math.max(1, dias[dias.length - 1] || 1); let mx = 1; lineas.forEach(l => l.v.forEach(x => { if (x > mx) mx = x; })); mx = Math.ceil(mx * 1.08);
+    const X = d => m.l + (W - m.l - m.r) * d / nD, Y = v => H - m.b - (H - m.t - m.b) * v / mx;
+    for (let i = 0; i <= 4; i++) { const v = mx * i / 4, y = Y(v); s.appendChild(sv('line', { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: '#e2e8f0' })); const t = sv('text', { x: m.l - 4, y: y + 3, 'font-size': 9, 'text-anchor': 'end', fill: '#475569' }); t.textContent = Math.round(v).toLocaleString('es-AR'); s.appendChild(t); }
+    for (let i = 0; i <= 5; i++) { const d = Math.round(nD * i / 5), t = sv('text', { x: X(d), y: H - 12, 'font-size': 9, 'text-anchor': 'middle', fill: '#475569' }); t.textContent = d; s.appendChild(t); }
+    let lx = m.l; lineas.forEach(l => { const pts = dias.map((d, i) => X(d).toFixed(1) + ',' + Y(l.v[i]).toFixed(1)).join(' '); s.appendChild(sv('polyline', { points: pts, fill: 'none', stroke: l.c, 'stroke-width': 2, 'stroke-dasharray': l.d || '' }));
+      s.appendChild(sv('rect', { x: lx, y: H - 8, width: 8, height: 4, fill: l.c })); const t = sv('text', { x: lx + 11, y: H - 4, 'font-size': 9, fill: '#0f172a' }); t.textContent = l.n; s.appendChild(t); lx += 22 + l.n.length * 5; });
+    return s;
+  }
+  function datos(idx) {      // totales (idx -1) o de una zona: arrays por día
+    const pts = (serie || []).filter(x => x.v.z), dias = pts.map(x => x.d), g = k => pts.map(x => (idx < 0 ? x.v.z.reduce((t, z) => t + z[k], 0) : x.v.z[idx][k]));
+    return { dias: dias, S: g(0), E: g(1), I: g(2), H: g(3), U: g(4), R: g(5), V: g(6), D: g(7), C: g(8), capH: g(9), capU: g(10), pob: pts.length ? (idx < 0 ? base.zonas.reduce((t, z) => t + z.pob, 0) : base.zonas[idx].pob) : 0 };
+  }
+  function graficos(idx) {
+    const d = datos(idx), act2 = d.E.map((e, i) => e + d.I[i]);
+    return [grafico('Infectados activos, internados en sala y en UTI', d.dias, [{ n: 'Activos (expuestos + infecciosos)', c: '#dc2626', v: act2 }, { n: 'Sala', c: '#d97706', v: d.H }, { n: 'UTI', c: '#7c3aed', v: d.U }]),
+      grafico('UTI y sala frente a la capacidad', d.dias, [{ n: 'UTI ocupada', c: '#7c3aed', v: d.U }, { n: 'Capacidad UTI', c: '#7c3aed', v: d.capU, d: '5 4' }, { n: 'Sala ocupada', c: '#d97706', v: d.H }, { n: 'Capacidad sala', c: '#d97706', v: d.capH, d: '5 4' }]),
+      grafico('Casos y fallecidos acumulados', d.dias, [{ n: 'Casos acumulados', c: '#0369a1', v: d.C }, { n: 'Fallecidos', c: '#111827', v: d.D }, { n: 'Vacunados inmunes', c: '#15803d', v: d.V }])];
+  }
+  function tabCurvas(c) {
+    if (!serie || !base) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    const sc = campo('Ver', 'select', escala, v => { escala = v; pintar(); }, [['T', 'Total del teatro']].concat(base.zonas.map((z, i) => ['Z' + i, z.n]))); c.appendChild(sc);
+    const idx = escala === 'T' ? -1 : Number(escala.slice(1)); graficos(idx).forEach(g => c.appendChild(g));
+  }
+
+  /* ---------- informe ---------- */
+  function resumen(idx) {
+    const d = datos(idx), act2 = d.E.map((e, i) => e + d.I[i]), n = d.dias.length - 1; if (n < 0) return null;
+    const pk = (a) => { let m = 0, di = 0; a.forEach((v, i) => { if (v > m) { m = v; di = d.dias[i]; } }); return [m, di]; };
+    const pa = pk(act2), pu = pk(d.U), ph = pk(d.H); let diasU = 0, diasH = 0, pctU = 0; d.U.forEach((v, i) => { if (d.capU[i] > 0 && v >= 0.95 * d.capU[i]) diasU++; else if (d.capU[i] === 0 && v > 0) diasU++; if (d.capH[i] > 0 && d.H[i] >= 0.95 * d.capH[i]) diasH++; if (d.capU[i] > 0) pctU = Math.max(pctU, v / d.capU[i]); });
+    return { dias: d.dias[n], pob: d.pob, picoAct: pa[0], diaPicoAct: pa[1], picoU: pu[0], diaPicoU: pu[1], pctU: pctU, picoH: ph[0], diasU: diasU, diasH: diasH, casos: d.C[n], fall: d.D[n], letal: d.C[n] > 0 ? d.D[n] / d.C[n] : 0, ataque: d.pob ? d.C[n] / d.pob : 0, vac: d.V[n] };
+  }
+  const pct = v => (v * 100).toFixed(1).replace('.', ',') + ' %';
+  function tabInforme(c) {
+    if (!serie || !base) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    const r = resumen(-1); if (!r) { c.appendChild(el('div', 'color:#94a3b8', 'Todavía no hay datos.')); return; }
+    c.appendChild(el('div', 'font-weight:bold;font-size:13px', 'Informe — ' + ej.nombre + ' (día ' + r.dias + ')'));
+    c.appendChild(tabla(['Indicador', 'Valor'], [['Población total', ent(r.pob)], ['Casos acumulados', ent(r.casos) + ' (' + pct(r.ataque) + ' de la población)'], ['Fallecidos', ent(r.fall) + ' (letalidad ' + pct(r.letal) + ' de los casos)'], ['Pico de infectados activos', ent(r.picoAct) + ' el día ' + r.diaPicoAct],
+      ['Pico de pacientes en UTI', ent(r.picoU) + ' el día ' + r.diaPicoU + ' (hasta ' + pct(r.pctU) + ' de la capacidad)'], ['Pico de pacientes en sala', ent(r.picoH)], ['Días con UTI al 95 % o más', String(r.diasU)], ['Días con sala al 95 % o más', String(r.diasH)], ['Vacunados inmunes', ent(r.vac)]]));
+    c.appendChild(el('div', 'font-weight:bold;margin-top:6px', 'Por zona'));
+    c.appendChild(tabla(['Zona', 'Casos', 'Ataque', 'Fallec.', 'Pico activos (día)', 'Pico UTI', 'Días UTI satur.'], base.zonas.map((z, i) => { const q = resumen(i); return [z.n, ent(q.casos), pct(q.ataque), ent(q.fall), ent(q.picoAct) + ' (' + q.diaPicoAct + ')', ent(q.picoU) + ' (' + pct(q.pctU) + ')', String(q.diasU)]; })));
+    const ev = eventos.filter(e => ['SAT_UTI', 'SAT_SALA', 'SIN_O2', 'SIN_VAC', 'SIN_TEST', 'FIN_EPI', 'ORDEN', 'ENVIO'].indexOf(e.t) >= 0); c.appendChild(el('div', 'font-weight:bold;margin-top:6px', 'Decisiones y alertas (' + ev.length + ')'));
+    const l = el('div', 'max-height:150px;overflow:auto;font-size:11.5px;background:#0f172a;border-radius:4px;padding:4px 8px'); l.className = 'sn-bitacora'; ev.forEach(e => l.appendChild(el('div', '', 'Día ' + e.dia + ': ' + textoEv(e)))); if (!ev.length) l.textContent = 'Sin eventos.'; c.appendChild(l);
+    const fb = el('div', 'margin-top:8px'); fb.appendChild(btn('⬇ Informe en PDF', '#1d4ed8', pdf)); c.appendChild(fb);
+  }
+  function svgPng(svg) {
+    return new Promise(res => { try { const x = new XMLSerializer().serializeToString(svg), img = new Image(), url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(x); img.onload = () => { try { const cv = document.createElement('canvas'); cv.width = 1120; cv.height = 380; const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 1120, 380); g.drawImage(img, 0, 0, 1120, 380); res(cv.toDataURL('image/png')); } catch (_) { res(null); } }; img.onerror = () => res(null); img.src = url; } catch (_) { res(null); } });
+  }
+  async function pdf() {
+    if (!(window.jspdf && window.jspdf.jsPDF)) return aviso('⚠ No se cargó el generador de PDF. Recargue la página.', false);
+    const { jsPDF } = window.jspdf, doc = new jsPDF(), teatro = (window.ARES_TEATRO && ARES_TEATRO.nombre) || '', r = resumen(-1); if (!r) return;
+    doc.setFontSize(15); doc.text('A.R.E.S. C4I — Informe de simulación de epidemia', 14, 16); doc.setFontSize(10); doc.text('Teatro: ' + teatro + ' (EJERCICIO)   Ejercicio: ' + ej.nombre, 14, 24); doc.text('Días simulados: ' + r.dias + '   Semilla: ' + ej.semilla + '   Zonas: ' + base.zonas.length, 14, 30);
+    let y = 36; const AT = (cab, filas) => { if (doc.autoTable) { doc.autoTable({ startY: y, head: [cab], body: filas, styles: { fontSize: 8.5 }, headStyles: { fillColor: [30, 58, 95] } }); y = doc.lastAutoTable.finalY + 6; } };
+    AT(['Indicador', 'Valor'], [['Población total', ent(r.pob)], ['Casos acumulados', ent(r.casos) + ' (' + pct(r.ataque) + ')'], ['Fallecidos', ent(r.fall) + ' (letalidad ' + pct(r.letal) + ')'], ['Pico de activos', ent(r.picoAct) + ' el día ' + r.diaPicoAct], ['Pico de UTI', ent(r.picoU) + ' (hasta ' + pct(r.pctU) + ' de la capacidad)'], ['Días con UTI al 95 % o más', String(r.diasU)]]);
+    AT(['Zona', 'Casos', 'Ataque', 'Fallec.', 'Pico activos (día)', 'Pico UTI', 'Días UTI satur.'], base.zonas.map((z, i) => { const q = resumen(i); return [z.n, ent(q.casos), pct(q.ataque), ent(q.fall), ent(q.picoAct) + ' (' + q.diaPicoAct + ')', ent(q.picoU), String(q.diasU)]; }));
+    try { const gs = graficos(-1); for (const g of gs) { const png = await svgPng(g); if (png) { if (y > 205) { doc.addPage(); y = 16; } doc.addImage(png, 'PNG', 14, y, 180, 61); y += 66; } } } catch (_) { /* sin gráficos */ }
+    const ev = eventos.filter(e => ['SAT_UTI', 'SAT_SALA', 'SIN_O2', 'SIN_VAC', 'SIN_TEST', 'FIN_EPI', 'ORDEN', 'ENVIO'].indexOf(e.t) >= 0).slice(0, 300); if (ev.length) { if (y > 230) { doc.addPage(); y = 16; } AT(['Día', 'Evento'], ev.map(e => [String(e.dia), textoEv(e)])); }
+    doc.setFontSize(8); doc.text('Simulación de adiestramiento con parámetros genéricos (plantilla tipo COVID-19, fuente CDC y estimaciones); no es un pronóstico.', 14, 287);
+    doc.save('Epidemia_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
+  }
+  function tabParams(c) {
+    if (!ej || !lista) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    camposParams(c, p => pEd[p.k] !== undefined ? pEd[p.k] : ej.params[p.k], (k, v) => { pEd[k] = v; });
+    if (puede() && ej.estado === 'ACTIVO') { const fb = el('div', 'margin-top:8px'); fb.appendChild(btn('Guardar parámetros', '#15803d', async () => { await orden('EPI_PARAMS', { params: pEd }, 'Parámetros guardados (rigen desde el próximo día).'); pEd = {}; })); c.appendChild(fb); }
+    c.appendChild(el('div', 'font-weight:bold;margin-top:12px', 'Fuentes')); lista.fuentes.forEach(f => { const b = el('div', 'padding:4px 0;border-bottom:1px solid #1e293b;font-size:12px'); b.className = 'sn-fuente'; b.appendChild(el('span', 'border-radius:6px;padding:0 6px;font-size:10.5px;color:#fff;margin-right:6px;background:' + (SCOL[f.id] || '#1d4ed8'), f.id)); b.appendChild(document.createTextNode(f.t + ' '));
+      if (f.u) { const a = el('a', 'color:#7dd3fc', 'abrir'); a.href = f.u; a.target = '_blank'; a.rel = 'noopener noreferrer'; b.appendChild(a); } c.appendChild(b); });
+    c.appendChild(el('div', 'font-size:11px;color:#fbbf24;margin-top:6px', 'Sirve para adiestrar decisiones, no para pronosticar. Cambie los parámetros para ejercitar otra enfermedad.'));
+    if (puede()) { const fb = el('div', 'margin-top:8px'); fb.appendChild(btn(confirmar === 'rei' ? '¿Seguro?' : 'Reiniciar ejercicio (día 0)', '#b91c1c', () => { if (confirmar !== 'rei') { confirmar = 'rei'; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; orden('EPI_REINICIAR', {}, 'Ejercicio reiniciado.'); })); c.appendChild(fb); }
+  }
+
+  /* ---------- panel ---------- */
+  function pintar() {
+    if (!panel) return; const tabs = panel.querySelector('.sn-tabs'), cu = panel.querySelector('.sn-cuerpo'), y = cu.scrollTop; tabs.textContent = ''; cu.textContent = '';
+    const T = []; if (mod('SANITARIO')) T.push(['hosp', 'Hospitales']); if (mod('EPIDEMIA')) { T.push(['ejercicios', 'Epidemia']); if (ejId) T.push(['conducir', 'Conducción'], ['curvas', 'Curvas'], ['informe', 'Informe'], ['params', 'Parámetros']); }
+    T.forEach(([k, t]) => tabs.appendChild(btn(t, tab === k ? '#1d4ed8' : '#334155', () => { tab = k; pintar(); dibujar(); if (k === 'hosp' && !hosp) cargarHosp(); if (k === 'ejercicios' && !lista) cargarLista(); })));
+    if (tab === 'hosp') tabHosp(cu); else if (tab === 'ejercicios') tabEjercicios(cu); else if (tab === 'conducir') tabConducir(cu); else if (tab === 'curvas') tabCurvas(cu); else if (tab === 'informe') tabInforme(cu); else tabParams(cu);
+    if (ejId && tab !== 'hosp' && tab !== 'ejercicios') { const x = btn('← Salir del ejercicio', '#475569', cerrarEj); x.style.marginTop = '8px'; cu.appendChild(x); } cu.scrollTop = y;
+  }
+  function css() { if ($('ares-sn-css')) return; const s = document.createElement('style'); s.id = 'ares-sn-css'; s.textContent = '.sn-tip{background:rgba(15,23,42,.8);color:#fff;border:none;box-shadow:none;font-weight:bold}'; document.head.appendChild(s); }
+  function abrir() {
+    if (panel) return; if (!rolOk() || !(mod('SANITARIO') || mod('EPIDEMIA'))) return; css(); tab = mod('SANITARIO') ? 'hosp' : 'ejercicios';
+    panel = el('div', 'position:fixed;top:70px;left:10px;width:min(640px,96vw);max-height:calc(100vh - 90px);display:flex;flex-direction:column;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-family:sans-serif;padding:10px'); panel.id = 'sn-panel';
+    const h = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); h.appendChild(el('b', 'flex:1;font-size:14px', '🏥 SANIDAD')); h.appendChild(btn('↻', '#334155', () => { hosp = null; lista = null; if (ejId) refrescar(true); if (tab === 'hosp') cargarHosp(); else if (!ejId) cargarLista(); }, 'Actualizar')); h.appendChild(btn('✕', '#dc2626', cerrar, 'Cerrar')); panel.appendChild(h);
+    if (mod('EPIDEMIA')) panel.appendChild(el('div', 'background:#7f1d1d;border-radius:4px;padding:3px 8px;font-size:11px;margin-bottom:6px', 'EJERCICIO — la epidemia es una simulación de adiestramiento'));
+    const tabs = el('div', 'margin-bottom:6px'); tabs.className = 'sn-tabs'; panel.appendChild(tabs); const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'sn-aviso'; panel.appendChild(av);
+    const cu = el('div', 'overflow:auto;flex:1'); cu.className = 'sn-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); pintar(); if (tab === 'hosp') cargarHosp(); else cargarLista(); if (mod('EPIDEMIA') && tab === 'hosp') cargarLista();
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } limpiarMapa(); }
+  function boton() {
+    const b = $('btn-sanidad'); if (!(rolOk() && (mod('SANITARIO') || mod('EPIDEMIA')))) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-planificacion') || $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-fases') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🏥 Sanidad'); n.id = 'btn-sanidad'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Hospitales y simulación de epidemia'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  function reiniciar() { cerrar(); lista = hosp = ej = base = act = serie = null; ejId = ''; ver = ''; eventos = []; nf = nuevoForm(); hf = vacioH(); tab = 'hosp'; const b = $('btn-sanidad'); if (b) b.remove(); }
+  css();
+  setInterval(() => { const s = sesion(), k = s && rolOk() && (mod('SANITARIO') || mod('EPIDEMIA')) ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : ''; if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton(); }, 1500);
+  setInterval(() => { if (panel && ejId && (tab === 'conducir') && !document.hidden) refrescar(false); }, 6000);
+  window.aresSanidad = { abrir: abrir, cerrar: cerrar, estado: () => ({ lista: lista, hosp: hosp, ej: ej, base: base, act: act, serie: serie, eventos: eventos }), zonasEnMapa: () => capaZ ? capaZ.getLayers().length : 0, hospEnMapa: () => capaH ? capaH.getLayers().length : 0, texto: textoEv };
+})();
+</script>
+<!-- ===== FIN BLOQUE SANIDAD ===== -->
 </body>
 </html>
