@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyeu4pY1wUviXcXzOhpMpIkYiTEbwf5ZgQlthQVZ42xvNVuJU5G_lClVX1HXMWQ6H2Upg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwFnPXIRq75KQpZA9IPvs2WyDFj79iIr262KyBzsm-ovHCKumCqB7kaVp1S9j-OT0sgHw/exec";
 
 
 ;
@@ -3949,7 +3949,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -6466,7 +6466,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion', 'btn-sanidad'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion', 'btn-sanidad', 'btn-fuego'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -8029,7 +8029,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
   const esAdmin = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()) && !window.__super; };
   const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral']];
+    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral'], ['SANITARIO', 'Sanidad: registro de hospitales'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
   let datos = null, panel = null, esJefe = false, probado = '', ocupado = false;
 
   async function api(op, extra) {
@@ -9280,5 +9280,170 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE SANIDAD ===== -->
+<!-- ===== INICIO BLOQUE FUEGO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: gestión de incendios forestales (módulo FUEGO). Se carga el punto de ignición, el combustible, la pendiente, el pronóstico (viento, humedad, temperatura por tramos),
+   las brigadas, las aeronaves y los puntos expuestos (parajes, escuelas, rutas). El servidor calcula hora por hora la superficie, el perímetro, la velocidad del frente,
+   la línea de defensa construida y la hora de llegada del fuego a cada punto expuesto; el mapa dibuja el contorno cada 6 horas. Incluye estado y bitácora del incidente.
+   Es un modelo simplificado de adiestramiento: no reemplaza a un simulador oficial ni al criterio del jefe de incidente. Escriben Administrador y Planificador; el Operador consulta. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolVe = () => { const s = sesion(); return !!s && !/^meteor/i.test(String(s.rol).trim()); };
+  const rolEscribe = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const mod = m => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf(m) >= 0); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const CLS = { 'BAJA': '#16a34a', 'MODERADA': '#ca8a04', 'ALTA': '#ea580c', 'MUY ALTA': '#dc2626', 'EXTREMA': '#7f1d1d', '-': '#64748b' };
+  const EST = { ACTIVO: '#dc2626', CONTROLADO: '#ca8a04', EXTINGUIDO: '#16a34a' };
+  let panel = null, tab = 'lista', ini = null, ent = nueva(), id = '', nombre = '', estado = 'ACTIVO', res = null, bit = [], ultimo = '', capa = null, ocupado = false, confirmar = '';
+
+  function nueva() { return { lat: '', lon: '', comb: 'PASTIZAL', pend: 0, horas: 24, horaInicio: 12, r0: 50, tramos: [{ h: 0, vel: 15, dir: 0, hr: 35, temp: 30 }], brigadas: [], aeronaves: [], expuestos: [] }; }
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const ESTIL_IN = 'display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px';
+  function campo(rot, tipo, val, fn, opc) {
+    const w = el('div', 'min-width:0'), l = el('label', 'display:block;margin-top:5px;font-size:11px;color:#94a3b8', rot); w.appendChild(l); let i;
+    if (tipo === 'select') { i = el('select'); (opc || []).forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); }); } else { i = el('input'); i.type = tipo; if (tipo === 'number') i.step = 'any'; }
+    i.style.cssText = ESTIL_IN; if (val !== undefined && val !== null) i.value = val; i.oninput = i.onchange = () => fn(i.value); w.appendChild(i); return w;
+  }
+  const fmt = n => (n === null || n === undefined || !isFinite(n)) ? '-' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 });
+  const fh = t => new Date(t).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+  function aviso(t, ok) { const e = panel && panel.querySelector('.fu-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
+  const grid = n => el('div', 'display:grid;grid-template-columns:repeat(' + n + ',1fr);gap:6px');
+  function tabla(cab, filas) {
+    const w = el('div', 'overflow-x:auto;margin:4px 0'), t = el('table', 'border-collapse:collapse;width:100%;font-size:11.5px'), th = el('tr');
+    cab.forEach(c => th.appendChild(el('th', 'text-align:left;padding:3px 5px;background:#1e3a5f;color:#fff;white-space:nowrap', c))); t.appendChild(th);
+    filas.forEach(f => { const tr = el('tr'); f.forEach(c => { const td = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;vertical-align:top'); if (c && c.nodeType) td.appendChild(c); else td.textContent = c === null || c === undefined ? '' : String(c); tr.appendChild(td); }); t.appendChild(tr); });
+    w.appendChild(t); return w;
+  }
+  function tomarPunto(fn) {
+    const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); aviso('Haga clic en el mapa para fijar el punto.', true); M.getContainer().style.cursor = 'crosshair';
+    M.once('click', e => { M.getContainer().style.cursor = ''; aviso('', true); fn(e.latlng.lat, e.latlng.lng); });
+  }
+
+  /* ---------- mapa ---------- */
+  function limpiar() { const M = mapa(); if (M && capa && M.hasLayer(capa)) M.removeLayer(capa); capa = null; }
+  function dibujar() {
+    const M = mapa(); limpiar(); if (!M || !panel || !res) return; capa = L.layerGroup(); const n = res.poligonos.length;
+    res.poligonos.forEach((p, i) => { if (!p.p || p.p.length < 3) return; const f = n > 1 ? i / (n - 1) : 1, col = 'hsl(' + Math.round(50 - 50 * f) + ',90%,48%)';
+      const pg = L.polygon(p.p, { color: col, weight: i === n - 1 ? 3 : 1.5, fillColor: col, fillOpacity: i === n - 1 ? 0.3 : 0.08 }); pg.bindTooltip(el('span', '', 'Hora ' + p.h), { sticky: true }); capa.addLayer(pg); });
+    const c = L.circleMarker(res.centro, { radius: 6, color: '#fff', weight: 2, fillColor: '#dc2626', fillOpacity: 1 }); c.bindTooltip(el('span', '', 'Ignición'), { permanent: false }); capa.addLayer(c);
+    res.expuestos.forEach(x => { const mk = L.circleMarker([x.lat, x.lon], { radius: 7, color: '#fff', weight: 2, fillColor: x.h === null ? '#16a34a' : (x.h <= 6 ? '#dc2626' : '#f59e0b'), fillOpacity: 1 });
+      mk.bindTooltip(el('span', '', x.n + (x.h === null ? ': no alcanzado' : ': llega en ' + x.h + ' h')), { direction: 'top' }); capa.addLayer(mk); });
+    capa.addTo(M); try { const b = L.latLngBounds(res.poligonos[n - 1].p); res.expuestos.forEach(x => b.extend([x.lat, x.lon])); M.fitBounds(b.pad(0.2)); } catch (_) { /* sin ajuste */ }
+  }
+
+  /* ---------- carga ---------- */
+  async function cargar() {
+    try { const r = await api('FUE_INICIO'); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); ini = r; if (panel) pintar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function calcular() {
+    if (ocupado) return; ocupado = true; aviso('Calculando…', true);
+    try { const r = await api('FUE_CALCULAR', { entrada: ent }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); res = r.resultado; aviso('Cálculo listo.', true); tab = 'res'; pintar(); dibujar(); } catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; }
+  }
+  async function guardar() {
+    if (ocupado) return; if (!nombre.trim()) return aviso('⚠ Escriba el nombre del incidente.', false); ocupado = true;
+    try { const r = await api('FUE_GUARDAR', { id: id, nombre: nombre, estado: estado, entrada: ent }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); id = r.id; res = r.resultado; aviso('Incidente guardado.', true); await cargar(); } catch (e) { aviso('⚠ ' + e.message, false); } finally { ocupado = false; }
+  }
+  async function abrirInc(i) {
+    try { const r = await api('FUE_VER', { id: i }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); id = r.id; nombre = r.nombre; estado = r.estado; ent = Object.assign(nueva(), r.entrada); res = r.resultado; bit = r.bitacora || []; tab = 'res'; pintar(); dibujar(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function cambiarEstado(es) { try { const r = await api('FUE_ESTADO', { id: id, estado: es }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); estado = es; bit = r.bitacora; await cargar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function borrar(i) { if (confirmar !== i) { confirmar = i; pintar(); return; } confirmar = ''; try { const r = await api('FUE_BORRAR', { id: i }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); if (id === i) nuevoInc(); await cargar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  function nuevoInc() { id = ''; nombre = ''; estado = 'ACTIVO'; ent = nueva(); res = null; bit = []; limpiar(); tab = 'datos'; pintar(); }
+
+  /* ---------- pestañas ---------- */
+  function tabLista(c) {
+    if (!ini) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
+    if (ini.puedeEscribir) c.appendChild(btn('+ Nuevo incidente', '#15803d', nuevoInc));
+    if (!ini.incidentes.length) c.appendChild(el('div', 'color:#94a3b8;margin-top:8px', 'No hay incidentes cargados.'));
+    c.appendChild(tabla(['Incidente', 'Estado', 'Actualizado', ''], ini.incidentes.map(x => { const a = el('span'); a.appendChild(btn('Abrir', '#1d4ed8', () => abrirInc(x.id))); if (ini.puedeEscribir) a.appendChild(btn(confirmar === x.id ? '¿Seguro?' : 'Borrar', '#b91c1c', () => borrar(x.id)));
+      const st = el('b', 'color:' + (EST[x.estado] || '#94a3b8'), x.estado); return [x.nombre, st, fh(x.ts), a]; })));
+    c.appendChild(el('div', 'font-size:11px;color:#fbbf24;margin-top:8px', 'Modelo simplificado de adiestramiento. Los coeficientes son estimaciones genéricas: calibrar con datos locales antes de usarlo en una decisión real.'));
+  }
+  function tabDatos(c) {
+    if (!ini) return; const w = !!ini.puedeEscribir;
+    c.appendChild(campo('Nombre del incidente', 'text', nombre, v => { nombre = v; }));
+    const p = btn('📍 Fijar ignición en el mapa', '#7c3aed', () => tomarPunto((la, lo) => { ent.lat = la.toFixed(5); ent.lon = lo.toFixed(5); pintar(); })); c.appendChild(p);
+    let g = grid(2); g.appendChild(campo('Latitud', 'number', ent.lat, v => { ent.lat = v; })); g.appendChild(campo('Longitud', 'number', ent.lon, v => { ent.lon = v; })); c.appendChild(g);
+    g = grid(3); g.appendChild(campo('Combustible', 'select', ent.comb, v => { ent.comb = v; }, ini.combustibles.map(x => [x.k, x.n]))); g.appendChild(campo('Pendiente (grados)', 'number', ent.pend, v => { ent.pend = v; })); g.appendChild(campo('Horas a pronosticar (1 a 72)', 'number', ent.horas, v => { ent.horas = v; })); c.appendChild(g);
+    g = grid(2); g.appendChild(campo('Hora local de detección (0 a 23)', 'number', ent.horaInicio, v => { ent.horaInicio = v; })); g.appendChild(campo('Radio inicial (m)', 'number', ent.r0, v => { ent.r0 = v; })); c.appendChild(g);
+    c.querySelectorAll('select').forEach(s => { s.value = ent.comb; });
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:10px', 'Pronóstico por tramos (el viento se indica DE DÓNDE sopla: 0 = norte)'));
+    ent.tramos.forEach((t, i) => { const f = el('div', 'border:1px solid #334155;border-radius:6px;padding:4px;margin-top:4px'); const gg = grid(5);
+      gg.appendChild(campo('Desde hora', 'number', t.h, v => { t.h = v; })); gg.appendChild(campo('Viento km/h', 'number', t.vel, v => { t.vel = v; })); gg.appendChild(campo('Dirección °', 'number', t.dir, v => { t.dir = v; })); gg.appendChild(campo('Humedad %', 'number', t.hr, v => { t.hr = v; })); gg.appendChild(campo('Temp °C', 'number', t.temp, v => { t.temp = v; })); f.appendChild(gg);
+      if (i) f.appendChild(btn('Quitar tramo', '#b91c1c', () => { ent.tramos.splice(i, 1); pintar(); })); c.appendChild(f); });
+    if (ent.tramos.length < ini.limites.tramos) c.appendChild(btn('+ Tramo (cambio de tiempo)', '#334155', () => { const u = ent.tramos[ent.tramos.length - 1]; ent.tramos.push({ h: Number(u.h) + 6, vel: u.vel, dir: u.dir, hr: u.hr, temp: u.temp }); pintar(); }));
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:10px', 'Brigadas (personas; una brigada tipo tiene 10)'));
+    ent.brigadas.forEach(b => { const gg = grid(4); gg.style.cssText += ';margin-top:4px'; gg.appendChild(campo('Nombre', 'text', b.n, v => { b.n = v; })); gg.appendChild(campo('Personas', 'number', b.pers, v => { b.pers = v; })); gg.appendChild(campo('Llega en (h)', 'number', b.llega, v => { b.llega = v; })); gg.appendChild(btn('✕', '#b91c1c', () => { ent.brigadas.splice(ent.brigadas.indexOf(b), 1); pintar(); })); c.appendChild(gg); });
+    c.appendChild(btn('+ Brigada', '#334155', () => { ent.brigadas.push({ n: 'Brigada ' + (ent.brigadas.length + 1), pers: 20, llega: 2 }); pintar(); }));
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:10px', 'Aeronaves (solo vuelan de 7 a 19 h y con viento hasta 55 km/h)'));
+    ent.aeronaves.forEach(a => { const gg = grid(5); gg.style.cssText += ';margin-top:4px'; gg.appendChild(campo('Nombre', 'text', a.n, v => { a.n = v; })); gg.appendChild(campo('Capacidad (L)', 'number', a.cap, v => { a.cap = v; })); gg.appendChild(campo('Ciclo (min)', 'number', a.ciclo, v => { a.ciclo = v; })); gg.appendChild(campo('Llega en (h)', 'number', a.llega, v => { a.llega = v; })); gg.appendChild(btn('✕', '#b91c1c', () => { ent.aeronaves.splice(ent.aeronaves.indexOf(a), 1); pintar(); })); c.appendChild(gg); });
+    c.appendChild(btn('+ Aeronave', '#334155', () => { ent.aeronaves.push({ n: 'Aeronave ' + (ent.aeronaves.length + 1), cap: 2000, ciclo: 20, llega: 3 }); pintar(); }));
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:10px', 'Puntos expuestos (parajes, escuelas, rutas, instalaciones)'));
+    ent.expuestos.forEach(x => { const gg = grid(4); gg.style.cssText += ';margin-top:4px'; gg.appendChild(campo('Nombre', 'text', x.n, v => { x.n = v; })); gg.appendChild(campo('Latitud', 'number', x.lat, v => { x.lat = v; })); gg.appendChild(campo('Longitud', 'number', x.lon, v => { x.lon = v; })); gg.appendChild(btn('✕', '#b91c1c', () => { ent.expuestos.splice(ent.expuestos.indexOf(x), 1); pintar(); })); c.appendChild(gg); });
+    c.appendChild(btn('+ Punto expuesto (clic en el mapa)', '#334155', () => tomarPunto((la, lo) => { ent.expuestos.push({ n: 'Punto ' + (ent.expuestos.length + 1), lat: la.toFixed(5), lon: lo.toFixed(5) }); pintar(); })));
+    const fb = el('div', 'margin-top:12px'); fb.appendChild(btn('▶ Calcular propagación', '#1d4ed8', calcular)); if (w) fb.appendChild(btn('💾 Guardar incidente', '#15803d', guardar)); c.appendChild(fb);
+  }
+  function tabRes(c) {
+    if (!res) { c.appendChild(el('div', 'color:#94a3b8', 'Cargue los datos y calcule.')); return; } const r = res.resumen;
+    c.appendChild(el('div', 'font-size:13px;font-weight:bold', (nombre || 'Pronóstico') + ' — ' + res.combNombre));
+    const k = el('div', 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin:6px 0');
+    [['Superficie', fmt(r.ha) + ' ha'], ['Perímetro', fmt(r.perimetro / 1000) + ' km'], ['Frente máx.', fmt(r.frenteMax) + ' m/h (' + r.clase + ')'], ['Contención', r.contenidoHora ? 'hora ' + r.contenidoHora : fmt(r.contencionFinal) + ' % al final'], ['Personal', fmt(r.personas)], ['Aeronaves', fmt(r.aeronaves)]].forEach(x => { const b = el('div', 'background:#1e293b;border-radius:6px;padding:5px 7px'); b.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', x[0])); b.appendChild(el('div', 'font-size:13px;font-weight:bold', x[1])); k.appendChild(b); }); c.appendChild(k);
+    res.alertas.forEach(a => c.appendChild(el('div', 'background:#451a03;color:#fde68a;border-radius:6px;padding:5px 7px;margin:3px 0;font-size:12px', '⚠ ' + a)));
+    if (r.necesarias.length) { c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:8px', 'Personal estimado para contener (aproximado, sin contar el crecimiento durante el arribo)')); c.appendChild(tabla(['En', 'Perímetro (m)', 'Personas'], r.necesarias.map(x => [x.horas + ' h', fmt(x.perimetro), fmt(x.personas)]))); }
+    if (res.expuestos.length) { c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:8px', 'Puntos expuestos')); c.appendChild(tabla(['Punto', 'Llegada del fuego'], res.expuestos.map(x => [x.n, x.h === null ? 'No alcanzado en ' + res.horas + ' h' : 'a las ' + x.h + ' h']))); }
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:8px', 'Hora por hora'));
+    c.appendChild(tabla(['Hora', 'ha', 'Perím. m', 'Frente m/h', 'Clase', 'L/A', 'Línea m', 'Cont. %'], res.serie.filter((s, i) => i % (res.horas > 24 ? 3 : 1) === 0 || i === res.serie.length - 1).map(s => { const cl = el('b', 'color:' + (CLS[s.cls] || '#94a3b8'), s.cls); return [s.h, fmt(s.ha), fmt(s.per), fmt(s.R), cl, fmt(s.lb), fmt(s.linea), s.cont]; })));
+    const fb = el('div', 'margin-top:8px'); fb.appendChild(btn('🗺 Ver en el mapa', '#7c3aed', dibujar)); fb.appendChild(btn('✎ Editar datos', '#334155', () => { tab = 'datos'; pintar(); })); c.appendChild(fb);
+  }
+  function tabBit(c) {
+    if (!id) { c.appendChild(el('div', 'color:#94a3b8', 'Guarde el incidente para llevar su estado y bitácora.')); return; }
+    const w = !!(ini && ini.puedeEscribir); c.appendChild(el('div', 'margin-bottom:6px', 'Estado: ')); c.lastChild.appendChild(el('b', 'color:' + (EST[estado] || '#94a3b8'), estado));
+    if (w) ['ACTIVO', 'CONTROLADO', 'EXTINGUIDO'].forEach(e => c.appendChild(btn(e, estado === e ? '#1d4ed8' : '#334155', () => cambiarEstado(e))));
+    if (w) { let tx = ''; const g = campo('Novedad', 'text', '', v => { tx = v; }); c.appendChild(g); c.appendChild(btn('+ Agregar a la bitácora', '#15803d', async () => { try { const r = await api('FUE_BITACORA', { id: id, texto: tx }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'Error.'), false); bit = r.bitacora; pintar(); } catch (e) { aviso('⚠ ' + e.message, false); } })); }
+    c.appendChild(tabla(['Fecha', 'Autor', 'Novedad'], bit.slice().reverse().map(x => [fh(x.t), x.a, x.x])));
+  }
+  function tabFuentes(c) {
+    if (!ini) return; c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px', 'Qué hay detrás de los números.'));
+    ini.fuentes.forEach(f => c.appendChild(el('div', 'padding:5px 0;border-bottom:1px solid #1e293b;font-size:12px', '[' + f.id + '] ' + f.t)));
+    c.appendChild(el('div', 'font-weight:bold;font-size:12px;margin-top:8px', 'Combustibles'));
+    c.appendChild(tabla(['Combustible', 'Velocidad base m/h', 'Efecto del viento (por km/h)', 'Efecto de pendiente (por 10°)', 'Línea m/h por brigada de 10', 'Fuente'], ini.combustibles.map(x => [x.n, x.ros0, x.kw, x.kp, x.linea, x.s])));
+    c.appendChild(el('div', 'font-size:11px;color:#fbbf24;margin-top:8px', 'Todos los coeficientes son estimaciones genéricas de adiestramiento (X). Para una decisión real, usar la herramienta oficial del Servicio Nacional de Manejo del Fuego y datos locales.'));
+  }
+
+  /* ---------- panel ---------- */
+  function pintar() {
+    if (!panel) return; const tabs = panel.querySelector('.fu-tabs'), cu = panel.querySelector('.fu-cuerpo'), y = cu.scrollTop; tabs.textContent = ''; cu.textContent = '';
+    [['lista', 'Incidentes'], ['datos', 'Datos'], ['res', 'Pronóstico'], ['bit', 'Estado y bitácora'], ['fuentes', 'Fuentes']].forEach(([k, t]) => tabs.appendChild(btn(t, tab === k ? '#1d4ed8' : '#334155', () => { tab = k; pintar(); })));
+    if (tab === 'lista') tabLista(cu); else if (tab === 'datos') tabDatos(cu); else if (tab === 'res') tabRes(cu); else if (tab === 'bit') tabBit(cu); else tabFuentes(cu); cu.scrollTop = y;
+  }
+  function abrir() {
+    if (panel || !rolVe()) return;
+    panel = el('div', 'position:fixed;top:70px;left:10px;width:min(640px,96vw);max-height:calc(100vh - 90px);display:flex;flex-direction:column;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:8px');
+    const h = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); h.appendChild(el('b', 'flex:1;font-size:14px', '🔥 INCENDIOS FORESTALES')); h.appendChild(btn('↻', '#334155', cargar, 'Actualizar')); h.appendChild(btn('✕', '#334155', cerrar, 'Cerrar')); panel.appendChild(h);
+    const tabs = el('div', 'margin-bottom:6px'); tabs.className = 'fu-tabs'; panel.appendChild(tabs); const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'fu-aviso'; panel.appendChild(av);
+    const cu = el('div', 'overflow:auto;flex:1'); cu.className = 'fu-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); pintar(); cargar();
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } limpiar(); }
+  function boton() {
+    const b = $('btn-fuego'); if (!(rolVe() && mod('FUEGO'))) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-sanidad') || $('btn-planificacion') || $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-fases') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🔥 Incendios'); n.id = 'btn-fuego'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Pronóstico de propagación y gestión de incendios forestales'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  function reiniciar() { cerrar(); ini = null; ent = nueva(); id = ''; nombre = ''; estado = 'ACTIVO'; res = null; bit = []; tab = 'lista'; const b = $('btn-fuego'); if (b) b.remove(); }
+  setInterval(() => {
+    const s = sesion(), k = s && rolVe() ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : '';
+    if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton();
+  }, 1500);
+  window.aresFuego = { abrir: abrir, cerrar: cerrar, estado: () => ({ ini: ini, ent: ent, res: res, id: id }), calcular: calcular, poligonosEnMapa: () => capa ? capa.getLayers().length : 0 };
+})();
+</script>
+<!-- ===== FIN BLOQUE FUEGO ===== -->
 </body>
 </html>
