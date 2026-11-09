@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwFnPXIRq75KQpZA9IPvs2WyDFj79iIr262KyBzsm-ovHCKumCqB7kaVp1S9j-OT0sgHw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbziqfGjcX2sgXaorwC0WzMoSKzmJgSADQ30otwzIf97MBt12yevig4U2_DUhb3hHMW8MQ/exec";
 
 
 ;
@@ -6466,7 +6466,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-planificacion', 'btn-sanidad', 'btn-fuego'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-decision', 'btn-planificacion', 'btn-sanidad', 'btn-fuego'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -8517,12 +8517,14 @@ window.addEventListener('DOMContentLoaded', () => {
         if (e.rec) return 'Orden: recursos de ' + n(e.u) + ' fijados (' + RN3.filter(r => e.rec[r[0]] !== undefined).map(r => r[2].toLowerCase() + ' ' + e.rec[r[0]]).join(', ') + ')';
         if (e.cap) return 'Orden: capacidad de carga de ' + n(e.u) + ' fijada (' + RN3.map(r => r[2].toLowerCase() + ' ' + e.cap[r[0]]).join(', ') + ')';
         return e.q ? 'Orden: ' + n(e.u) + ' se detiene' : e.e ? 'Orden: ' + n(e.u) + ' cambia a ' + (EST[e.e] || e.e) : 'Orden: ' + n(e.u) + ' se dirige a ' + e.lat + ', ' + e.lon;
+      case 'INY': return e.k === 'MENSAJE' ? '📨 ' + e.x : e.k === 'AVERIA' ? '⚠ Avería en ' + n(e.u) + (e.x ? ': ' + e.x : '') : e.k === 'RECURSOS' ? '📦 Variación de recursos en ' + n(e.u) + (e.x ? ': ' + e.x : '') : 'Inyecto del árbitro';
+      case 'IA': return 'Doctrina automática: ' + n(e.u) + ' pasa a ' + (e.m || '').toLowerCase();
       case 'PARAMS': return 'El árbitro modificó los parámetros';
       case 'FIN': return 'FIN: ' + e.m;
       default: return e.t;
     }
   }
-  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24' }[t] || '#cbd5e1');
+  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24', INY: '#f0abfc', IA: '#fda4af' }[t] || '#cbd5e1');
 
   /* ---------- carga ---------- */
   async function cargarLista() { try { const r = await api('SIM_LISTAR'); if (r.status === 'success') { lista = r; if (panel && tab === 'ejercicios') pintar(); } else aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); } catch (_) { aviso('⚠ Sin conexión.', false); } }
@@ -8631,7 +8633,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const FILAS_PAR = [['turnoMin', 'Duración del turno (min)', 5, 1440], ['pBase', 'Probabilidad base de impacto (0 a 1)', 0, 1], ['dano', 'Daño por impacto', .1, 100], ['modDegradado', 'Factor de fuerza degradada (0 a 1)', 0, 1], ['antiaereo', 'Efectividad antiaérea contra aire', 0, 2],
     ['umbral', 'Recursos: % por encima del cual rinde pleno', 1, 100], ['consMun', 'Munición que gasta un turno de fuego (puntos)', 0, 100], ['consViv', 'Víveres que gasta cada turno (puntos)', 0, 100], ['radioReab', 'Radio de reabastecimiento (km)', 0.1, 200], ['tasaReab', 'Reabastecimiento máximo por turno (puntos)', 0, 100], ['tasaCarga', 'Carga y descarga de convoyes por turno', 0, 10000]];
   function tabParams(c) {
-    if (!ej) return; const P = ej.params, cond = puede() && ej.estado !== 'TERMINADO', inputs = {};
+    if (!ej) return; const P = ej.params, cond = !!(lista && lista.puedeConducir) && ej.estado !== 'TERMINADO', inputs = {};
     c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:4px', 'Valores genéricos y ficticios: ajústelos a su criterio. Cada cambio queda en la bitácora.'));
     FILAS_PAR.forEach(([k, r, lo, hi]) => { const [l, i] = campo(r, 'number', P[k]); i.step = 'any'; i.min = lo; i.max = hi; i.disabled = !cond; inputs[k] = i; c.appendChild(l); });
     c.appendChild(el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Velocidad (km/h)')); const v = el('div', 'display:flex;gap:6px'); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const [l, i] = campo(d.toLowerCase(), 'number', P.vel[d]); i.disabled = !cond; i.step = 'any'; inputs['v' + d] = i; l.style.flex = '1'; v.appendChild(l); }); c.appendChild(v);
@@ -8642,7 +8644,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (cond) c.appendChild(el('div', 'margin-top:8px')).appendChild(btn('Guardar parámetros', '#15803d', () => {
       const p = { vel: {}, consComb: {}, eff: { TIERRA: {}, AIRE: {}, MAR: {} } }; FILAS_PAR.forEach(([k]) => { p[k] = Number(inputs[k].value); }); ['TIERRA', 'AIRE', 'MAR'].forEach(d => { p.vel[d] = Number(inputs['v' + d].value); p.consComb[d] = Number(inputs['k' + d].value); ['TIERRA', 'AIRE', 'MAR'].forEach(t => { p.eff[d][t] = Number(inputs['e' + d + t].value); }); });
       accion('SIM_PARAMS', { id: ejId, params: p }, 'Parámetros guardados.', () => refrescar(true)); }));
-    else c.appendChild(el('div', 'margin-top:8px;font-size:11.5px;color:#fbbf24', puede() ? 'El ejercicio terminó: los parámetros ya no se editan.' : 'Solo el árbitro edita los parámetros.'));
+    else c.appendChild(el('div', 'margin-top:8px;font-size:11.5px;color:#fbbf24', (lista && lista.puedeConducir) ? 'El ejercicio terminó: los parámetros ya no se editan.' : 'Solo el árbitro edita los parámetros.'));
   }
   async function tabBitacora(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando bitácora…')); const r = await cargarRep(); if (!r || tab !== 'bitacora') return; return pintar(); }
@@ -9445,5 +9447,178 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE FUEGO ===== -->
+<!-- ===== INICIO BLOQUE DECISION: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
+<script>
+/* A.R.E.S.: práctica de toma de decisiones sobre la simulación de combate (módulo COMBATE, teatros de EJERCICIO).
+   Un alumno (Administrador o Planificador) conduce el bando AZUL contra un ROJO que obra solo por reglas automáticas; el superadministrador (árbitro) configura el
+   ejercicio: modo decisión, niebla de guerra, tiempo límite, doctrina del rojo, inyectos por turno y objetivos con peso y plazo.
+   El alumno arma un plan por turnos, verifica su factibilidad contra la simulación (chequeos y varias corridas con semillas distintas) y al terminar recibe puntaje
+   y una tabla para comparar corridas. Todo lo calcula el servidor; este bloque solo muestra y envía. Las órdenes sobre el mapa se dan en 🎲 Simulación. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const moduloOn = () => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf('COMBATE') >= 0); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const bando = a => a === 'AZUL' ? 'AZUL' : (a === 'ROJO' || a === 'DESCONOCIDO') ? 'ROJO' : null;
+  const IAM = [['DEFENDER', 'Defender (se queda)'], ['AVANZAR', 'Avanzar sobre el enemigo'], ['PATRULLAR', 'Patrullar hasta un punto y volver'], ['REPLEGAR', 'Replegarse']];
+  const INYT = [['MENSAJE', 'Mensaje'], ['AVERIA', 'Avería (pierde combustible)'], ['RECURSOS', 'Variación de recursos'], ['ORDEN_ROJO', 'Orden al rojo (oculta)']];
+  const OBJT = [['OCUPAR', 'Ocupar un punto'], ['DESTRUIR', 'Destruir fuerzas rojas'], ['PRESERVAR', 'Preservar fuerza propia'], ['LOGISTICA', 'Sostenimiento logístico']];
+  const ESTC = { CUMPLIDO: '#86efac', PENDIENTE: '#fde047', FALLIDO: '#fca5a5', TARDE: '#fdba74' };
+  let panel = null, tab = 'mision', lista = null, ejId = '', d = null, base = [], act = {}, off = 0, ultimo = '', planL = null, planSucio = false, cfgL = null, cfgSucio = false, evalR = null, evalOc = false, elegir = null, capaPt = null;
+  const esSa = () => !!(lista && lista.puedeConducir);
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const inp = (tipo, val, w, ph) => { const i = el('input', 'padding:3px 5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12px;width:' + (w || 70) + 'px'); i.type = tipo; if (val !== undefined && val !== null) i.value = val; if (ph) i.placeholder = ph; return i; };
+  const sel = (ops, val, w) => { const s = el('select', 'padding:3px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12px;max-width:' + (w || 150) + 'px'); ops.forEach(o => { const p = document.createElement('option'); p.value = o[0]; p.textContent = o[1]; s.appendChild(p); }); if (val !== undefined) s.value = val; return s; };
+  const nombreDe = id => { const u = base.filter(x => x.id === id)[0]; return u ? u.n : id; };
+  const azules = () => base.filter(u => bando(u.af) === 'AZUL' && u.s !== 'LOG');
+  const rojos = () => base.filter(u => bando(u.af) === 'ROJO' && u.s !== 'LOG');
+  function aviso(t, ok) { const e = panel && panel.querySelector('.dc-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
+  const tabla = (cab, filas) => { const t = el('table', 'width:100%;border-collapse:collapse;font-size:12px'), h = el('tr'); cab.forEach(c => h.appendChild(el('th', 'text-align:left;padding:3px 5px;border-bottom:1px solid #475569;color:#94a3b8', c))); t.appendChild(h);
+    filas.forEach(f => { const r = el('tr'); f.forEach(c => { const td = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;vertical-align:top'); if (c && c.nodeType) td.appendChild(c); else if (c && typeof c === 'object') { td.textContent = c.t; if (c.c) td.style.color = c.c; if (c.b) td.style.fontWeight = 'bold'; } else td.textContent = c === null || c === undefined ? '' : c; r.appendChild(td); }); t.appendChild(r); }); return t; };
+
+  /* ---------- carga ---------- */
+  async function cargarLista() {
+    try { const r = await api('SIM_LISTAR'); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'Error.'), false); return; } lista = r;
+      const ok = (r.ejercicios || []).filter(e => esSa() || e.modo === 'DECISION'); if (!ok.some(e => e.id === ejId)) { ejId = ''; d = null; }
+      if (!ejId) { try { const e = window.aresSim && window.aresSim.estado && window.aresSim.estado(); if (e && ok.some(x => x.id === e.id)) ejId = e.id; } catch (_) { /* nada */ } }
+      if (!ejId && ok.length) ejId = (ok.filter(e => e.modo === 'DECISION')[0] || ok[0]).id; } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function refrescar(forzar) {
+    if (!panel) return; if (!lista || forzar) await cargarLista(); if (!ejId) { d = null; if (panel) pintar(); return; }
+    try { const r = await api('SIM_DEC_ESTADO', { id: ejId }); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'Error.'), false); return; } d = r; off = (r.ahora || Date.now()) - Date.now();
+      const e = await api('SIM_ESTADO', { id: ejId }); if (e.status === 'success' && !e.sinCambios) { base = e.base || base; act = e.act || act; }
+      if (!planSucio) planL = JSON.parse(JSON.stringify(d.plan || { auto: false, ord: [] })); if (!cfgSucio) cfgL = cfgDe(d);
+      if (panel && !panel.querySelector('input:focus,select:focus')) pintar(); else tictac(); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  function cfgDe(r) { return { modo: r.modo, niebla: r.niebla || { on: false, radio: 25 }, tlim: r.tlim || 0, ia: JSON.parse(JSON.stringify(r.ia || {})), iny: JSON.parse(JSON.stringify(r.iny || [])), obj: JSON.parse(JSON.stringify(r.objetivosCfg || [])) }; }
+
+  /* ---------- pestañas ---------- */
+  function selector(c) {
+    const f = el('div', 'display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap'); f.appendChild(el('span', 'font-size:11px;color:#94a3b8', 'Ejercicio:'));
+    const ops = (lista && lista.ejercicios || []).filter(e => esSa() || e.modo === 'DECISION').map(e => [e.id, e.nombre + ' · ' + e.estado + ' · t' + e.turno + (e.modo === 'DECISION' ? ' · 🎯' : '')]); if (!ops.length) ops.push(['', '(sin ejercicios de decisión)']);
+    const s = sel(ops, ejId, 340); s.onchange = () => { ejId = s.value; d = null; planSucio = cfgSucio = false; evalR = null; refrescar(true); }; f.appendChild(s); c.appendChild(f);
+  }
+  function tictac() { const e = panel && panel.querySelector('.dc-reloj'); if (e && d) e.textContent = relojTxt(); }
+  function relojTxt() { if (!d || !d.tlim) return 'sin tiempo límite'; if (d.estado === 'TERMINADO') return 'ejercicio terminado'; const seg = d.tlim - Math.floor((Date.now() + off - d.t0) / 1000); return seg >= 0 ? 'Tiempo para decidir: ' + Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0') : 'Tiempo límite vencido (' + (-seg) + ' s): resta puntos'; }
+  function tabMision(c) {
+    if (!d) { c.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'Elija un ejercicio.')); return; }
+    if (d.modo !== 'DECISION') { c.appendChild(el('div', 'color:#fbbf24;font-size:12px', 'Este ejercicio está en modo estándar: el árbitro puede pasarlo a modo decisión en la pestaña Árbitro.')); return; }
+    const h = el('div', 'display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-bottom:6px'); h.appendChild(el('b', '', 'Turno ' + d.turno + ' · ' + d.estado)); const rl = el('span', 'color:#93c5fd'); rl.className = 'dc-reloj'; rl.textContent = relojTxt(); h.appendChild(rl);
+    if (d.niebla && d.niebla.on) h.appendChild(el('span', 'color:#fbbf24', '🌫 Niebla de guerra: el rojo solo se ve a ' + d.niebla.radio + ' km de una fuerza propia (aire ×2)')); c.appendChild(h);
+    c.appendChild(el('div', 'font-weight:bold;margin:6px 0 3px', 'Misión'));
+    if (!d.objetivos.length) c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'El árbitro no cargó objetivos: el puntaje se basa en bajas y recursos.'));
+    else c.appendChild(tabla(['Objetivo', 'Tipo', 'Peso', 'Estado', 'Detalle'], d.objetivos.map(o => { const cf = (d.objetivosCfg || []).filter(x => x.id === o.id)[0] || {}; return [o.n + (cf.tipo === 'OCUPAR' ? ' (' + cf.lat + ', ' + cf.lon + ', radio ' + cf.r + ' km)' : ''), (OBJT.filter(x => x[0] === o.tipo)[0] || [0, o.tipo])[1], o.peso, { t: o.e + (o.turno ? ' (t' + o.turno + ')' : ''), c: ESTC[o.e], b: 1 }, o.det]; })));
+    c.appendChild(el('div', 'font-weight:bold;margin:10px 0 3px', 'Puntaje actual: ' + d.puntaje.total + ' / 100' + (d.estado === 'TERMINADO' ? ' (final)' : ' (provisorio)')));
+    c.appendChild(tabla(['Criterio', 'Puntos', 'Máximo'], d.puntaje.partes.map(p => [p.t, p.pts, p.max])));
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Los pesos del puntaje (misión 50, fuerza propia 20, enemigo 15, logística 10, tiempo 5) son un criterio del sistema para adiestrar: no predicen resultados reales.'));
+    const bt = el('div', 'margin-top:8px'); bt.appendChild(btn('🎲 Abrir simulación (mapa y órdenes)', '#0369a1', () => { try { window.aresSim.abrir(); } catch (_) { aviso('Abra 🎲 Simulación desde el menú.', false); } }));
+    if (d.puedeConducir && d.estado !== 'TERMINADO') bt.appendChild(btn('⏭ Avanzar 1 turno', '#047857', async () => { const r = await api('SIM_AVANZAR', { id: ejId, n: 1 }); aviso(r.status === 'success' ? 'Turno ' + r.turno + (r.fin ? ' · FIN: ' + r.fin : '') : '⚠ ' + r.message, r.status === 'success'); refrescar(true); try { window.aresSim.abrir(); window.aresSim.abrir(); } catch (_) { /* nada */ } })); c.appendChild(bt);
+  }
+  function tabPlan(c) {
+    if (!d || d.modo !== 'DECISION') { c.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'Disponible en ejercicios de modo decisión.')); return; }
+    if (!planL) planL = { auto: false, ord: [] };
+    c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px', 'Programe órdenes por turno para sus fuerzas AZUL. Con «ejecutar solo» el servidor las da en el turno indicado al avanzar; si no, sirven únicamente para evaluar la factibilidad.'));
+    const rows = planL.ord.map((o, i) => { const t = inp('number', o.t, 52), u = sel(azules().map(x => [x.id, x.n]).concat(azules().some(x => x.id === o.u) ? [] : [[o.u, o.u]]), o.u, 140), q = el('input'); q.type = 'checkbox'; q.checked = !!o.quieto;
+      const la = inp('number', o.lat, 82, 'lat'), lo = inp('number', o.lon, 82, 'lon'); [la, lo].forEach(x => { x.step = 'any'; }); la.style.display = lo.style.display = o.quieto ? 'none' : '';
+      const upd = () => { planSucio = true; o.t = Number(t.value); o.u = u.value; o.quieto = q.checked ? 1 : 0; if (q.checked) { delete o.lat; delete o.lon; } else { o.lat = la.value === '' ? undefined : Number(la.value); o.lon = lo.value === '' ? undefined : Number(lo.value); } la.style.display = lo.style.display = q.checked ? 'none' : ''; };
+      [t, u, q, la, lo].forEach(x => { x.onchange = upd; });
+      const mp = btn('📍', '#334155', () => { elegir = (p) => { la.value = p[0].toFixed(5); lo.value = p[1].toFixed(5); q.checked = false; upd(); pintar(); }; aviso('Haga clic en el mapa para fijar el destino de la orden.', true); }, 'Elegir destino en el mapa');
+      const lq = el('label', 'font-size:11px;color:#94a3b8'); lq.appendChild(q); lq.appendChild(document.createTextNode(' detenerse'));
+      const bo = btn('✕', '#7f1d1d', () => { planL.ord.splice(i, 1); planSucio = true; pintar(); }); return [t, u, lq, la, lo, mp, bo].map(x => x); });
+    const wrap = el('div'); rows.forEach(r => { const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap'); f.appendChild(el('span', 'font-size:11px;color:#94a3b8', 'turno')); r.forEach(x => f.appendChild(x)); wrap.appendChild(f); }); c.appendChild(wrap);
+    const bt = el('div', 'margin-top:6px'); bt.appendChild(btn('➕ Agregar orden', '#334155', () => { const a = azules()[0]; if (!a) return aviso('No hay fuerzas AZUL.', false); planL.ord.push({ t: (d.turno || 0) + 1, u: a.id }); planSucio = true; pintar(); }));
+    const au = el('label', 'margin-left:8px;font-size:12px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!planL.auto; ck.onchange = () => { planL.auto = ck.checked; planSucio = true; }; au.appendChild(ck); au.appendChild(document.createTextNode(' ejecutar solo al avanzar')); bt.appendChild(au);
+    bt.appendChild(btn('💾 Guardar plan', '#0369a1', async () => { const r = await api('SIM_PLAN_GUARDAR', { id: ejId, plan: planL }); if (r.status === 'success') { planSucio = false; planL = r.plan; aviso('Plan guardado.', true); refrescar(true); } else aviso('⚠ ' + r.message, false); })); c.appendChild(bt);
+    const ev = el('div', 'margin-top:10px;padding-top:6px;border-top:1px solid #334155'); ev.appendChild(el('b', '', 'Verificar factibilidad contra la simulación'));
+    const k = inp('number', 15, 48), nt = inp('number', '', 52, 'auto'); const f = el('div', 'margin:4px 0;font-size:12px'); f.appendChild(document.createTextNode('Corridas ')); f.appendChild(k); f.appendChild(document.createTextNode('  Turnos ')); f.appendChild(nt);
+    f.appendChild(btn(evalOc ? '… calculando' : '🧪 Evaluar plan', '#7c3aed', async () => { if (evalOc) return; evalOc = true; aviso('Evaluando (puede tardar unos segundos)…', true); pintar(); try { const r = await api('SIM_PLAN_EVALUAR', { id: ejId, plan: planL, corridas: Number(k.value) || 15, turnos: nt.value === '' ? undefined : Number(nt.value) }); if (r.status === 'success') { evalR = r; aviso('', true); } else aviso('⚠ ' + r.message, false); } catch (e) { aviso('⚠ ' + e.message, false); } evalOc = false; pintar(); }, 'Simula el plan varias veces con semillas distintas; no modifica el ejercicio')); ev.appendChild(f);
+    if (evalR) { const e = evalR.evaluacion, col = e.veredicto === 'FACTIBLE' ? '#86efac' : e.veredicto === 'RIESGOSO' ? '#fde047' : '#fca5a5';
+      ev.appendChild(el('div', 'font:bold 15px sans-serif;color:' + col + ';margin:4px 0', 'Veredicto: ' + e.veredicto + ' (' + e.corridas + ' corridas de ' + e.turnos + ' turnos)')); e.razones.forEach(x => ev.appendChild(el('div', 'font-size:12px;color:#cbd5e1', '• ' + x)));
+      if (e.objetivos.length) ev.appendChild(tabla(['Objetivo', 'Éxito', 'Turno mediano'], e.objetivos.map(o => [o.n, { t: o.exito + ' %', c: o.exito >= 80 ? '#86efac' : o.exito >= 50 ? '#fde047' : '#fca5a5', b: 1 }, o.turnoMediano === null ? '—' : 't' + o.turnoMediano])));
+      ev.appendChild(el('div', 'font-size:12px;margin-top:4px', 'Bajas propias: mediana ' + e.bajasPropiasP50 + ' % · peor 10 % ' + e.bajasPropiasP90 + ' % · enemigo neutralizado (mediana) ' + e.enemigoNeutralizadoP50 + ' % · agotamiento de recursos en ' + e.agotamientoPct + ' % de las corridas'));
+      const ch = evalR.chequeos; if (ch.unidades.length) { ev.appendChild(el('div', 'font-weight:bold;margin-top:6px', 'Chequeos directos del plan')); ev.appendChild(tabla(['Fuerza', 'Tramos (km → llegada)', 'Combustible', 'Estado'], ch.unidades.map(u => [u.n, u.tramos.map(l => l.km + ' km → ' + (l.llega === null ? 'no llega' : 't' + l.llega)).join(' · '), u.combNecesario + ' / ' + (u.combDisponible === null ? '—' : u.combDisponible), { t: u.estado, c: u.estado === 'OK' ? '#86efac' : u.estado === 'JUSTO' ? '#fde047' : '#fca5a5', b: 1 }]))); }
+      if (ch.objetivos.length) ev.appendChild(tabla(['Objetivo de ocupar', 'Plazo', 'Llega', 'Estado'], ch.objetivos.map(o => [o.n, 't' + o.plazo, o.llega === null ? '—' : 't' + o.llega, { t: o.estado, c: o.estado === 'A TIEMPO' ? '#86efac' : '#fca5a5', b: 1 }])));
+      ev.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Es una estimación con la doctrina del rojo y los inyectos cargados, resumida en porcentajes; no revela posiciones ni órdenes del rojo. La primera corrida usa la semilla real del ejercicio.')); }
+    c.appendChild(ev);
+  }
+  function tabCorridas(c) {
+    if (!d || d.modo !== 'DECISION') { c.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'Disponible en ejercicios de modo decisión.')); return; }
+    if (!d.corridas.length) { c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Todavía no hay corridas terminadas. Al terminar o reiniciar el ejercicio, la corrida queda registrada para compararla con la siguiente (misma configuración, otra decisión).')); return; }
+    const mejor = Math.max.apply(null, d.corridas.map(x => x.tot));
+    c.appendChild(tabla(['#', 'Semilla', 'Turnos', 'Puntaje', 'Objetivos', 'Bajas propias', 'Bajas rojo', 'Órdenes', 'Plan auto'], d.corridas.map(x => [x.n, x.sem, x.tn, { t: x.tot + (x.tot === mejor ? ' ★' : ''), c: x.tot === mejor ? '#86efac' : '', b: 1 }, x.obj[0] + '/' + x.obj[1], x.baz + ' %', x.bro + ' %', x.ord, x.plan ? 'sí' : 'no'])));
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Se conservan las últimas 10 corridas. Reiniciar el ejercicio conserva la tabla; con la misma semilla y las mismas órdenes el resultado se repite, con otra semilla cambia el azar.'));
+  }
+  function tabArbitro(c) {
+    if (!esSa()) { c.appendChild(el('div', 'color:#fbbf24;font-size:12px', 'Solo el superadministrador (árbitro) configura el ejercicio.')); return; }
+    if (!d) { c.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'Elija o cree un ejercicio en 🎲 Simulación.')); return; }
+    if (d.turno > 0) c.appendChild(el('div', 'font-size:12px;color:#fbbf24;margin-bottom:6px', 'El ejercicio está en el turno ' + d.turno + ': para cambiar la configuración reinícielo (turno 0).'));
+    if (!cfgL) cfgL = cfgDe(d); const X = cfgL, mk = () => { cfgSucio = true; }, L = (t) => el('div', 'font-weight:bold;margin:10px 0 3px', t);
+    const g = el('div', 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px'); const m = sel([['ESTANDAR', 'Modo estándar'], ['DECISION', 'Modo decisión (el control conduce al AZUL)']], X.modo, 260); m.onchange = () => { X.modo = m.value; mk(); }; g.appendChild(m);
+    const nb = el('label'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!X.niebla.on; ck.onchange = () => { X.niebla.on = ck.checked; mk(); }; nb.appendChild(ck); nb.appendChild(document.createTextNode(' niebla de guerra, radio (km) ')); const nr = inp('number', X.niebla.radio, 56); nr.onchange = () => { X.niebla.radio = Number(nr.value); mk(); }; nb.appendChild(nr); g.appendChild(nb);
+    const tl = el('label'); tl.appendChild(document.createTextNode('tiempo límite por turno (s, 0 = sin) ')); const ti = inp('number', X.tlim, 60); ti.onchange = () => { X.tlim = Number(ti.value); mk(); }; tl.appendChild(ti); g.appendChild(tl); c.appendChild(g);
+    c.appendChild(L('Doctrina del rojo (reglas automáticas)'));
+    const rj = rojos(); if (!rj.length) c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'No hay fuerzas ROJO en el ejercicio.'));
+    rj.forEach(u => { const cf = X.ia[u.id] || null; const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); f.appendChild(el('span', 'min-width:90px;font-weight:bold', u.n));
+      const s = sel([['', '(sin doctrina: usa órdenes manuales)']].concat(IAM), cf ? cf.m : '', 210), la = inp('number', cf && cf.lat !== null ? cf.lat : '', 78, 'destino lat'), lo = inp('number', cf && cf.lon !== null ? cf.lon : '', 78, 'lon'), rp = inp('number', cf ? cf.rp : '', 56, 'repl. %'), bl = inp('number', cf && cf.bl !== null ? cf.bl : '', 78, 'base lat'), bo = inp('number', cf && cf.bo !== null ? cf.bo : '', 78, 'base lon'); [la, lo, bl, bo].forEach(x => { x.step = 'any'; }); rp.title = 'Se repliega si su fuerza baja de este % de la inicial';
+      const upd = () => { mk(); if (!s.value) { delete X.ia[u.id]; return; } const n = x => x.value === '' ? null : Number(x.value); X.ia[u.id] = { m: s.value, lat: n(la), lon: n(lo), rp: rp.value === '' ? 0 : Number(rp.value), bl: n(bl), bo: n(bo) }; };
+      [s, la, lo, rp, bl, bo].forEach(x => { x.onchange = upd; }); [s, la, lo, rp, bl, bo].forEach(x => f.appendChild(x)); c.appendChild(f); });
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Destino: objetivo de avance o punto de patrulla. «Repl. %»: se repliega al bajar de ese % de fuerza, hacia la base indicada (o su posición inicial). Avanzar se detiene a disparar a 90 % de su alcance.'));
+    c.appendChild(L('Inyectos por turno'));
+    X.iny.forEach((y, i) => { const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); const t = inp('number', y.t, 50), k = sel(INYT, y.k, 190), tx = inp('text', y.x || '', 200, 'texto'), u = sel([['', '—']].concat(base.map(x => [x.id, x.n])), y.u || '', 120), ex = inp('number', y.k === 'AVERIA' ? y.c : '', 60, 'comb. −%'), md = sel(IAM, y.m || 'AVANZAR', 120), rc = inp('text', y.d ? ['m', 'c', 'v'].map(r => y.d[r] === undefined ? '' : y.d[r]).join(',') : '', 90, 'm,c,v');
+      const la = inp('number', y.lat !== undefined ? y.lat : '', 76, 'lat'), lo = inp('number', y.lon !== undefined ? y.lon : '', 76, 'lon'); [la, lo].forEach(x => { x.step = 'any'; });
+      const vis = () => { u.style.display = y.k === 'MENSAJE' ? 'none' : ''; ex.style.display = y.k === 'AVERIA' ? '' : 'none'; rc.style.display = y.k === 'RECURSOS' ? '' : 'none'; md.style.display = la.style.display = lo.style.display = y.k === 'ORDEN_ROJO' ? '' : 'none'; };
+      const upd = () => { mk(); y.t = Number(t.value); y.k = k.value; y.x = tx.value; if (y.k !== 'MENSAJE') y.u = u.value; else delete y.u; if (y.k === 'AVERIA') y.c = ex.value === '' ? 50 : Number(ex.value); if (y.k === 'RECURSOS') { y.d = {}; rc.value.split(',').forEach((v, j) => { if (v.trim() !== '' && isFinite(Number(v))) y.d['mcv'[j]] = Number(v); }); } if (y.k === 'ORDEN_ROJO') { y.m = md.value; if (la.value !== '' && lo.value !== '') { y.lat = Number(la.value); y.lon = Number(lo.value); } else { delete y.lat; delete y.lon; } } vis(); };
+      [t, k, tx, u, ex, rc, md, la, lo].forEach(x => { x.onchange = upd; }); f.appendChild(el('span', 'font-size:11px;color:#94a3b8', 'turno')); [t, k, u, ex, rc, md, la, lo, tx].forEach(x => f.appendChild(x)); f.appendChild(btn('✕', '#7f1d1d', () => { X.iny.splice(i, 1); mk(); pintar(); })); vis(); c.appendChild(f); });
+    c.appendChild(btn('➕ Inyecto', '#334155', () => { X.iny.push({ t: Math.max(1, d.turno + 1), k: 'MENSAJE', x: '' }); mk(); pintar(); }));
+    c.appendChild(L('Objetivos de la misión'));
+    X.obj.forEach((o, i) => { const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); const k = sel(OBJT, o.tipo, 190), n = inp('text', o.n || '', 130, 'nombre'), pe = inp('number', o.peso || 1, 44), t = inp('number', o.t || '', 50, 'plazo'), la = inp('number', o.lat !== undefined ? o.lat : '', 76, 'lat'), lo = inp('number', o.lon !== undefined ? o.lon : '', 76, 'lon'), r = inp('number', o.r !== undefined ? o.r : 2, 52, 'radio km'), pc = inp('number', o.pct || o.umbral || '', 56, '%'), us = inp('text', (o.u || []).map(nombreDe).join(', '), 150, 'fuerzas rojas (nombres)'); [la, lo].forEach(x => { x.step = 'any'; });
+      const vis = () => { la.style.display = lo.style.display = r.style.display = o.tipo === 'OCUPAR' ? '' : 'none'; t.style.display = (o.tipo === 'OCUPAR' || o.tipo === 'DESTRUIR') ? '' : 'none'; pc.style.display = (o.tipo === 'PRESERVAR' || o.tipo === 'LOGISTICA') ? '' : 'none'; us.style.display = o.tipo === 'DESTRUIR' ? '' : 'none'; };
+      const upd = () => { mk(); o.tipo = k.value; o.n = n.value; o.peso = Number(pe.value) || 1; if (o.tipo === 'OCUPAR') { o.lat = la.value === '' ? undefined : Number(la.value); o.lon = lo.value === '' ? undefined : Number(lo.value); o.r = Number(r.value) || 2; o.t = Number(t.value); }
+        if (o.tipo === 'DESTRUIR') { o.t = Number(t.value); o.u = us.value.split(',').map(x => x.trim().toLowerCase()).filter(Boolean).map(nm => (rojos().filter(q => q.n.toLowerCase() === nm)[0] || {}).id).filter(Boolean); } if (o.tipo === 'PRESERVAR') o.pct = Number(pc.value); if (o.tipo === 'LOGISTICA') o.umbral = Number(pc.value); vis(); };
+      [k, n, pe, t, la, lo, r, pc, us].forEach(x => { x.onchange = upd; }); [k, n, el('span', 'font-size:11px;color:#94a3b8', 'peso'), pe, t, la, lo, r, pc, us].forEach(x => f.appendChild(x));
+      f.appendChild(btn('📍', '#334155', () => { elegir = (p) => { la.value = p[0].toFixed(5); lo.value = p[1].toFixed(5); o.tipo = 'OCUPAR'; k.value = 'OCUPAR'; upd(); pintar(); }; aviso('Haga clic en el mapa para fijar el punto a ocupar.', true); }, 'Elegir punto en el mapa')); f.appendChild(btn('✕', '#7f1d1d', () => { X.obj.splice(i, 1); mk(); pintar(); })); vis(); c.appendChild(f); });
+    c.appendChild(btn('➕ Objetivo', '#334155', () => { X.obj.push({ tipo: 'OCUPAR', n: '', peso: 1, r: 2, t: Math.max(5, d.turno + 5) }); mk(); pintar(); }));
+    const bt = el('div', 'margin-top:12px'); bt.appendChild(btn('💾 Guardar configuración', '#047857', async () => { const r = await api('SIM_DEC_CONFIG', { id: ejId, config: cfgL }); if (r.status === 'success') { cfgSucio = false; aviso('Configuración guardada.', true); refrescar(true); } else aviso('⚠ ' + r.message, false); })); c.appendChild(bt);
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'En modo decisión el Administrador y el Planificador ordenan y avanzan solo al bando AZUL; el árbitro conserva crear, borrar, parámetros y esta configuración. Los alumnos no ven doctrinas ni inyectos de orden al rojo hasta que ocurren sus efectos.'));
+  }
+  function pintar() {
+    if (!panel) return; const tabs = panel.querySelector('.dc-tabs'), cu = panel.querySelector('.dc-cuerpo'); tabs.textContent = ''; const sc = cu.scrollTop;
+    const T = [['mision', 'Misión'], ['plan', 'Plan'], ['corridas', 'Corridas']]; if (esSa()) T.push(['arbitro', 'Árbitro']);
+    T.forEach(t => tabs.appendChild(btn(t[1], tab === t[0] ? '#0369a1' : '#334155', () => { tab = t[0]; pintar(); }))); cu.textContent = ''; selector(cu);
+    if (tab === 'mision') tabMision(cu); else if (tab === 'plan') tabPlan(cu); else if (tab === 'corridas') tabCorridas(cu); else tabArbitro(cu); cu.scrollTop = sc;
+  }
+  function abrir() {
+    if (panel || !rolOk()) return;
+    panel = el('div', 'position:fixed;top:70px;right:10px;width:min(720px,96vw);max-height:calc(100vh - 90px);display:flex;flex-direction:column;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:8px');
+    const h = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); h.appendChild(el('b', 'flex:1;font-size:14px', '🎯 DECISIÓN — práctica de conducción')); h.appendChild(btn('↻', '#334155', () => refrescar(true), 'Actualizar')); h.appendChild(btn('✕', '#334155', cerrar, 'Cerrar')); panel.appendChild(h);
+    const tabs = el('div', 'margin-bottom:6px'); tabs.className = 'dc-tabs'; panel.appendChild(tabs); const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'dc-aviso'; panel.appendChild(av);
+    const cu = el('div', 'overflow:auto;flex:1'); cu.className = 'dc-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); pintar(); refrescar(true);
+    const M = mapa(); if (M && !abrir._h) { abrir._h = e => { if (!elegir) return; const f = elegir; elegir = null; f([e.latlng.lat, e.latlng.lng]); aviso('Punto fijado.', true); }; M.on('click', abrir._h); }
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } elegir = null; }
+  function boton() {
+    const b = $('btn-decision'); if (!(rolOk() && moduloOn())) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-fases') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🎯 Decisión'); n.id = 'btn-decision'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Práctica de toma de decisiones: plan, factibilidad, objetivos y puntaje'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  function reiniciar() { cerrar(); lista = null; ejId = ''; d = null; base = []; act = {}; planL = cfgL = evalR = null; planSucio = cfgSucio = false; const b = $('btn-decision'); if (b) b.remove(); }
+  setInterval(() => {
+    const s = sesion(), clave = s && moduloOn() && rolOk() ? s.email + '|' + s.pin + '|' + (ARES_TEATRO.nombre || '') : '';
+    if (clave !== ultimo) { if (ultimo) reiniciar(); ultimo = clave; }
+    if (clave) boton();
+  }, 1500);
+  setInterval(() => { if (panel && ejId && !document.hidden) refrescar(false); }, 5000);
+  setInterval(tictac, 1000);
+  window.aresDecision = { abrir: abrir, cerrar: cerrar, estado: () => d, plan: () => planL, evaluacion: () => evalR, config: () => cfgL };
+})();
+</script>
+<!-- ===== FIN BLOQUE DECISION ===== -->
 </body>
 </html>
