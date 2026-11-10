@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwo-2pLccyVLNzbS6jpVXBR3XAZQHLAskIzIkm4BVivk1KOYybRb6opJHq47_hnWBF-0A/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycby-pc-AyqCvuCodraGSk-XCR7TYijX5J1gl-rSSN6bhE9Kk0dleREEtAS_CJQNOrKGw9Q/exec";
 
 
 ;
@@ -3935,7 +3935,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const bNU = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #2563eb;background:#1e3a8a;color:#fff;cursor:pointer', '👤 Nuevo usuario'); bNU.type = 'button';
     const bUS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #7c3aed;background:#4c1d95;color:#fff;cursor:pointer', '👥 Usuarios'); bUS.type = 'button';
     const bAS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #0891b2;background:#164e63;color:#fff;cursor:pointer', '🧭 Asistente de teatro'); bAS.type = 'button'; bAS.id = 'btn-asistente'; bAS.title = 'Describa el teatro que quiere y el sistema lo configura (con vista previa)';
-    cab.append(bAS, bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
+    const bDM = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #d97706;background:#78350f;color:#fff;cursor:pointer', '🎟 Usuarios de prueba'); bDM.type = 'button'; bDM.id = 'btn-demos'; bDM.title = 'Cuentas de demostración con su propio teatro de práctica, para evaluadores y compradores';
+    cab.append(bDM, bAS, bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
     const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
     let mapa = null, usuariosTodos = [];
     cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
@@ -4019,6 +4020,46 @@ window.addEventListener('DOMContentLoaded', () => {
           fila.append(ok, vol); w.appendChild(fila);
         }
         paso1();
+      });
+    }
+    /* ---- Usuarios de prueba (demo): una persona = un teatro de práctica propio + cuentas por rol, con vencimiento ---- */
+    function demos() {
+      const fh = t => t ? new Date(t).toLocaleDateString('es-AR') : 'sin vencimiento';
+      modal('🎟 Usuarios de prueba', (c, msg, cerrar) => {
+        const w = el('div'); c.appendChild(w);
+        const b2 = (t, fn, col) => { const b = el('button', 'padding:4px 8px;border:1px solid #475569;border-radius:4px;background:' + (col || '#334155') + ';color:#fff;cursor:pointer;font-size:11.5px;margin:1px', t); b.type = 'button'; b.onclick = fn; return b; };
+        const nota = t => el('div', 'font-size:11.5px;color:#94a3b8;margin-top:6px', t);
+        function credenciales(r, titulo, persona) {
+          w.textContent = ''; msg.textContent = ''; w.appendChild(el('div', 'font-weight:bold;color:#4ade80;font-size:14px', '✅ ' + titulo));
+          const url = location.href.split('#')[0].split('?')[0]; const L = ['Acceso de prueba a A.R.E.S. C4I' + (persona ? ' — ' + persona : ''), 'Dirección: ' + url, ''];
+          (r.credenciales || []).forEach(x => { L.push((x.rotulo || x.rol) + ': ' + x.correo + '  ·  clave: ' + x.pin); }); L.push('', 'Es un entorno de práctica con datos de ejemplo: puede probar y modificar todo sin afectar a nadie.', 'Vence: ' + fh(r.vence));
+          const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:190px;margin-top:8px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font:12px monospace'); ta.value = L.join('\n'); ta.readOnly = true; w.appendChild(ta);
+          w.appendChild(nota('Las claves se muestran ahora una sola vez. Copie este texto y envíelo a la persona por un canal de su confianza.'));
+          const f = el('div', 'margin-top:8px'); f.appendChild(b2('📋 Copiar', async () => { try { await navigator.clipboard.writeText(ta.value); msg.style.color = '#86efac'; msg.textContent = 'Copiado.'; } catch (_) { ta.select(); msg.style.color = '#fde68a'; msg.textContent = 'Seleccione y copie el texto manualmente.'; } }, '#047857')); f.appendChild(b2('← Volver a la lista', lista)); w.appendChild(f);
+          if (r.informe) { const inf = el('div', 'margin-top:8px;font-size:12px;line-height:1.5'); r.informe.forEach(t => inf.appendChild(el('div', /^✘/.test(t) ? 'color:#fca5a5' : 'color:#94a3b8', t))); w.appendChild(inf); }
+        }
+        async function lista() {
+          w.textContent = ''; msg.textContent = ''; const j = await admin('DEMO_LISTAR'); if (j.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); return; }
+          w.appendChild(nota('Cada demo es una persona con SU PROPIO teatro de práctica (ejemplos cargados, incluido combate y decisión) y cuentas por rol. No ve otros teatros ni este panel, y vence sola.'));
+          const top = el('div', 'margin:8px 0'); top.appendChild(b2('➕ Nuevo usuario de prueba', nuevo, '#16a34a')); w.appendChild(top);
+          if (!j.demos.length) w.appendChild(nota('Todavía no hay demos.'));
+          j.demos.forEach(d => { const f = el('div', 'padding:6px 0;border-top:1px solid #334155;font-size:12.5px'); f.appendChild(el('div', 'font-weight:bold', d.persona + ' · ' + d.correo)); f.appendChild(el('div', 'color:' + (d.activa && !d.vencida ? '#86efac' : '#fca5a5'), d.codigo + ' · ' + d.cuentas + ' cuenta(s) · ' + (!d.activa ? 'dada de baja' : d.vencida ? 'VENCIDA el ' + fh(d.vence) : 'activa, vence ' + fh(d.vence))));
+            const ac = el('div'); const ren = async (dias, nc) => { msg.style.color = '#93c5fd'; msg.textContent = 'Procesando…'; const r = await admin('DEMO_RENOVAR', { codigo: d.codigo, dias: dias, nuevaClave: nc }); if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); return; } if (nc) credenciales(r, r.message, d.persona); else lista(); };
+            ac.appendChild(b2('+7 días', () => ren(7, false))); ac.appendChild(b2('+30 días', () => ren(30, false))); ac.appendChild(b2('Nueva clave', () => ren(d.vence ? Math.max(1, Math.ceil((d.vence - Date.now()) / 86400000)) : 0, true), '#475569'));
+            if (d.activa) { const bb = b2('Dar de baja', async () => { if (!bb.dataset.c) { bb.dataset.c = '1'; bb.textContent = '¿Confirmar baja?'; msg.style.color = '#fde68a'; msg.textContent = 'Se desactivan las cuentas y el teatro de ' + d.codigo + ' (los datos se conservan). Vuelva a pulsar para confirmar.'; return; } const r = await admin('DEMO_BAJA', { codigo: d.codigo }); if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); } else lista(); }, '#7f1d1d'); ac.appendChild(bb); } f.appendChild(ac); w.appendChild(f); });
+        }
+        function nuevo() {
+          w.textContent = ''; msg.textContent = ''; w.appendChild(el('div', 'font-weight:bold;font-size:14px', 'Nuevo usuario de prueba'));
+          const nom = campo(w, 'Nombre de la persona o entidad', 'text', 'Ej.: Cnl. Pérez / Empresa X'), cor = campo(w, 'Correo (será su usuario)', 'email', 'persona@ejemplo.com');
+          const dias = campo(w, 'Duración', 'select', null, '7', i => { [['7', '7 días'], ['30', '30 días'], ['0', 'Sin vencimiento']].forEach(x => { const o = document.createElement('option'); o.value = x[0]; o.textContent = x[1]; i.appendChild(o); }); i.value = '7'; });
+          const hoja = campo(w, 'ID de la planilla (vacío = crearla automáticamente)', 'text', 'opcional', '');
+          const l = el('label', 'display:block;margin-top:8px;font-size:12.5px'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = true; l.appendChild(ck); l.appendChild(document.createTextNode(' Incluir cuentas de Planificador, Operador y Meteorólogo para probar cada rol')); w.appendChild(l);
+          w.appendChild(nota('Se crea un teatro de práctica nuevo (EJERCICIO) con sectores, personal desplegado, unidades, locales de votación, fuerzas de combate y un ejercicio de decisión listos. Puede tardar unos segundos y crea una planilla en su Drive por cada demo.'));
+          const fila = el('div', 'display:flex;gap:8px;margin-top:12px'); const ok = el('button', 'flex:1;padding:8px;border:none;border-radius:4px;background:#16a34a;color:#fff;cursor:pointer;font-weight:bold', '✅ Crear'); ok.type = 'button';
+          ok.onclick = async () => { ok.disabled = true; msg.style.color = '#93c5fd'; msg.textContent = 'Creando la demo… (unos segundos)'; try { const r = await admin('DEMO_CREAR', { nombre: nom.value, correo: cor.value, dias: Number(dias.value), roles: ck.checked, sheetId: hoja.value.trim() }); if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); } else { credenciales(r, r.message, nom.value); cargar(); } } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (e && e.message || 'Error'); } ok.disabled = false; };
+          fila.append(ok, b2('← Volver', lista)); w.appendChild(fila);
+        }
+        lista();
       });
     }
     function formTeatro(t) {
@@ -4195,7 +4236,7 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       f.firstChild.style.width = 'min(640px,98vw)';
     }
-    bAS.onclick = asistente; bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
+    bDM.onclick = demos; bAS.onclick = asistente; bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
     function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
     function pintar(ts, gen) {
       try { if (mapa) mapa.remove(); } catch (_) {} mapa = null; cuerpo.innerHTML = '';
