@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbziqfGjcX2sgXaorwC0WzMoSKzmJgSADQ30otwzIf97MBt12yevig4U2_DUhb3hHMW8MQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbww9GNNtyEstef1FBoJcFz93dPZfmC7db8JCWUz1o-oc2Wq_f4bhhM_D0dQ1P22Pm3WVg/exec";
 
 
 ;
@@ -3934,7 +3934,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const bNT = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #16a34a;background:#14532d;color:#fff;cursor:pointer', '➕ Nuevo teatro'); bNT.type = 'button';
     const bNU = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #2563eb;background:#1e3a8a;color:#fff;cursor:pointer', '👤 Nuevo usuario'); bNU.type = 'button';
     const bUS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #7c3aed;background:#4c1d95;color:#fff;cursor:pointer', '👥 Usuarios'); bUS.type = 'button';
-    cab.append(bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
+    const bAS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #0891b2;background:#164e63;color:#fff;cursor:pointer', '🧭 Asistente de teatro'); bAS.type = 'button'; bAS.id = 'btn-asistente'; bAS.title = 'Describa el teatro que quiere y el sistema lo configura (con vista previa)';
+    cab.append(bAS, bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
     const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
     let mapa = null, usuariosTodos = [];
     cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
@@ -3969,6 +3970,42 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function parseSectores(txt) {
       return String(txt).split('\n').map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(','); const num = x => parseFloat(String(x).replace(',', '.')); let radio = null; if (p.length >= 4 && isFinite(num(p[p.length - 1])) && isFinite(num(p[p.length - 2])) && isFinite(num(p[p.length - 3]))) radio = num(p.pop()); const lon = num(p.pop()), lat = num(p.pop()); return radio === null ? { nombre: p.join(',').trim(), lat, lon } : { nombre: p.join(',').trim(), lat, lon, radio }; });
+    }
+    /* ---- Asistente de teatro: interpreta lo que usted escribe (reglas fijas, sin IA externa), muestra una vista previa y recién al confirmar crea todo ---- */
+    function asistente() {
+      const PL = [['', 'Detectar según lo que escribo'], ['COMBATE', 'Combate y decisión (ejercicio)'], ['PANDEMIA', 'Pandemia / emergencia sanitaria (ejercicio)'], ['ELECTORAL', 'Operativo electoral'], ['HIDRICO', 'Emergencia hídrica / inundaciones'], ['INCENDIO', 'Incendios forestales']];
+      modal('🧭 Asistente de teatro', (c, msg, cerrar) => {
+        const w = el('div'); c.appendChild(w); let ultimo = { plantilla: '', texto: '' };
+        const nota = t => el('div', 'font-size:11.5px;color:#94a3b8;margin-top:6px', t);
+        function paso1() {
+          w.textContent = ''; msg.textContent = ''; w.appendChild(nota('Elija un tipo o describa en una frase el teatro que quiere (tipo, lugar, nombre entre comillas y correos con su rol). Primero verá una vista previa: no se crea nada hasta que confirme.'));
+          const sel = campo(w, 'Tipo de teatro', 'select', null, ultimo.plantilla, i => { PL.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; i.appendChild(o); }); i.value = ultimo.plantilla; });
+          const l2 = el('label', 'display:block;margin-top:8px;font-size:11.5px;color:#94a3b8', 'Describa el teatro'); const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:110px;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px'); ta.value = ultimo.texto;
+          ta.placeholder = 'Ej.: Ejercicio de combate en Resistencia con práctica de decisión. ana@unidad.mil.ar planificador, beto@unidad.mil.ar operador'; l2.appendChild(ta); w.appendChild(l2);
+          botones(w, 'Interpretar y ver vista previa', async () => { ultimo = { plantilla: sel.value, texto: ta.value }; const j = await admin('ASIS_PROPUESTA', { plantilla: sel.value, texto: ta.value }); if (j.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); return; } paso2(j); }, cerrar);
+        }
+        function paso2(j) {
+          const p = j.propuesta; w.textContent = ''; msg.textContent = ''; const forz = p.plantilla === 'COMBATE' || p.plantilla === 'PANDEMIA';
+          w.appendChild(el('div', 'font-weight:bold;font-size:14px', 'Vista previa: ' + p.plantillaNombre));
+          const ul = el('div', 'margin-top:6px;font-size:12.5px;line-height:1.5'); j.descripcion.forEach(t => ul.appendChild(el('div', '', '• ' + t))); w.appendChild(ul);
+          if (p.avisos.length) { const av = el('div', 'margin-top:8px;padding:6px;border-radius:4px;background:#422006;color:#fde68a;font-size:12px'); p.avisos.forEach(t => av.appendChild(el('div', '', '⚠ ' + t))); w.appendChild(av); }
+          w.appendChild(nota('Puede ajustar estos datos antes de crear:'));
+          const cod = campo(w, 'Código (2 a 20 letras, números, guion)', 'text', null, p.codigo), nom = campo(w, 'Nombre', 'text', null, p.nombre), tip = campo(w, 'Tipo', 'select', null, p.tipo, i => { ['EJERCICIO', 'REAL'].forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; i.appendChild(o); }); i.value = p.tipo; if (forz) i.disabled = true; }),
+            lat = campo(w, 'Latitud del centro', 'number', null, p.lat, i => { i.step = 'any'; }), lon = campo(w, 'Longitud del centro', 'number', null, p.lon, i => { i.step = 'any'; }), hoja = campo(w, 'ID de la planilla del teatro (vacío = crearla automáticamente)', 'text', 'opcional', '');
+          let ej = null, dc = null;
+          if (p.plantilla === 'COMBATE') { const f = (t, v) => { const l = el('label', 'display:block;margin-top:8px;font-size:12.5px'); const k = el('input'); k.type = 'checkbox'; k.checked = v; l.appendChild(k); l.appendChild(document.createTextNode(' ' + t)); w.appendChild(l); return k; }; ej = f('Cargar fuerzas de ejemplo (AZUL y ROJO)', p.ejemplo); dc = f('Crear un ejercicio de decisión de ejemplo (doctrina del rojo, inyectos, objetivos)', p.decision); }
+          const fila = el('div', 'display:flex;gap:8px;margin-top:12px'); const ok = el('button', 'flex:1;padding:8px;border:none;border-radius:4px;background:#16a34a;color:#fff;cursor:pointer;font-weight:bold', '✅ Crear teatro'), vol = el('button', 'padding:8px 14px;border:1px solid #475569;border-radius:4px;background:#334155;color:#fff;cursor:pointer', '← Volver'); ok.type = vol.type = 'button'; vol.onclick = paso1;
+          ok.onclick = async () => { ok.disabled = true; msg.style.color = '#93c5fd'; msg.textContent = 'Creando… (puede tardar unos segundos)';
+            try { const q = { plantilla: p.plantilla, codigo: cod.value, nombre: nom.value, tipo: tip.value, lat: lat.value, lon: lon.value, modulos: p.modulos, usuarios: p.usuarios, sectores: p.sectores, sheetId: hoja.value.trim(), ejemplo: ej ? ej.checked : false, decision: dc ? dc.checked : false };
+              const r = await admin('ASIS_APLICAR', { p: q }); w.textContent = ''; msg.textContent = '';
+              if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); paso2(j); msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); return; }
+              w.appendChild(el('div', 'font-weight:bold;color:#4ade80;font-size:14px', '✅ ' + r.message)); const inf = el('div', 'margin-top:8px;font-size:12.5px;line-height:1.5'); (r.informe || []).forEach(t => inf.appendChild(el('div', /^✘/.test(t) ? 'color:#fca5a5' : '', t))); w.appendChild(inf);
+              w.appendChild(nota('Entre al teatro desde el selector para verlo. Las cuentas que no existían se crean con «Nuevo usuario» y luego se agregan al teatro.')); const cb = el('button', 'margin-top:12px;padding:8px 14px;border:1px solid #475569;border-radius:4px;background:#334155;color:#fff;cursor:pointer', 'Cerrar'); cb.type = 'button'; cb.onclick = () => { cerrar(); cargar(); }; w.appendChild(cb); cargar();
+            } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (e && e.message || 'Error'); } ok.disabled = false; };
+          fila.append(ok, vol); w.appendChild(fila);
+        }
+        paso1();
+      });
     }
     function formTeatro(t) {
       const nuevo = !t; t = t || { tipo: 'EJERCICIO', zoom: 7, radio: 300, modulos: ['ZONAS'], activo: true };
@@ -4144,7 +4181,7 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       f.firstChild.style.width = 'min(640px,98vw)';
     }
-    bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
+    bAS.onclick = asistente; bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
     function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
     function pintar(ts, gen) {
       try { if (mapa) mapa.remove(); } catch (_) {} mapa = null; cuerpo.innerHTML = '';
