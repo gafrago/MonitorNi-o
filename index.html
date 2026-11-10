@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbww9GNNtyEstef1FBoJcFz93dPZfmC7db8JCWUz1o-oc2Wq_f4bhhM_D0dQ1P22Pm3WVg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwo-2pLccyVLNzbS6jpVXBR3XAZQHLAskIzIkm4BVivk1KOYybRb6opJHq47_hnWBF-0A/exec";
 
 
 ;
@@ -3982,7 +3982,19 @@ window.addEventListener('DOMContentLoaded', () => {
           const sel = campo(w, 'Tipo de teatro', 'select', null, ultimo.plantilla, i => { PL.forEach(p => { const o = document.createElement('option'); o.value = p[0]; o.textContent = p[1]; i.appendChild(o); }); i.value = ultimo.plantilla; });
           const l2 = el('label', 'display:block;margin-top:8px;font-size:11.5px;color:#94a3b8', 'Describa el teatro'); const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:110px;margin-top:3px;padding:7px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px'); ta.value = ultimo.texto;
           ta.placeholder = 'Ej.: Ejercicio de combate en Resistencia con práctica de decisión. ana@unidad.mil.ar planificador, beto@unidad.mil.ar operador'; l2.appendChild(ta); w.appendChild(l2);
+          const ex = el('div', 'margin-top:14px;padding-top:8px;border-top:1px solid #334155;font-size:12px;color:#94a3b8', 'Si ya tiene un teatro creado y vacío: '); ex.appendChild(btn2('📦 Cargar datos de ejemplo en un teatro existente', paso3)); w.appendChild(ex);
           botones(w, 'Interpretar y ver vista previa', async () => { ultimo = { plantilla: sel.value, texto: ta.value }; const j = await admin('ASIS_PROPUESTA', { plantilla: sel.value, texto: ta.value }); if (j.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); return; } paso2(j); }, cerrar);
+        }
+        const btn2 = (t, fn) => { const b = el('button', 'padding:5px 10px;border:1px solid #475569;border-radius:4px;background:#334155;color:#fff;cursor:pointer;font-size:12px', t); b.type = 'button'; b.onclick = fn; return b; };
+        async function paso3() {
+          const j = await admin('ASIS_PROPUESTA', { plantilla: 'COMBATE' }); if (j.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (j.message || 'Error'); return; }
+          w.textContent = ''; msg.textContent = ''; w.appendChild(el('div', 'font-weight:bold;font-size:14px', 'Cargar datos de ejemplo en un teatro existente'));
+          w.appendChild(nota('Agrega sectores (si no tiene), 6 puestos de personal desplegado, unas 6 unidades/medios con sus modelos y, si es electoral, 6 locales de votación en simulacro. Solo completa lo que está vacío: no duplica ni pisa nada.'));
+          const sel = campo(w, 'Teatro', 'select', null, '', i => { (j.teatros || []).forEach(x => { const o = document.createElement('option'); o.value = x.id; o.textContent = x.id + ' · ' + x.nombre + ' (' + x.tipo + ')'; i.appendChild(o); }); });
+          const fila = el('div', 'display:flex;gap:8px;margin-top:12px'); const ok = el('button', 'flex:1;padding:8px;border:none;border-radius:4px;background:#16a34a;color:#fff;cursor:pointer;font-weight:bold', '📦 Cargar ejemplos'), vol = btn2('← Volver', paso1); ok.type = 'button';
+          ok.onclick = async () => { ok.disabled = true; msg.style.color = '#93c5fd'; msg.textContent = 'Cargando…'; try { const r = await admin('ASIS_POBLAR', { teatro: sel.value }); msg.textContent = '';
+            if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); } else { w.textContent = ''; w.appendChild(el('div', 'font-weight:bold;color:#4ade80;font-size:14px', '✅ ' + r.message)); const inf = el('div', 'margin-top:8px;font-size:12.5px;line-height:1.5'); (r.informe || []).forEach(t => inf.appendChild(el('div', /^✘/.test(t) ? 'color:#fca5a5' : '', t))); w.appendChild(inf); w.appendChild(btn2('Cerrar', () => { cerrar(); cargar(); })); cargar(); } } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (e && e.message || 'Error'); } ok.disabled = false; };
+          fila.append(ok, vol); w.appendChild(fila);
         }
         function paso2(j) {
           const p = j.propuesta; w.textContent = ''; msg.textContent = ''; const forz = p.plantilla === 'COMBATE' || p.plantilla === 'PANDEMIA';
@@ -3992,11 +4004,13 @@ window.addEventListener('DOMContentLoaded', () => {
           w.appendChild(nota('Puede ajustar estos datos antes de crear:'));
           const cod = campo(w, 'Código (2 a 20 letras, números, guion)', 'text', null, p.codigo), nom = campo(w, 'Nombre', 'text', null, p.nombre), tip = campo(w, 'Tipo', 'select', null, p.tipo, i => { ['EJERCICIO', 'REAL'].forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; i.appendChild(o); }); i.value = p.tipo; if (forz) i.disabled = true; }),
             lat = campo(w, 'Latitud del centro', 'number', null, p.lat, i => { i.step = 'any'; }), lon = campo(w, 'Longitud del centro', 'number', null, p.lon, i => { i.step = 'any'; }), hoja = campo(w, 'ID de la planilla del teatro (vacío = crearla automáticamente)', 'text', 'opcional', '');
+          const fck = (t, v) => { const l = el('label', 'display:block;margin-top:8px;font-size:12.5px'); const k = el('input'); k.type = 'checkbox'; k.checked = v; l.appendChild(k); l.appendChild(document.createTextNode(' ' + t)); w.appendChild(l); return k; };
+          const pe = fck('Personal desplegado, unidades y medios de ejemplo (sectores, puestos, vehículos, aeronaves' + (p.modulos.indexOf('ELECTORAL') >= 0 ? ', locales de votación' : '') + ')', p.personal !== false);
           let ej = null, dc = null;
           if (p.plantilla === 'COMBATE') { const f = (t, v) => { const l = el('label', 'display:block;margin-top:8px;font-size:12.5px'); const k = el('input'); k.type = 'checkbox'; k.checked = v; l.appendChild(k); l.appendChild(document.createTextNode(' ' + t)); w.appendChild(l); return k; }; ej = f('Cargar fuerzas de ejemplo (AZUL y ROJO)', p.ejemplo); dc = f('Crear un ejercicio de decisión de ejemplo (doctrina del rojo, inyectos, objetivos)', p.decision); }
           const fila = el('div', 'display:flex;gap:8px;margin-top:12px'); const ok = el('button', 'flex:1;padding:8px;border:none;border-radius:4px;background:#16a34a;color:#fff;cursor:pointer;font-weight:bold', '✅ Crear teatro'), vol = el('button', 'padding:8px 14px;border:1px solid #475569;border-radius:4px;background:#334155;color:#fff;cursor:pointer', '← Volver'); ok.type = vol.type = 'button'; vol.onclick = paso1;
           ok.onclick = async () => { ok.disabled = true; msg.style.color = '#93c5fd'; msg.textContent = 'Creando… (puede tardar unos segundos)';
-            try { const q = { plantilla: p.plantilla, codigo: cod.value, nombre: nom.value, tipo: tip.value, lat: lat.value, lon: lon.value, modulos: p.modulos, usuarios: p.usuarios, sectores: p.sectores, sheetId: hoja.value.trim(), ejemplo: ej ? ej.checked : false, decision: dc ? dc.checked : false };
+            try { const q = { plantilla: p.plantilla, codigo: cod.value, nombre: nom.value, tipo: tip.value, lat: lat.value, lon: lon.value, modulos: p.modulos, usuarios: p.usuarios, sectores: p.sectores, sheetId: hoja.value.trim(), ejemplo: ej ? ej.checked : false, decision: dc ? dc.checked : false, personal: pe.checked };
               const r = await admin('ASIS_APLICAR', { p: q }); w.textContent = ''; msg.textContent = '';
               if (r.status !== 'success') { msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); paso2(j); msg.style.color = '#fca5a5'; msg.textContent = '⚠ ' + (r.message || 'Error'); return; }
               w.appendChild(el('div', 'font-weight:bold;color:#4ade80;font-size:14px', '✅ ' + r.message)); const inf = el('div', 'margin-top:8px;font-size:12.5px;line-height:1.5'); (r.informe || []).forEach(t => inf.appendChild(el('div', /^✘/.test(t) ? 'color:#fca5a5' : '', t))); w.appendChild(inf);
