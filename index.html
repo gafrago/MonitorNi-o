@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbx61vTzSrqa4B9xHUk49qH9pEcG6hMi1y2VWoM-UFG5FXSmaN4FIq4a2VB_0QStT12y-g/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbylaNYuAkOzVQc1yrk14XCueliLaxfO8ALtePSJlGYQ3onuXBIbQuZfIAHk_IIgqAm8cg/exec";
 
 
 ;
@@ -4607,8 +4607,7 @@ window.addEventListener('DOMContentLoaded', () => {
         alcSel = sel(); [['ESTE', 'En este teatro'], ['ELEGIDOS', 'Teatros elegidos…'], ['TODOS', 'TODOS los teatros']].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; alcSel.appendChild(o); }); fila.appendChild(alcSel);
       }
       const deSector = (d.sectores || []).map(n => ['SECTOR:' + n, 'Para: sector ' + n]);
-      const opcPara = d.rol === 'Meteorologo' ? [['SUPERIORES', 'Para: Administrador y Planificador']].concat(deSector, [['PERSONAS', 'Para: personas elegidas…']])
-        : [['TODOS', 'Para: todo el teatro'], ['SUPERIORES', 'Para: Administrador y Planificador'], ['ROL:operador', 'Para: todos los Operadores'], ['ROL:planificador', 'Para: todos los Planificadores'], ['ROL:administrador', 'Para: todos los Administradores']].concat(deSector, [['PERSONAS', 'Para: personas elegidas…']]);
+      const opcPara = [['TODOS', 'Para: todo el teatro'], ['SUPERIORES', 'Para: Administrador y Planificador'], ['ROL:operador', 'Para: todos los Operadores'], ['ROL:planificador', 'Para: todos los Planificadores'], ['ROL:administrador', 'Para: todos los Administradores']].concat(deSector, [['PERSONAS', 'Para: personas elegidas…']]);
       paraSel = sel(); opcPara.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; paraSel.appendChild(o); });
       fila.appendChild(paraSel);
     }
@@ -4622,7 +4621,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const zona = el('div', 'display:none;max-height:110px;overflow:auto;border:1px solid #334155;border-radius:4px;padding:4px 8px'); cj.appendChild(zona);
     const llenarPersonas = () => {
       zona.innerHTML = ''; zona.dataset.modo = 'personas';
-      (d.miembros || []).forEach(m => { const l = el('label', 'display:block;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.value = m.email; l.appendChild(c); l.appendChild(document.createTextNode(' ' + m.nombre + ' (' + m.rol + ')')); zona.appendChild(l); });
+      (d.miembros || []).filter(m => !(d.rol === 'Meteorologo' && m.rol === 'Meteorologo')).forEach(m => { const l = el('label', 'display:block;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.value = m.email; l.appendChild(c); l.appendChild(document.createTextNode(' ' + m.nombre + ' (' + m.rol + ')')); zona.appendChild(l); });
       if (!(d.miembros || []).length) zona.textContent = 'No hay otros usuarios en este teatro.';
     };
     const llenarTeatros = () => {
@@ -7216,7 +7215,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const MAX_BYTES = 44000, ESTE = /^(?:TORMENTA|LLUVIA|CRECIDA|INUNDACION|VIENTO|NIEBLA|TEMPERATURA|OTRO)$/;
   let areas = [], ver = '', desfase = 0, capa = null, ctrl = null, ctrlDiv = null, panel = null, previa = null, borrador = null, dib = null, barra = null, iniciado = false, ultimoTeatro = '', ocupado = false;
   let anim = true, previaPt = null;
-  let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true, depsOSM = null;
+  let puedeEditar = false, puedeBorrarTodas = false, visible = true, listaAbierta = true, depsOSM = null, errCarga = '', intentos = 0;
+  const esMeteoRol = () => { try { return String(sesionActiva.rol).trim().toLowerCase() === 'meteorologo'; } catch (_) { return false; } };   // el servidor igual decide: esto solo evita que el boton desaparezca si la carga falla
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
   const teatro = () => window.ARES_TEATRO || null;
@@ -7332,12 +7332,14 @@ window.addEventListener('DOMContentLoaded', () => {
   async function cargar(forzar) {
     if (ocupado || !activa()) return; ocupado = true;
     try {
-      const r = await api('MET_AREA_LISTAR', forzar ? {} : { ver: ver }); if (r.status !== 'success') return;
-      desfase = Number(r.ahora) ? Number(r.ahora) - Date.now() : desfase; const antes = puedeEditar; puedeEditar = !!r.puedeEditar; puedeBorrarTodas = !!r.puedeBorrarTodas;
+      const r = await api('MET_AREA_LISTAR', forzar ? {} : { ver: ver }); if (r.status !== 'success') { errCarga = r.message || 'El servidor no respondió.'; reintentar(); if (panel) pintar(); boton(); return; }
+      errCarga = ''; intentos = 0; desfase = Number(r.ahora) ? Number(r.ahora) - Date.now() : desfase; const antes = puedeEditar; puedeEditar = !!r.puedeEditar; puedeBorrarTodas = !!r.puedeBorrarTodas;
       if (!r.sinCambios) { areas = r.areas || []; ver = r.ver || ''; dibujar(); } else if (antes !== puedeEditar) dibujar();
       boton();
-    } catch (_) { /* sin conexion: se queda con lo ultimo que vio */ } finally { ocupado = false; }
+    } catch (_) { errCarga = 'Sin respuesta del servidor.'; reintentar(); boton(); /* sin conexion: se queda con lo ultimo que vio */ } finally { ocupado = false; }
   }
+  /* si la primera carga falla (servidor frio, red lenta) se reintenta sola unas veces, para que "Mi capa" no quede oculta hasta el siguiente minuto */
+  function reintentar() { if (intentos >= 6) return; intentos++; setTimeout(() => { if (activa() && iniciado) cargar(true); }, 6000); }
   async function cerrarArea(a) {
     if (!confirm('¿Cerrar el área “' + a.titulo + '”? Deja de verse en el mapa de todos.')) return;
     try { const r = await api('MET_AREA_BORRAR', { id: a.id }); if (r.status !== 'success') { alert(r.message); return; } const mp = mapa(); if (mp) mp.closePopup(); await cargar(true); } catch (_) { /* sesion */ }
@@ -7349,7 +7351,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const nuevoBorrador = () => ({ id: '', tipo: 'TORMENTA', sev: 'PRECAUCION', horas: 12, titulo: '', texto: '', lugares: '', partes: [], radio: 30, icono: '', punto: null });
   function abrir() {
     if (panel) { cerrarPanel(); return; }
-    if (!puedeEditar) return; if (!borrador) borrador = nuevoBorrador();
+    if (!puedeEditar && !esMeteoRol()) return; if (!puedeEditar) cargar(true); if (!borrador) borrador = nuevoBorrador();
     panel = el('div', 'position:fixed;left:10px;top:56px;width:min(400px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'capa-panel';
     document.body.appendChild(panel); pintar();
   }
@@ -7377,6 +7379,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗺 Mi capa · ' + ((teatro() && teatro().nombre) || 'Teatro')));
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
     panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:2px 0 6px', 'Lo que publique aparece en el Visor Táctico de todo el teatro, y se renueva solo cada 60 segundos. Las áreas vencen solas.'));
+    if (errCarga) { const ae = el('div', 'background:#7f1d1d;color:#fecaca;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:12px', 'No se pudo comprobar su permiso en el servidor: ' + errCarga + ' Se reintenta sola.'); ae.id = 'capa-err'; ae.setAttribute('role', 'alert'); panel.appendChild(ae); }
     // vigentes
     const v = vigentes().sort((p, q) => q.ts - p.ts), caja = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:6px 0'); caja.open = true; caja.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', '📋 Áreas vigentes (' + v.length + ')'));
     if (!v.length) caja.appendChild(el('div', 'color:#94a3b8;font-size:12px;margin:4px 0', 'No hay áreas vigentes.'));
@@ -7546,7 +7549,7 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- Boton y arranque ---------- */
   function boton() {
     const b = $('btn-capa-meteo');
-    if (!activa() || !puedeEditar) { if (b) b.remove(); return; }
+    if (!activa() || !(puedeEditar || esMeteoRol())) { if (b) b.remove(); return; }
     if (b) return; const ref = $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
     const n = el('button', 'margin-right:6px', '🗺 Mi capa'); n.id = 'btn-capa-meteo'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Publicar áreas meteorológicas en el Visor Táctico de todo el teatro'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref);
   }
