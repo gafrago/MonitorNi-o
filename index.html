@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXHBm3mBLA9wgvXffCHlt3rLjp90XOnWd7A4U3aJQ9uGDKr3DykrRt1g3TtflfMlnl/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbx61vTzSrqa4B9xHUk49qH9pEcG6hMi1y2VWoM-UFG5FXSmaN4FIq4a2VB_0QStT12y-g/exec";
 
 
 ;
@@ -6565,7 +6565,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
   const SUELTOS = ['btn-mensajes', 'btn-tareas'];
   const GRUPOS = [
-    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-decision', 'btn-planificacion', 'btn-sanidad', 'btn-fuego'] },
+    { k: 'mapa', txt: '🗺 Mapa', items: ['btn-trazos', 'btn-fases', 'btn-medios', 'btn-territorio', 'btn-electoral', 'btn-combate', 'btn-simulacion', 'btn-decision', 'btn-tiemporeal', 'btn-planificador', 'btn-planificacion', 'btn-sanidad', 'btn-fuego'] },
     { k: 'meteo', txt: '🌦 Meteo', items: ['btn-meteo', 'btn-capa-meteo', 'btn-reporte-meteo', 'btn-rios'] },
     { k: 'informes', txt: '📄 Informes', items: ['btn-informe-meteo', 'btn-sitrep'] }
   ];
@@ -10326,5 +10326,303 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE BIENVENIDA ===== -->
+<!-- ===== INICIO BLOQUE TIEMPO REAL: reproductor animado de la simulacion + planificador de ataque (pegar antes de </body>; el ensamblador lo ubica solo) ===== -->
+<style>
+  .tr-div { background: none !important; border: none !important; }
+  #tr-bar { position: fixed; z-index: 1100; left: 50%; bottom: 26px; transform: translateX(-50%); width: min(96vw, 760px); box-sizing: border-box; background: var(--t-panel, #0f172a); color: var(--t-txt, #e2e8f0); border: 1px solid var(--t-line, #334155); border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.55); padding: 9px 12px 10px; font: 12.5px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #tr-bar .tr-fila { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  #tr-bar .tr-fila:first-child { margin-top: 0; }
+  #tr-bar button { border: 1px solid var(--t-line, #334155); background: var(--t-card, #16213a); color: inherit; border-radius: 7px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; }
+  #tr-bar button:hover { background: var(--t-card2, #1b2a47); }
+  #tr-bar button.on { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+  #tr-bar select { background: var(--t-card, #16213a); color: inherit; border: 1px solid var(--t-line, #334155); border-radius: 7px; padding: 4px 6px; font-size: 12.5px; max-width: 100%; }
+  #tr-bar input[type=range] { flex: 1 1 160px; min-width: 120px; }
+  #tr-bar .tr-reloj { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 210px; }
+  #tr-bar .tr-msg { color: #fde68a; font-size: 12px; }
+  #tr-bar label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--t-mut, #94a3b8); }
+  #pl-panel { position: fixed; z-index: 1150; top: 64px; right: 10px; width: min(440px, calc(100vw - 20px)); max-height: calc(100vh - 80px); overflow: auto; box-sizing: border-box; background: var(--t-panel, #0f172a); color: var(--t-txt, #e2e8f0); border: 1px solid var(--t-line, #334155); border-radius: 12px; box-shadow: 0 16px 44px rgba(0,0,0,.6); padding: 12px 14px 14px; font: 12.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #pl-panel h3 { margin: 0 0 2px; font-size: 16px; }
+  #pl-panel .pl-sub { color: var(--t-mut, #94a3b8); font-size: 11.5px; margin-bottom: 8px; }
+  #pl-panel label.pl-c { display: block; margin-top: 8px; font-size: 11.5px; color: var(--t-mut, #94a3b8); }
+  #pl-panel input[type=text], #pl-panel input[type=number], #pl-panel select { display: block; width: 100%; box-sizing: border-box; margin-top: 2px; padding: 6px; border-radius: 6px; border: 1px solid var(--t-line, #334155); background: var(--t-card, #16213a); color: inherit; font-size: 12.5px; }
+  #pl-panel button { border: 1px solid var(--t-line, #334155); background: var(--t-card, #16213a); color: inherit; border-radius: 7px; padding: 6px 11px; font-size: 12.5px; cursor: pointer; margin: 2px 4px 2px 0; }
+  #pl-panel button:hover { background: var(--t-card2, #1b2a47); }
+  #pl-panel button.pri { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+  #pl-panel button:disabled { opacity: .55; cursor: default; }
+  #pl-panel .pl-lista { max-height: 130px; overflow: auto; border: 1px solid var(--t-line, #334155); border-radius: 6px; padding: 4px 6px; margin-top: 2px; }
+  #pl-panel .pl-lista label { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+  #pl-panel .pl-fila { display: flex; gap: 8px; } #pl-panel .pl-fila > * { flex: 1; }
+  .pl-op { margin-top: 10px; border: 1px solid var(--t-line, #334155); border-radius: 10px; padding: 9px 10px; background: var(--t-card, #16213a); }
+  .pl-op.rec { border-color: #16a34a; }
+  .pl-op h4 { margin: 0; font-size: 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .pl-ins { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #14532d; color: #bbf7d0; }
+  .pl-ver { font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+  .pl-barra { height: 8px; border-radius: 4px; background: #1e293b; margin: 4px 0 2px; overflow: hidden; } .pl-barra > div { height: 100%; }
+  .pl-op ul { margin: 3px 0 3px 16px; padding: 0; } .pl-op li { margin: 1px 0; }
+  .pl-op details { margin-top: 4px; } .pl-op summary { cursor: pointer; color: var(--t-mut, #94a3b8); }
+  #pl-orden { position: fixed; z-index: 1200; inset: 0; background: rgba(5,9,18,.72); display: flex; align-items: center; justify-content: center; padding: 14px; }
+  #pl-orden > div { width: min(720px, 100%); max-height: 90vh; display: flex; flex-direction: column; background: var(--t-panel, #0f172a); color: var(--t-txt, #e2e8f0); border: 1px solid var(--t-line, #334155); border-radius: 12px; padding: 12px; }
+  #pl-orden pre { flex: 1; overflow: auto; margin: 8px 0; padding: 8px; background: #0b1220; border-radius: 8px; white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+  #pl-orden button { border: 1px solid var(--t-line, #334155); background: var(--t-card, #16213a); color: inherit; border-radius: 7px; padding: 6px 11px; cursor: pointer; margin-right: 6px; }
+  @media (max-width: 560px) { #tr-bar { bottom: 10px; } #tr-bar .tr-reloj { min-width: 0; flex: 1 1 100%; } #pl-panel { top: 56px; right: 5px; } }
+</style>
+<script>
+/* A.R.E.S.: reproductor en tiempo real de la simulacion de combate.
+   Anima SUAVEMENTE el movimiento de aviones, infanteria, blindados y buques entre turnos, con reloj de simulacion y velocidad (x1 a x50), rastros y lineas de fuego.
+   Modo "Repeticion": reproduce el ejercicio ya resuelto (lo puede ver el control). Modo "En vivo": el sistema pide el turno siguiente al servidor cada vez que la animacion
+   llega al final (solo quien conduce el ejercicio). Todo el calculo es del servidor; este bloque solo interpola posiciones para mostrarlas. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const moduloOn = () => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf('COMBATE') >= 0); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const COL = { AZUL: '#0369a1', ROJO: '#b91c1c', NEUTRAL: '#15803d', DESCONOCIDO: '#a16207' };
+  const bando = a => a === 'AZUL' ? 'AZUL' : (a === 'ROJO' || a === 'DESCONOCIDO') ? 'ROJO' : null;
+  const VELS = [1, 2, 5, 10, 20, 50], TURNOS_POR_S = 1 / 3;     // x1 = un turno cada 3 segundos
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  let bar = null, R = null, tau = 0, vel = 5, jugando = false, vivo = false, rastros = true, alcance = false, raf = 0, tPrev = 0, ocupado = false, msg = '', listaEj = null, ultimo = '';
+  let grupo = null, mk = {}, ic = {}, tr = {}, ci = {}, fuego = null, trI = -1, trB = {};
+
+  function svgUrl(u) { try { const s = window.aresCombate ? window.aresCombate.simboloSVG(u.af, u.s, u.d) : ''; return s ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s) : ''; } catch (_) { return ''; } }
+  function iconoDe(u, vivoU) {
+    const w = el('div', 'position:relative;width:30px;height:30px;' + (vivoU ? '' : 'opacity:.35;filter:grayscale(1)')), im = document.createElement('img'); im.src = svgUrl(u); im.width = im.height = 30; im.alt = ''; im.style.display = 'block'; w.appendChild(im);
+    if (!svgUrl(u)) { w.style.cssText += ';border-radius:50%;background:' + (COL[bando(u.af)] || '#a16207') + ';border:2px solid #fff'; }
+    return L.divIcon({ html: w, className: 'tr-div', iconSize: [30, 30], iconAnchor: [15, 15] });
+  }
+  function posU(id, t) {
+    const n = R.snaps.length - 1, i = Math.min(n, Math.max(0, Math.floor(t))), fr = Math.min(1, Math.max(0, t - i)), A = R.snaps[i].act[id]; if (!A) return null;
+    const B = (i < n && fr > 0) ? R.snaps[i + 1].act[id] : null; if (!B) return { lat: A.lat, lon: A.lon, f: A.f, e: A.e, s: A.s, cg: A.cg };
+    const C = fr >= 0.5 ? B : A; return { lat: A.lat + (B.lat - A.lat) * fr, lon: A.lon + (B.lon - A.lon) * fr, f: C.f, e: C.e, s: C.s, cg: C.cg };
+  }
+  const vivoE = p => p.f > 0.0001 && (p.e === 'OPERATIVO' || p.e === 'DEGRADADO');
+  function limpiar() { const M = mapa(); if (M) [grupo, fuego].forEach(g => { if (g && M.hasLayer(g)) M.removeLayer(g); }); grupo = fuego = null; mk = {}; ic = {}; tr = {}; ci = {}; trI = -1; trB = {}; }
+  function asegurarCapas() { const M = mapa(); if (!M) return false; if (!grupo) { grupo = L.layerGroup().addTo(M); fuego = L.layerGroup().addTo(M); } return true; }
+  function frame() {
+    if (!R || !asegurarCapas()) return; const i = Math.min(R.snaps.length - 1, Math.max(0, Math.floor(tau))), fr = tau - i;
+    if (trI !== i) { trI = i; trB = {}; R.base.forEach(u => { const pts = []; for (let k = 0; k <= i; k++) { const a = R.snaps[k].act[u.id]; if (a && (!pts.length || pts[pts.length - 1][0] !== a.lat || pts[pts.length - 1][1] !== a.lon)) pts.push([a.lat, a.lon]); } trB[u.id] = pts; }); }
+    R.base.forEach(u => {
+      const p = posU(u.id, tau);
+      if (!p || !isFinite(p.lat) || !isFinite(p.lon)) { [mk, tr, ci].forEach(o => { if (o[u.id]) { grupo.removeLayer(o[u.id]); delete o[u.id]; } }); return; }
+      const v = vivoE(p);
+      if (!mk[u.id]) { const m = L.marker([p.lat, p.lon], { icon: iconoDe(u, v), zIndexOffset: 700, keyboard: false }); m.__v = v; m.bindPopup(() => popup(u)); grupo.addLayer(m); mk[u.id] = m; }
+      else { const m = mk[u.id]; m.setLatLng([p.lat, p.lon]); if (m.__v !== v) { m.__v = v; m.setIcon(iconoDe(u, v)); } }
+      const base = trB[u.id] || [];
+      if (rastros && base.length + 1 >= 2 && (base.length > 1 || (base[0] && (base[0][0] !== p.lat || base[0][1] !== p.lon)))) { const pts = base.concat([[p.lat, p.lon]]); if (!tr[u.id]) { tr[u.id] = L.polyline(pts, { color: COL[bando(u.af)] || '#a16207', weight: 2, opacity: .65, dashArray: '2 5', interactive: false }); grupo.addLayer(tr[u.id]); } else tr[u.id].setLatLngs(pts); }
+      else if (tr[u.id]) { grupo.removeLayer(tr[u.id]); delete tr[u.id]; }
+      if (alcance && u.al > 0 && v) { if (!ci[u.id]) { ci[u.id] = L.circle([p.lat, p.lon], { radius: u.al * 1000, color: COL[bando(u.af)] || '#a16207', weight: 1.2, dashArray: '8 6', fillOpacity: .04, interactive: false }); grupo.addLayer(ci[u.id]); } else ci[u.id].setLatLng([p.lat, p.lon]); }
+      else if (ci[u.id]) { grupo.removeLayer(ci[u.id]); delete ci[u.id]; }
+    });
+    fuego.clearLayers(); if (fr >= 0.3 || tau >= R.snaps.length - 1) { const tt = fr >= 0.3 && tau < R.snaps.length - 1 ? i + 1 : i; R.eventos.forEach(e => { if (e.t !== 'FUEGO' || e.turno !== tt || tt < 1) return; const a = posU(e.a, tau), d = posU(e.d, tau); if (a && d) fuego.addLayer(L.polyline([[a.lat, a.lon], [d.lat, d.lon]], { color: '#ef4444', weight: 2, dashArray: '6 4', interactive: false })); }); }
+    pintarReloj();
+  }
+  function popup(u) { const p = posU(u.id, tau) || {}, d = el('div', 'font-size:12px'); d.appendChild(el('b', '', u.n)); d.appendChild(el('div', '', (u.af || '') + ' · ' + (u.c || '') + ' · ' + String(u.d || '').toLowerCase())); d.appendChild(el('div', '', 'Fuerza ' + Math.ceil(p.f || 0) + ' de ' + u.q)); if (p.s) d.appendChild(el('div', '', 'Munición ' + Math.round(p.s.m) + '% · Combustible ' + Math.round(p.s.c) + '% · Víveres ' + Math.round(p.s.v) + '%')); return d; }
+  const horas = t => { const m = Math.round(t * (R ? R.turnoMin : 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60; return (d ? 'día ' + (d + 1) + ' · ' : '') + 'H+' + String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); };
+  function pintarReloj() {
+    if (!bar || !R) return; const n = R.snaps.length - 1, r = bar.querySelector('.tr-reloj'), s = bar.querySelector('input[type=range]');
+    if (r) r.textContent = 'Turno ' + Math.min(n, Math.floor(tau)) + ' de ' + n + ' · ' + horas(tau) + (R.estado === 'TERMINADO' ? ' · terminado' : '');
+    if (s && document.activeElement !== s) { s.max = n; s.value = tau; }
+  }
+  /* ---------- carga ---------- */
+  async function cargarLista() { try { const r = await api('SIM_LISTAR'); if (r.status === 'success') listaEj = r; } catch (_) { /* nada */ } }
+  async function cargar(id) {
+    if (!id) return; msg = 'Cargando…'; pintarBar();
+    try { const r = await api('SIM_REPLAY', { id: id }); if (r.status !== 'success') { msg = r.message || 'No se pudo cargar.'; R = null; limpiar(); pintarBar(); return; }
+      R = { id: id, nombre: r.ejercicio.nombre, base: r.base, snaps: (r.snapshots || []).sort((a, b) => a.t - b.t), eventos: r.eventos || [], puede: !!r.puedeConducir, turnoMin: (r.ejercicio.params && r.ejercicio.params.turnoMin) || 60, estado: r.ejercicio.estado };
+      if (!R.snaps.length) { msg = 'El ejercicio no tiene turnos todavía: avance al menos uno.'; }
+      else msg = ''; limpiar(); tau = 0; jugando = false; vivo = false; frame();
+    } catch (_) { msg = 'Sin conexión con el servidor.'; }
+    pintarBar();
+  }
+  async function avanzarVivo() {
+    if (ocupado || !R) return; ocupado = true; msg = 'Calculando el turno siguiente…'; pintarBar();
+    try { const r = await api('SIM_AVANZAR', { id: R.id, n: 1 }); if (r.status !== 'success') { msg = r.message || 'No se pudo avanzar.'; vivo = false; jugando = false; return; }
+      const e = await api('SIM_ESTADO', { id: R.id });
+      if (e.status === 'success' && e.ejercicio.turno === R.snaps.length) { R.base = e.base; R.snaps.push({ t: e.ejercicio.turno, act: e.act }); (e.eventosTurno || []).forEach(x => R.eventos.push(x)); R.estado = e.ejercicio.estado; msg = ''; }
+      else { const t = tau; await cargar(R.id); tau = Math.min(t, R.snaps.length - 1); }
+      if (r.terminado) { vivo = false; jugando = false; R.estado = 'TERMINADO'; msg = 'Fin del ejercicio: ' + (r.fin || ''); }
+    } catch (_) { msg = 'Sin conexión con el servidor.'; vivo = false; jugando = false; } finally { ocupado = false; pintarBar(); }
+  }
+  function lazo(ts) {
+    raf = requestAnimationFrame(lazo); if (!R) { tPrev = ts; return; } const dt = tPrev ? Math.min(0.1, (ts - tPrev) / 1000) : 0; tPrev = ts;
+    if (jugando && !ocupado) { const n = R.snaps.length - 1; tau += dt * vel * TURNOS_POR_S;
+      if (tau >= n) { tau = n; if (vivo && R.estado !== 'TERMINADO') avanzarVivo(); else { jugando = false; pintarBar(); } } }
+    frame();
+  }
+  /* ---------- barra de control ---------- */
+  function pintarBar() {
+    if (!bar) return; bar.textContent = '';
+    const f1 = el('div', ''); f1.className = 'tr-fila'; const t = el('b', '', '⏯ Tiempo real'); f1.appendChild(t);
+    const sel = el('select'); sel.setAttribute('aria-label', 'Ejercicio'); const ejs = (listaEj && listaEj.ejercicios) || []; if (!ejs.length) { const o = el('option', '', 'Sin ejercicios'); sel.appendChild(o); }
+    ejs.forEach(x => { const o = el('option', '', x.nombre + ' (' + (x.estado || '').toLowerCase().replace('_', ' ') + ', turno ' + x.turno + ')'); o.value = x.id; if (R && R.id === x.id) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => cargar(sel.value); f1.appendChild(sel);
+    const x = el('button', 'margin-left:auto', '✕'); x.type = 'button'; x.title = 'Cerrar el reproductor'; x.onclick = cerrar; f1.appendChild(x); bar.appendChild(f1);
+    const f2 = el('div', ''); f2.className = 'tr-fila';
+    const b0 = el('button', '', '⏮'); b0.type = 'button'; b0.title = 'Volver al inicio'; b0.onclick = () => { tau = 0; jugando = false; vivo = false; frame(); pintarBar(); }; f2.appendChild(b0);
+    const bp = el('button', jugando ? 'on' : '', jugando ? '⏸ Pausa' : '▶ Reproducir'); bp.type = 'button'; bp.id = 'tr-play'; if (jugando) bp.className = 'on';
+    bp.onclick = () => { if (!R || !R.snaps.length) return; if (jugando) { jugando = false; } else { if (tau >= R.snaps.length - 1 && !(vivo && R.estado !== 'TERMINADO')) tau = 0; jugando = true; } pintarBar(); }; f2.appendChild(bp);
+    VELS.forEach(v => { const b = el('button', '', '×' + v); b.type = 'button'; b.className = 'tr-vel' + (v === vel ? ' on' : ''); b.title = 'Velocidad ×' + v + ': ' + (v / 3).toFixed(1).replace('.0', '') + ' turnos por segundo'; b.onclick = () => { vel = v; pintarBar(); }; f2.appendChild(b); });
+    bar.appendChild(f2);
+    const f3 = el('div', ''); f3.className = 'tr-fila'; const s = el('input'); s.type = 'range'; s.min = 0; s.max = R ? R.snaps.length - 1 : 0; s.step = 0.01; s.value = tau; s.setAttribute('aria-label', 'Posición en el tiempo'); s.oninput = () => { tau = Number(s.value); jugando = false; frame(); };
+    s.onchange = () => pintarBar(); f3.appendChild(s); const rl = el('span', '', ''); rl.className = 'tr-reloj'; f3.appendChild(rl); bar.appendChild(f3);
+    const f4 = el('div', ''); f4.className = 'tr-fila';
+    const chk = (txt, val, fn, dis, title) => { const l = el('label'), c = el('input'); c.type = 'checkbox'; c.checked = !!val; c.disabled = !!dis; c.onchange = () => fn(c.checked); if (title) l.title = title; l.appendChild(c); l.appendChild(document.createTextNode(txt)); f4.appendChild(l); return c; };
+    chk('Rastros', rastros, v => { rastros = v; frame(); }); chk('Alcances', alcance, v => { alcance = v; frame(); });
+    const puedeVivo = !!(R && R.puede && R.estado !== 'TERMINADO'); const cv = chk('En vivo (el sistema avanza los turnos)', vivo, v => { vivo = v; if (v) { if (R) { tau = R.snaps.length - 1; } jugando = true; } pintarBar(); }, !puedeVivo, puedeVivo ? 'Cada vez que la animación llega al final se calcula un turno nuevo en el servidor' : 'Solo quien conduce el ejercicio, y mientras no haya terminado');
+    cv.id = 'tr-vivo'; if (msg) { const m = el('span', '', msg); m.className = 'tr-msg'; m.setAttribute('role', 'status'); f4.appendChild(m); } bar.appendChild(f4); pintarReloj();
+  }
+  async function abrir(op) {
+    if (!(rolOk() && moduloOn())) return; op = op || {};
+    try { if (window.aresSim && window.aresSim.cerrar) window.aresSim.cerrar(); } catch (_) { /* nada */ }
+    try { if (window.aresCombate && window.aresCombate.mostrarCapa) window.aresCombate.mostrarCapa(false); } catch (_) { /* nada */ }
+    if (!bar) { bar = el('div'); bar.id = 'tr-bar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Reproductor de la simulación'); document.body.appendChild(bar); }
+    await cargarLista(); let id = op.id || (R && R.id) || ''; if (!id) { try { const e = window.aresSim && window.aresSim.estado && window.aresSim.estado(); if (e && e.id) id = e.id; } catch (_) { /* nada */ } }
+    const ejs = (listaEj && listaEj.ejercicios) || []; if (!id || !ejs.some(x => x.id === id)) { const c = ejs.filter(x => x.estado === 'EN_CURSO')[0] || ejs[0]; id = c ? c.id : ''; }
+    pintarBar(); if (id) await cargar(id);
+    if (R && op.vivo && R.puede && R.estado !== 'TERMINADO') { vivo = true; tau = R.snaps.length - 1; jugando = true; if (op.vel) vel = op.vel; pintarBar(); } else if (R && R.snaps.length > 1 && !op.sinPlay) { jugando = true; if (op.vel) vel = op.vel; pintarBar(); }
+    if (!raf) raf = requestAnimationFrame(lazo);
+  }
+  function cerrar() { jugando = false; vivo = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } tPrev = 0; limpiar(); R = null; if (bar) { bar.remove(); bar = null; } try { if (window.aresCombate && window.aresCombate.mostrarCapa) window.aresCombate.mostrarCapa(true); } catch (_) { /* nada */ } }
+  function boton() {
+    const b = $('btn-tiemporeal'); if (!(rolOk() && moduloOn())) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-decision') || $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '⏯ Tiempo real'); n.id = 'btn-tiemporeal'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Ver la simulación moviéndose en el mapa, con velocidad ajustable'; n.onclick = () => abrir(); ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  setInterval(() => { const s = sesion(), clave = s && moduloOn() && rolOk() ? s.email + '|' + s.pin + '|' + (ARES_TEATRO.nombre || '') : ''; if (clave !== ultimo) { if (ultimo) { cerrar(); listaEj = null; const b = $('btn-tiemporeal'); if (b) b.remove(); } ultimo = clave; } if (clave) boton(); }, 1500);
+  window.aresTiempoReal = { abrir: abrir, cerrar: cerrar, estado: () => R, tau: () => tau, ir: t => { if (R) { tau = Math.max(0, Math.min(R.snaps.length - 1, Number(t))); frame(); } }, jugando: () => jugando, vel: () => vel, vivo: () => vivo, marcadores: () => Object.keys(mk).length, rastros: () => Object.keys(tr).length, fuego: () => fuego ? fuego.getLayers().length : 0, posicion: id => R ? posU(id, tau) : null };
+})();
+</script>
+<script>
+/* A.R.E.S.: planificador de ataque (modo DECISION). El control indica un objetivo (destruir una fuerza enemiga u ocupar una zona) y el sistema arma de 1 a 3 cursos de accion
+   con las fuerzas propias disponibles, los verifica (llegadas y combustible), los corre varias veces con semillas distintas y los muestra comparados: probabilidad de cumplir el
+   objetivo, bajas propias, riesgos y orden de operaciones escrita. Cada curso se puede ver en el mapa y cargar como plan del ejercicio para simularlo.
+   Son reglas y calculo dentro del sistema, sin IA externa. Es una herramienta de adiestramiento: no predice resultados reales. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^(administrador|planificador)$/i.test(String(s.rol).trim()); };
+  const moduloOn = () => { try { return !!(window.ARES_TEATRO && (ARES_TEATRO.modulos || []).indexOf('COMBATE') >= 0); } catch (_) { return false; } };
+  const mapa = () => { try { return (typeof mapTactico !== 'undefined' && mapTactico && window.L) ? mapTactico : null; } catch (_) { return null; } };
+  const bando = a => a === 'AZUL' ? 'AZUL' : (a === 'ROJO' || a === 'DESCONOCIDO') ? 'ROJO' : null;
+  const VER = { 'FACTIBLE': ['#14532d', '#bbf7d0', '#16a34a'], 'RIESGOSO': ['#713f12', '#fde68a', '#eab308'], 'NO FACTIBLE': ['#7f1d1d', '#fecaca', '#ef4444'] };
+  async function api(a, extra) {
+    const s = sesion(); if (!s) throw new Error('Sesión cerrada.');
+    return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json();
+  }
+  let pan = null, ultimo = '', capaPv = null;
+  let st = { ejs: null, ejId: '', base: [], act: {}, tipo: 'DESTRUIR', sel: {}, lat: '', lon: '', r: '5', plazo: '', regreso: true, K: '12', nombre: '', res: null, ocupado: false, msg: '', msgOk: false, conf: '', cargado: '', elegir: false };
+
+  async function cargarEj() {
+    try { const r = await api('SIM_LISTAR'); if (r.status === 'success') { st.ejs = (r.ejercicios || []).filter(x => x.modo === 'DECISION' && x.estado !== 'TERMINADO'); } else { st.msg = r.message || 'No se pudo cargar.'; st.ejs = []; } } catch (_) { st.msg = 'Sin conexión con el servidor.'; st.ejs = []; }
+    if (!st.ejId || !st.ejs.some(x => x.id === st.ejId)) { let p = ''; try { const e = window.aresSim && window.aresSim.estado && window.aresSim.estado(); if (e && e.id) p = e.id; } catch (_) { /* nada */ } st.ejId = (st.ejs.some(x => x.id === p) ? p : (st.ejs[0] ? st.ejs[0].id : '')); }
+    if (st.ejId) await cargarEstado();
+  }
+  async function cargarEstado() { try { const r = await api('SIM_ESTADO', { id: st.ejId }); if (r.status === 'success') { st.base = r.base || []; st.act = r.act || {}; st.sel = {}; st.res = null; borrarPv(); } else st.msg = r.message || ''; } catch (_) { st.msg = 'Sin conexión con el servidor.'; } }
+  const rojos = () => st.base.filter(u => bando(u.af) === 'ROJO' && u.s !== 'LOG' && st.act[u.id] && st.act[u.id].f > 0.0001);
+  function borrarPv() { const M = mapa(); if (M && capaPv && M.hasLayer(capaPv)) M.removeLayer(capaPv); capaPv = null; }
+  function verEnMapa(o) {
+    const M = mapa(); if (!M || !o) return; borrarPv(); capaPv = L.layerGroup(); const ob = st.res.objetivo, ptsAll = [[ob.lat, ob.lon]];
+    const objL = ob.tipo === 'OCUPAR' ? L.circle([ob.lat, ob.lon], { radius: ob.r * 1000, color: '#22c55e', weight: 2, fillOpacity: .12, interactive: false }) : L.circleMarker([ob.lat, ob.lon], { radius: 9, color: '#ef4444', weight: 3, fillOpacity: .15, interactive: false });
+    capaPv.addLayer(objL); const por = {}; o.plan.ord.forEach(x => { (por[x.u] = por[x.u] || []).push(x); });
+    Object.keys(por).forEach(id => { const u = st.base.filter(q => q.id === id)[0], a = st.act[id]; if (!u || !a) return; const pts = [[a.lat, a.lon]]; por[id].sort((p, q) => p.t - q.t).forEach(x => pts.push([x.lat, x.lon]));
+      const col = u.d === 'AIRE' ? '#38bdf8' : u.d === 'MAR' ? '#2dd4bf' : '#facc15'; capaPv.addLayer(L.polyline(pts, { color: col, weight: 3, dashArray: '8 6', interactive: false }));
+      pts.slice(1).forEach(p => { capaPv.addLayer(L.circleMarker(p, { radius: 4, color: col, weight: 2, fillOpacity: .9, interactive: false })); }); pts.forEach(p => ptsAll.push(p)); });
+    capaPv.addTo(M); try { M.fitBounds(L.latLngBounds(ptsAll), { padding: [60, 60], maxZoom: 11 }); } catch (_) { /* nada */ }
+  }
+  async function planificar() {
+    if (st.ocupado) return; const b = { id: st.ejId, tipo: st.tipo, nombre: st.nombre, regreso: !!st.regreso, corridas: Number(st.K) };
+    if (st.tipo === 'DESTRUIR') { b.u = Object.keys(st.sel).filter(k => st.sel[k]); if (!b.u.length) { if (st.lat === '' || st.lon === '') { st.msg = 'Marque una o más fuerzas enemigas, o elija un punto en el mapa.'; st.msgOk = false; return pintar(); } b.lat = Number(st.lat); b.lon = Number(st.lon); } }
+    else { if (st.lat === '' || st.lon === '') { st.msg = 'Elija en el mapa la zona a ocupar.'; st.msgOk = false; return pintar(); } b.lat = Number(st.lat); b.lon = Number(st.lon); b.r = Number(st.r); }
+    if (st.plazo !== '') b.plazo = Number(st.plazo);
+    st.ocupado = true; st.msg = 'Calculando cursos de acción y corriendo las simulaciones… puede tardar hasta 20 segundos.'; st.msgOk = true; st.res = null; st.conf = ''; st.cargado = ''; borrarPv(); pintar();
+    try { const r = await api('SIM_PLANIFICAR', b); if (r.status === 'success') { st.res = r; st.msg = ''; } else { st.msg = r.message || 'No se pudo planificar.'; st.msgOk = false; } } catch (e) { st.msg = 'Sin conexión con el servidor.'; st.msgOk = false; }
+    st.ocupado = false; pintar();
+  }
+  async function cargarPlan(o) {
+    if (st.conf !== o.id) { st.conf = o.id; return pintar(); } st.conf = '';
+    try { const r = await api('SIM_PLAN_GUARDAR', { id: st.ejId, plan: { auto: true, ord: o.plan.ord } }); if (r.status === 'success') { st.cargado = o.id; st.msg = 'Plan «' + o.nombre + '» cargado con autoejecución (' + o.plan.ord.length + ' órdenes). Ya se puede ver en tiempo real.'; st.msgOk = true; } else { st.msg = r.message || 'No se pudo cargar el plan.'; st.msgOk = false; } } catch (_) { st.msg = 'Sin conexión con el servidor.'; st.msgOk = false; }
+    pintar();
+  }
+  function verOrden(o) {
+    const f = el('div'); f.id = 'pl-orden'; const c = el('div'); f.appendChild(c); c.appendChild(el('b', '', 'Orden de operaciones — ' + o.nombre));
+    const pre = el('pre', '', o.orden); c.appendChild(pre); const fila = el('div'), cerrar = () => f.remove();
+    const b1 = el('button', '', 'Copiar'); b1.type = 'button'; b1.onclick = async () => { try { await navigator.clipboard.writeText(o.orden); b1.textContent = 'Copiado ✓'; } catch (_) { try { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b1.textContent = 'Seleccionado: use Ctrl+C'; } catch (e) { /* nada */ } } };
+    const b2 = el('button', '', 'Descargar .txt'); b2.type = 'button'; b2.onclick = () => { try { const u = URL.createObjectURL(new Blob([o.orden], { type: 'text/plain;charset=utf-8' })), a = document.createElement('a'); a.href = u; a.download = 'orden-de-operaciones-' + o.id + '.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); } catch (_) { /* nada */ } };
+    const b3 = el('button', '', 'Cerrar'); b3.type = 'button'; b3.onclick = cerrar; fila.append(b1, b2, b3); c.appendChild(fila); f.addEventListener('mousedown', e => { if (e.target === f) cerrar(); }); document.body.appendChild(f);
+  }
+  function elegirPunto() {
+    const M = mapa(); if (!M) { st.msg = 'El mapa todavía no está listo.'; st.msgOk = false; return pintar(); } st.elegir = true; if (pan) pan.style.display = 'none'; const cont = M.getContainer(); const aviso = el('div', 'position:fixed;z-index:1300;left:50%;top:70px;transform:translateX(-50%);background:#111a2e;color:#e2e8f0;border:1px solid #3b82f6;border-radius:10px;padding:9px 14px;font:600 13px system-ui,sans-serif', 'Toque en el mapa el punto del objetivo'); aviso.id = 'pl-aviso'; document.body.appendChild(aviso); const prev = cont.style.cursor; cont.style.cursor = 'crosshair';
+    M.once('click', e => { st.lat = e.latlng.lat.toFixed(5); st.lon = e.latlng.lng.toFixed(5); st.elegir = false; cont.style.cursor = prev; aviso.remove(); if (pan) pan.style.display = ''; pintar(); });
+  }
+  function campo(rot, ctl) { const l = el('label', '', rot); l.className = 'pl-c'; l.appendChild(ctl); return l; }
+  function pintar() {
+    if (!pan) return; const sc = pan.scrollTop; pan.textContent = ''; const h = el('h3', '', '🧭 Planificador de ataque'); pan.appendChild(h);
+    pan.appendChild(el('div', '', 'Indique el objetivo y el sistema arma, verifica y compara los cursos de acción con sus fuerzas. Es adiestramiento: no predice resultados reales.')).className = 'pl-sub';
+    const x = el('button', 'float:right', '✕'); x.type = 'button'; x.title = 'Cerrar'; x.onclick = cerrar; h.appendChild(x);
+    if (st.ejs === null) { pan.appendChild(el('div', '', 'Cargando…')); return; }
+    if (!st.ejs.length) { pan.appendChild(el('div', '', 'No hay ejercicios de decisión en curso. El árbitro tiene que crear uno y configurarlo en modo decisión (menú 🎯 Decisión).')); if (st.msg) pan.appendChild(el('div', 'color:#fca5a5;margin-top:6px', st.msg)); return; }
+    const se = el('select'); se.id = 'pl-ej'; st.ejs.forEach(e => { const o = el('option', '', e.nombre + ' (turno ' + e.turno + ')'); o.value = e.id; if (e.id === st.ejId) o.selected = true; se.appendChild(o); }); se.onchange = async () => { st.ejId = se.value; await cargarEstado(); pintar(); }; pan.appendChild(campo('Ejercicio', se));
+    const ti = el('select'); ti.id = 'pl-tipo'; [['DESTRUIR', 'Destruir fuerzas enemigas'], ['OCUPAR', 'Ocupar una zona']].forEach(p => { const o = el('option', '', p[1]); o.value = p[0]; if (p[0] === st.tipo) o.selected = true; ti.appendChild(o); }); ti.onchange = () => { st.tipo = ti.value; st.res = null; borrarPv(); pintar(); }; pan.appendChild(campo('Objetivo', ti));
+    const nm = el('input'); nm.type = 'text'; nm.maxLength = 60; nm.id = 'pl-nombre'; nm.placeholder = st.tipo === 'DESTRUIR' ? 'Ej.: Compañía roja del puente' : 'Ej.: Cruce de rutas'; nm.value = st.nombre; nm.oninput = () => { st.nombre = nm.value; }; pan.appendChild(campo('Nombre del objetivo (opcional)', nm));
+    if (st.tipo === 'DESTRUIR') {
+      const rj = rojos(); const lst = el('div'); lst.className = 'pl-lista'; lst.id = 'pl-rojos';
+      if (!rj.length) lst.appendChild(el('div', 'color:#94a3b8', 'No hay fuerzas enemigas detectadas. Puede elegir un punto en el mapa.'));
+      rj.forEach(u => { const l = el('label'), c = el('input'); c.type = 'checkbox'; c.checked = !!st.sel[u.id]; c.onchange = () => { st.sel[u.id] = c.checked; }; l.appendChild(c); l.appendChild(document.createTextNode(u.n + ' · ' + u.c + ' · ' + Math.ceil(st.act[u.id].f) + ' de ' + u.q)); lst.appendChild(l); });
+      pan.appendChild(campo('Fuerzas enemigas a destruir', lst));
+    }
+    const fila = el('div'); fila.className = 'pl-fila'; const la = el('input'), lo = el('input'); [la, lo].forEach(i => { i.type = 'number'; i.step = 'any'; }); la.id = 'pl-lat'; lo.id = 'pl-lon'; la.value = st.lat; lo.value = st.lon; la.oninput = () => { st.lat = la.value; }; lo.oninput = () => { st.lon = lo.value; };
+    fila.appendChild(campo(st.tipo === 'OCUPAR' ? 'Zona: latitud' : 'Punto: latitud (si no elige fuerzas)', la)); fila.appendChild(campo('Punto: longitud', lo)); pan.appendChild(fila);
+    const bm = el('button', '', '📍 Elegir en el mapa'); bm.type = 'button'; bm.id = 'pl-mapa'; bm.onclick = elegirPunto; pan.appendChild(bm);
+    const f2 = el('div'); f2.className = 'pl-fila';
+    if (st.tipo === 'OCUPAR') { const rr = el('input'); rr.type = 'number'; rr.min = 0.5; rr.max = 100; rr.step = 'any'; rr.value = st.r; rr.id = 'pl-r'; rr.oninput = () => { st.r = rr.value; }; f2.appendChild(campo('Radio de la zona (km)', rr)); }
+    const pz = el('input'); pz.type = 'number'; pz.min = 1; pz.max = 60; pz.placeholder = 'automático'; pz.value = st.plazo; pz.id = 'pl-plazo'; pz.oninput = () => { st.plazo = pz.value; }; f2.appendChild(campo('Plazo (turnos)', pz));
+    const ks = el('select'); ks.id = 'pl-k'; [['6', 'Rápido (6 corridas)'], ['12', 'Normal (12)'], ['20', 'Preciso (20)']].forEach(p => { const o = el('option', '', p[1]); o.value = p[0]; if (p[0] === st.K) o.selected = true; ks.appendChild(o); }); ks.onchange = () => { st.K = ks.value; }; f2.appendChild(campo('Precisión', ks)); pan.appendChild(f2);
+    const lr = el('label', 'display:flex;gap:6px;align-items:center;margin-top:8px'), cr = el('input'); cr.type = 'checkbox'; cr.checked = st.regreso; cr.id = 'pl-regreso'; cr.onchange = () => { st.regreso = cr.checked; }; lr.appendChild(cr); lr.appendChild(document.createTextNode('La aviación regresa a su base después de atacar')); pan.appendChild(lr);
+    const go = el('button', '', st.ocupado ? 'Calculando…' : '🧭 Planificar'); go.type = 'button'; go.className = 'pri'; go.id = 'pl-go'; go.disabled = st.ocupado; go.onclick = planificar; go.style.marginTop = '8px'; pan.appendChild(go);
+    if (st.msg) { const m = el('div', 'margin-top:8px;color:' + (st.msgOk ? '#86efac' : '#fca5a5'), st.msg); m.setAttribute('role', 'status'); m.id = 'pl-msg'; pan.appendChild(m); }
+    if (st.res) {
+      const r = st.res; pan.appendChild(el('div', 'margin-top:10px;font-weight:700', 'Cursos de acción (' + r.opciones.length + ') · ' + r.corridas + ' corridas, ' + r.turnos + ' turnos'));
+      (r.avisos || []).forEach(a => pan.appendChild(el('div', 'color:#fde68a;font-size:11.5px', '⚠ ' + a)));
+      r.opciones.forEach(o => {
+        const c = el('div'); c.className = 'pl-op' + (o.recomendada ? ' rec' : ''); c.dataset.id = o.id; const t = el('h4', '', o.id + ' · ' + o.nombre); if (o.recomendada) t.appendChild(el('span', '', 'Recomendada')).className = 'pl-ins';
+        const v = VER[o.evaluacion.veredicto] || VER['RIESGOSO'], vb = el('span', 'background:' + v[0] + ';color:' + v[1], o.evaluacion.veredicto); vb.className = 'pl-ver'; t.appendChild(vb); c.appendChild(t);
+        c.appendChild(el('div', 'color:#94a3b8;font-size:11.5px', o.resumen));
+        const pb = el('div'); pb.className = 'pl-barra'; pb.appendChild(el('div', 'width:' + Math.max(2, o.exito) + '%;background:' + v[2])); c.appendChild(pb);
+        c.appendChild(el('div', 'font-weight:700', 'Probabilidad de cumplir el objetivo: ' + o.exito + ' %' + (o.turnoMediano !== null ? ' · hacia el turno ' + o.turnoMediano : '')));
+        c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1', 'Bajas propias: mediana ' + o.evaluacion.bajasPropiasP50 + ' % · peor caso ' + o.evaluacion.bajasPropiasP90 + ' % · enemigo neutralizado ' + o.evaluacion.enemigoNeutralizadoP50 + ' %'));
+        c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1', 'Fuerzas: ' + o.usa.map(u => u.n).join(', ')));
+        if (o.ventajas.length) { const u1 = el('ul'); o.ventajas.forEach(a => u1.appendChild(el('li', 'color:#bbf7d0', '＋ ' + a))); c.appendChild(u1); }
+        if (o.riesgos.length) { const u2 = el('ul'); o.riesgos.forEach(a => u2.appendChild(el('li', 'color:#fde68a', '⚠ ' + a))); c.appendChild(u2); }
+        const d = el('details'); d.appendChild(el('summary', '', 'Cronograma (' + o.fases.length + ' pasos)')); o.fases.forEach(f => d.appendChild(el('div', 'font-size:11.5px;padding:1px 0', 'T' + f.t + ' · ' + f.h + ' — ' + f.txt))); c.appendChild(d);
+        const bs = el('div', 'margin-top:6px'); const b1 = el('button', '', '🗺 Ver en el mapa'); b1.type = 'button'; b1.className = 'pl-ver-mapa'; b1.onclick = () => verEnMapa(o);
+        const b2 = el('button', '', st.conf === o.id ? '¿Reemplazar el plan actual? Confirmar' : (st.cargado === o.id ? '✓ Plan cargado' : '⬇ Cargar como plan')); b2.type = 'button'; b2.className = 'pl-cargar pri'; b2.onclick = () => cargarPlan(o);
+        const b3 = el('button', '', '📝 Orden de operaciones'); b3.type = 'button'; b3.className = 'pl-orden-btn'; b3.onclick = () => verOrden(o); bs.append(b1, b2, b3);
+        if (st.cargado === o.id) { const b4 = el('button', '', '▶ Ver en tiempo real'); b4.type = 'button'; b4.className = 'pl-tr pri'; b4.onclick = () => { cerrar(); if (window.aresTiempoReal) window.aresTiempoReal.abrir({ id: st.ejId, vivo: true, vel: 5 }); }; bs.appendChild(b4); }
+        c.appendChild(bs); pan.appendChild(c); });
+    }
+    pan.scrollTop = sc;
+  }
+  async function abrir() {
+    if (!(rolOk() && moduloOn())) return; if (pan) { pan.remove(); pan = null; } pan = el('div'); pan.id = 'pl-panel'; pan.setAttribute('role', 'dialog'); pan.setAttribute('aria-label', 'Planificador de ataque'); document.body.appendChild(pan); pintar();
+    st.ejs = null; st.msg = ''; await cargarEj(); pintar();
+  }
+  function cerrar() { if (pan) { pan.remove(); pan = null; } borrarPv(); const o = $('pl-orden'); if (o) o.remove(); const a = $('pl-aviso'); if (a) a.remove(); }
+  function boton() {
+    const b = $('btn-planificador'); if (!(rolOk() && moduloOn())) { if (b) b.remove(); return; } if (b) return;
+    const ref = $('btn-tiemporeal') || $('btn-decision') || $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+    const n = el('button', 'margin-right:6px', '🧭 Planificador'); n.id = 'btn-planificador'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Planificador de ataque: arma y compara cursos de acción'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
+  }
+  setInterval(() => { const s = sesion(), clave = s && moduloOn() && rolOk() ? s.email + '|' + s.pin + '|' + (ARES_TEATRO.nombre || '') : ''; if (clave !== ultimo) { if (ultimo) { cerrar(); st = { ejs: null, ejId: '', base: [], act: {}, tipo: 'DESTRUIR', sel: {}, lat: '', lon: '', r: '5', plazo: '', regreso: true, K: '12', nombre: '', res: null, ocupado: false, msg: '', msgOk: false, conf: '', cargado: '', elegir: false }; const b = $('btn-planificador'); if (b) b.remove(); } ultimo = clave; } if (clave) boton(); }, 1500);
+  window.aresPlanificador = { abrir: abrir, cerrar: cerrar, estado: () => st, resultado: () => st.res };
+})();
+</script>
+<!-- ===== FIN BLOQUE TIEMPO REAL ===== -->
 </body>
 </html>
