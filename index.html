@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbytx-JQLvOlp6vo1G04Aue1VFMYmncxZoKNs_HK_ypSYk6Df-uBZRAVdqBQgWt_hw3KCg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbysh0vegpbRnwiJBlUvxjDSn_LKb-rb3reFhFNTLO-Pu4mJil6etwQ7n6UByxHosWZpQA/exec";
 
 
 ;
@@ -3513,6 +3513,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       let r = await post({ action: 'LOGIN', email: emailInput, pin: pinInput });
       if (!(r.status === 'success' && r.usuario)) { errDiv.innerText = r.message || 'Credenciales inválidas o no autorizado.'; errDiv.style.display = 'block'; return; }
+      window.__demo = r.demo || null;                         // cuenta de demostracion: la guia de bienvenida la usa
       if (r.debeCambiar) {                                    // clave temporal (usuario nuevo o reseteado): no se entra hasta cambiarla
         if (!window.aresClave) { errDiv.innerText = 'Debe cambiar su clave: actualice la aplicación (Ctrl+F5) e ingrese de nuevo.'; errDiv.style.display = 'block'; return; }
         const nt = await window.aresClave.forzar(r.usuario.email, pinInput, r.token);
@@ -4860,6 +4861,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const ajustar = () => { try { if (mapTactico) mapTactico.invalidateSize(); } catch (_) {} };
     ajustar(); setTimeout(ajustar, 120); setTimeout(ajustar, 400);
   }
+  window.aresSidebar = {
+    oculto: () => { const v = document.getElementById('vista-tactica'); return !!(v && v.classList.contains('sidebar-oculto')); },
+    ocultar: () => { guardar(true); aplicar(true, document.querySelector('.ctl-sidebar a')); },
+    mostrar: () => { guardar(false); aplicar(false, document.querySelector('.ctl-sidebar a')); }
+  };
   function montar() {
     let mp; try { mp = (typeof mapTactico !== 'undefined') ? mapTactico : null; } catch (_) { mp = null; }
     if (!mp || !window.L || mp.__ctlSidebar) return;
@@ -10157,5 +10163,167 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE PUSH ===== -->
+<!-- ===== INICIO BLOQUE BIENVENIDA: guia de 3 pasos para demos (pegar ULTIMO, antes de </body>) ===== -->
+<style>
+  /* mapa protagonista: panel lateral mas angosto en escritorio y pestaña de plegado visible */
+  @media (min-width: 801px) { #sidebar { width: 380px !important; } }
+  .ctl-sidebar a { background: #111a2e !important; color: #e2e8f0 !important; border: 1px solid #26344f; width: 32px !important; height: 32px !important; line-height: 30px !important; }
+  .ctl-sidebar a:hover { background: #1b2a47 !important; color: #fff !important; }
+
+  #bv-fondo { position: fixed; inset: 0; z-index: 2147483200; background: rgba(5,9,18,.72); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+  #bv-caja { width: min(560px, 100%); background: #111a2e; color: #e2e8f0; border: 1px solid #26344f; border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.65); padding: 22px 22px 16px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #bv-caja h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: .01em; }
+  #bv-caja .bv-sub { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: #94a3b8; }
+  #bv-caja .bv-vence { display: inline-block; margin-bottom: 14px; padding: 3px 9px; border-radius: 999px; background: #1b2a47; color: #93c5fd; font-size: 12px; font-weight: 600; }
+  .bv-paso { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid #26344f; border-radius: 10px; background: #16213a; margin-bottom: 10px; }
+  .bv-paso.hecho { border-color: #166534; background: #10261c; }
+  .bv-num { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; }
+  .bv-paso.hecho .bv-num { background: #16a34a; }
+  .bv-txt { flex: 1 1 auto; min-width: 0; }
+  .bv-txt b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .bv-txt span { font-size: 12.5px; line-height: 1.45; color: #94a3b8; }
+  .bv-btn { flex: 0 0 auto; align-self: center; background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .bv-btn:hover { background: #3b82f6; }
+  .bv-paso.hecho .bv-btn { background: transparent; border: 1px solid #166534; color: #86efac; }
+  #bv-pie { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  #bv-pie button { background: transparent; border: 1px solid #334155; color: #cbd5e1; border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; }
+  #bv-pie button:hover { background: #1b2a47; }
+  #bv-pie .bv-prog { font-size: 12px; color: #94a3b8; }
+  #bv-fin { margin: 4px 0 8px; padding: 10px 12px; border-radius: 10px; background: #10261c; border: 1px solid #166534; color: #bbf7d0; font-size: 13px; line-height: 1.5; }
+  #bv-pildora { position: fixed; z-index: 2147483100; left: 14px; bottom: 14px; display: flex; align-items: center; gap: 8px; background: #2563eb; color: #fff; border: none; border-radius: 999px; padding: 9px 14px 9px 12px; font: 700 12.5px system-ui, sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,.5); cursor: pointer; }
+  #bv-pildora:hover { background: #3b82f6; }
+  #bv-pildora .bv-mini { background: rgba(255,255,255,.22); border-radius: 999px; padding: 1px 8px; }
+  #bv-consejo { position: fixed; z-index: 2147483100; left: 50%; top: 96px; transform: translateX(-50%); max-width: min(92vw, 440px); background: #111a2e; color: #e2e8f0; border: 1px solid #3b82f6; border-radius: 10px; padding: 10px 14px; font: 600 13px/1.45 system-ui, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.55); }
+  .bv-resalte { outline: 3px solid #60a5fa !important; outline-offset: 2px; animation: bvlat 1.1s ease-in-out 4; }
+  @keyframes bvlat { 50% { outline-color: rgba(96,165,250,.15); } }
+  @media (max-width: 560px) { #bv-caja { padding: 16px 14px 12px; } .bv-paso { flex-wrap: wrap; } .bv-btn { width: 100%; align-self: stretch; } }
+  @media (prefers-reduced-motion: reduce) { .bv-resalte { animation: none; } }
+</style>
+<script>
+/* A.R.E.S.: guia de bienvenida de tres pasos (mira el mapa, proba el ejercicio, envia un mensaje).
+   Se abre sola, una vez, solo con cuentas de DEMOSTRACION; cualquiera la puede reabrir desde el menu de usuario.
+   El avance se recuerda en este navegador y no toca ningun dato. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const logueado = () => { try { return !!(sesionActiva && sesionActiva.autenticado); } catch (_) { return false; } };
+  const miEmail = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  const clave = () => 'ares_bv_' + miEmail();
+  const cargarEst = () => { try { const o = JSON.parse(localStorage.getItem(clave()) || '{}'); return { p: Array.isArray(o.p) ? o.p.slice(0, 3).map(Boolean) : [false, false, false], visto: !!o.visto, oculta: !!o.oculta }; } catch (_) { return { p: [false, false, false], visto: false, oculta: false }; } };
+  let est = { p: [false, false, false], visto: false, oculta: false }, cargadoPara = '';
+  const guardarEst = () => { try { localStorage.setItem(clave(), JSON.stringify(est)); } catch (_) { /* sin almacenamiento: sigue funcionando en memoria */ } };
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+  const hechos = () => est.p.filter(Boolean).length;
+  const esDemo = () => !!window.__demo;
+
+  const PASOS = [
+    { t: 'Mirá el mapa', d: 'El mapa es el centro de todo: unidades, zonas, alertas y pronóstico en una sola vista. Movelo, acercate y activá las capas que quieras.', b: 'Ver el mapa', f: accionMapa },
+    { t: 'Probá el ejercicio', d: 'Simulá una decisión táctica: armá un plan, verificá si es factible y mirá cómo reacciona el enemigo. Todo con datos de ejemplo.', b: 'Abrir el ejercicio', f: accionEjercicio },
+    { t: 'Enviá un mensaje', d: 'Mensajería interna cifrada dentro del sistema: elegí a quién y cómo (aviso, tarea o mensaje) y mandalo. Es la forma de comunicarse sin salir de A.R.E.S.', b: 'Escribir un mensaje', f: accionMensaje }
+  ];
+
+  function marcar(i) { if (i < 0 || i > 2 || est.p[i]) return; est.p[i] = true; guardarEst(); pintarPildora(); const c = $('bv-caja'); if (c) pintar(); }
+
+  function consejo(txt) {
+    const a = $('bv-consejo'); if (a) a.remove();
+    const d = el('div', '', txt); d.id = 'bv-consejo'; d.setAttribute('role', 'status'); document.body.appendChild(d);
+    setTimeout(() => { if (d.parentNode) d.remove(); }, 8000);
+  }
+  function resaltar(nodo) { if (!nodo) return; nodo.classList.add('bv-resalte'); setTimeout(() => nodo.classList.remove('bv-resalte'), 5200); }
+
+  function accionMapa() {
+    cerrar(true);
+    try { if (typeof cambiarPestana === 'function') cambiarPestana('tactica'); } catch (_) { /* ya esta */ }
+    try { if (window.aresSidebar && !window.aresSidebar.oculto()) window.aresSidebar.ocultar(); } catch (_) { /* nada */ }
+    const bar = document.querySelector('.layer-control-bar');
+    if (bar) { bar.classList.remove('lc-cerrada'); const t = bar.querySelector('.lc-toggle'); if (t) t.setAttribute('aria-expanded', 'true'); resaltar(bar); }
+    consejo('El panel lateral se plegó para darle más mapa (el botón ▶ bajo el zoom lo vuelve a abrir). Pruebe las Capas de la derecha, acérquese con la rueda o los botones + y −.');
+    setTimeout(() => marcar(0), 1500);
+  }
+  function accionEjercicio() {
+    cerrar(true);
+    try { if (window.aresDecision && window.aresDecision.abrir) { window.aresDecision.abrir(); marcar(1); return; } } catch (_) { /* sin modulo de decision */ }
+    try { if (window.aresSim && window.aresSim.abrir) { window.aresSim.abrir(); marcar(1); return; } } catch (_) { /* sin simulacion */ }
+    consejo('El ejercicio no está habilitado en este teatro o para su rol. Se activa desde el menú Mapa → Decisión o Simulación.');
+  }
+  function accionMensaje() {
+    cerrar(true);
+    try { if (typeof window.abrirMensajes === 'function') { window.abrirMensajes(); consejo('Escriba un mensaje y envíelo: el paso se marca solo cuando sale.'); return; } } catch (_) { /* nada */ }
+    consejo('La mensajería no está disponible para su rol en este teatro.');
+  }
+
+  function cerrar(oculta) {
+    const f = $('bv-fondo'); if (f) f.remove(); document.removeEventListener('keydown', alTecla, true);
+    est.visto = true; guardarEst();
+    pintarPildora();
+  }
+  function alTecla(e) { if (e.key === 'Escape') { e.stopPropagation(); cerrar(); } }
+
+  function pintar() {
+    const caja = $('bv-caja'); if (!caja) return; caja.textContent = '';
+    const demo = esDemo(), d = window.__demo;
+    caja.appendChild(el('h2', '', demo ? 'Bienvenido a A.R.E.S. C4I' : 'Recorrido rápido de A.R.E.S. C4I')); caja.querySelector('h2').id = 'bv-tit';
+    caja.appendChild(el('p', 'bv-sub', demo ? 'Sistema de conducción de operaciones con varios teatros. Esta es una demostración con datos de ejemplo: nada de lo que haga afecta a otros usuarios. Son tres pasos y lleva pocos minutos.' : 'Tres pasos para conocer lo esencial: el mapa, el ejercicio de decisión y la mensajería.'));
+    if (demo && d && Number(d.vence) > 0) caja.appendChild(el('div', 'bv-vence', 'Su acceso de prueba vence el ' + new Date(Number(d.vence)).toLocaleDateString('es-AR')));
+    PASOS.forEach((p, i) => {
+      const f = el('div', 'bv-paso' + (est.p[i] ? ' hecho' : '')), n = el('div', 'bv-num', est.p[i] ? '✓' : String(i + 1)), x = el('div', 'bv-txt');
+      x.appendChild(el('b', '', p.t)); x.appendChild(el('span', '', p.d));
+      const b = el('button', 'bv-btn', est.p[i] ? 'Repetir' : p.b); b.type = 'button'; b.addEventListener('click', p.f);
+      f.append(n, x, b); caja.appendChild(f);
+    });
+    if (hechos() === 3) caja.appendChild(el('div', '', '¡Listo! Ya recorrió lo esencial. Siga explorando: el menú Mapa tiene los demás módulos y, en su nombre (arriba a la derecha), puede cambiar su clave o volver a esta guía.')).id = 'bv-fin';
+    const pie = el('div', ''); pie.id = 'bv-pie';
+    pie.appendChild(el('span', 'bv-prog', hechos() + ' de 3 pasos'));
+    const c = el('button', '', hechos() === 3 ? 'Empezar a usar el sistema' : 'Explorar por mi cuenta'); c.type = 'button'; c.addEventListener('click', () => cerrar()); pie.appendChild(c);
+    caja.appendChild(pie);
+    const pri = caja.querySelector('.bv-paso:not(.hecho) .bv-btn') || caja.querySelector('.bv-btn'); if (pri && !caja.dataset.foco) { caja.dataset.foco = '1'; pri.focus(); }
+  }
+  function abrir() {
+    if (!logueado()) return; if ($('bv-fondo')) return;
+    const c = cargarEst(); if (cargadoPara !== miEmail()) { est = c; cargadoPara = miEmail(); }
+    const f = el('div', ''); f.id = 'bv-fondo'; const caja = el('div', ''); caja.id = 'bv-caja'; caja.setAttribute('role', 'dialog'); caja.setAttribute('aria-modal', 'true'); caja.setAttribute('aria-labelledby', 'bv-tit');
+    f.appendChild(caja); f.addEventListener('mousedown', e => { if (e.target === f) cerrar(); });
+    document.body.appendChild(f); document.addEventListener('keydown', alTecla, true);
+    pintar(); const p = $('bv-pildora'); if (p) p.remove();
+  }
+  function pintarPildora() {
+    let p = $('bv-pildora');
+    const mostrar = logueado() && esDemo() && est.visto && !est.oculta && hechos() < 3 && !$('bv-fondo');
+    if (!mostrar) { if (p) p.remove(); return; }
+    if (p) { p.querySelector('.bv-mini').textContent = hechos() + '/3'; return; }
+    p = el('button', ''); p.id = 'bv-pildora'; p.type = 'button'; p.setAttribute('aria-label', 'Abrir la guía de inicio');
+    p.appendChild(el('span', '', 'Guía de inicio')); p.appendChild(el('span', 'bv-mini', hechos() + '/3'));
+    p.addEventListener('click', abrir); document.body.appendChild(p);
+  }
+
+  /* el paso 3 se marca solo cuando un mensaje sale de verdad */
+  const f0 = window.fetch;
+  if (typeof f0 === 'function') window.fetch = function (u, o) {
+    const pr = f0.apply(this, arguments);
+    try { if (o && typeof o.body === 'string' && o.body.indexOf('"action":"MSG_ENVIAR"') > -1) pr.then(r => r.clone().json()).then(j => { if (j && j.status === 'success') marcar(2); }).catch(() => { /* nada */ }); } catch (_) { /* nada */ }
+    return pr;
+  };
+
+  /* entrada en el menu de usuario */
+  function menu() {
+    const panel = $('ares-user-panel'); if (!panel || $('btn-bienvenida')) return;
+    const b = el('button', '', 'Guía de bienvenida'); b.id = 'btn-bienvenida'; b.type = 'button'; b.addEventListener('click', e => { e.stopPropagation(); abrir(); });
+    const salir = panel.querySelector('.t-salir'); panel.insertBefore(b, salir || null);
+  }
+  /* apertura automatica: una sola vez por cuenta demo, cuando ya no hay pantallas previas (cambio de clave, elegir teatro) */
+  let esperando = 0;
+  function vigilar() {
+    if (!logueado()) { if ($('bv-pildora')) $('bv-pildora').remove(); cargadoPara = ''; esperando = 0; return; }
+    menu();
+    if (cargadoPara !== miEmail()) { est = cargarEst(); cargadoPara = miEmail(); }
+    const bloqueado = !!($('clave-fondo') || $('modal-login') && getComputedStyle($('modal-login')).display !== 'none' || document.querySelector('#elegir-teatro, .elegir-teatro'));
+    if (esDemo() && !est.visto && !$('bv-fondo')) { if (bloqueado) { esperando = 0; return; } if (++esperando >= 2) { esperando = -99; abrir(); } }
+    pintarPildora();
+  }
+  setInterval(vigilar, 700);
+  window.aresBienvenida = { abrir: abrir, cerrar: cerrar, estado: () => ({ p: est.p.slice(), visto: est.visto }), reiniciar: () => { est = { p: [false, false, false], visto: false, oculta: false }; guardarEst(); esperando = 0; } };
+})();
+</script>
+<!-- ===== FIN BLOQUE BIENVENIDA ===== -->
 </body>
 </html>
