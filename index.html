@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyH3v3x7zCvsYSR07dICeMR7YOXEwcKSnAB1-llWvyg3ixAfzblVUeZpkHntpnos-Bchg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXHBm3mBLA9wgvXffCHlt3rLjp90XOnWd7A4U3aJQ9uGDKr3DykrRt1g3TtflfMlnl/exec";
 
 
 ;
@@ -10086,6 +10086,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       const cfg = await config();
       if (cfg.status !== 'success' || !cfg.activo || !cfg.web || !cfg.vapid) { aviso('Los avisos al celular todavía no están habilitados en este sistema.', true); return; }
+      for (const k of ['apiKey', 'projectId', 'messagingSenderId', 'appId']) if (!cfg.web[k]) { aviso('Falta «' + k + '» en la configuración de Firebase del servidor (propiedad FCM_WEB). Versión del servidor: ' + (cfg.version || 'anterior a v44: publique una NUEVA VERSIÓN de la implementación') + '.', true); return; }
       if (!window.aresPushAdapter) {
         const p = await Notification.requestPermission();
         if (p !== 'granted') { aviso(p === 'denied' ? 'Los avisos están bloqueados en este navegador. Habilítelos en la configuración del sitio y vuelva a intentar.' : 'No se activaron los avisos.', true); return; }
