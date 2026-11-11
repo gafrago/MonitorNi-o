@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycby-pc-AyqCvuCodraGSk-XCR7TYijX5J1gl-rSSN6bhE9Kk0dleREEtAS_CJQNOrKGw9Q/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbytx-JQLvOlp6vo1G04Aue1VFMYmncxZoKNs_HK_ypSYk6Df-uBZRAVdqBQgWt_hw3KCg/exec";
 
 
 ;
@@ -3101,7 +3101,8 @@ window.addEventListener('DOMContentLoaded', () => {
       var m = document.createElement('meta'); m.httpEquiv = 'Content-Security-Policy';
       m.content = "object-src 'none'; base-uri 'none'; form-action 'none'; "
         + "connect-src 'self' https://script.google.com https://script.googleusercontent.com https://api.open-meteo.com https://flood-api.open-meteo.com https://router.project-osrm.org "
-        + "https://photon.komoot.io https://apis.datos.gob.ar https://overpass-api.de https://api.rainviewer.com https://tilecache.rainviewer.com https://gibs.earthdata.nasa.gov https://earthquake.usgs.gov https://*.tile.openstreetmap.org;";
+        + "https://photon.komoot.io https://apis.datos.gob.ar https://overpass-api.de https://api.rainviewer.com https://tilecache.rainviewer.com https://gibs.earthdata.nasa.gov https://earthquake.usgs.gov https://*.tile.openstreetmap.org "
+        + "https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com https://fcm.googleapis.com;";
       document.head.appendChild(m);
     }
   } catch (e) {}
@@ -10017,5 +10018,144 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE TEMA ===== -->
+<!-- ===== INICIO BLOQUE PUSH: avisos al celular (Firebase Cloud Messaging) — pegar DESPUES de bloque-tema y bloque-pwa-movil ===== -->
+<style>
+  #push-aviso { position: fixed; z-index: 2147483300; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: min(92vw, 460px); background: #111a2e; color: #e2e8f0; border: 1px solid #3b82f6; border-radius: 10px; padding: 10px 14px; font: 600 13px/1.4 system-ui, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.55); }
+  #push-aviso.error { border-color: #dc2626; }
+  .push-estado { display: block; font-size: 11px; font-weight: 500; opacity: .75; }
+  #btn-push .push-punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #64748b; margin-right: 2px; }
+  #btn-push.on .push-punto { background: #4ade80; }
+</style>
+<script>
+/* A.R.E.S.: avisos al celular.
+   El servidor manda una notificacion GENERICA ("Mensaje nuevo: abra la aplicacion"); el texto nunca sale de la app.
+   Se activa por dispositivo y por persona desde el menu de usuario. Al cerrar sesion el dispositivo deja de recibir avisos de esa persona. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const SDK = ['https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js', 'https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js'];
+  const K_TOK = 'ares_push_tok', K_USR = 'ares_push_user';
+  let activo = false, ocupado = false, cfgCache = null;
+
+  const logueado = () => { try { return !!(sesionActiva && sesionActiva.autenticado); } catch (_) { return false; } };
+  const miEmail = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  const lee = k => { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } };
+  const guarda = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (_) { /* sin acceso */ } };
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  const instalada = () => !!(window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
+  const soportado = () => ('Notification' in window) && ('serviceWorker' in navigator) && ('PushManager' in window);
+
+  async function api(accion, extra) {
+    const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+    if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+    return r;
+  }
+  function aviso(txt, error) {
+    let a = $('push-aviso'); if (a) a.remove();
+    a = document.createElement('div'); a.id = 'push-aviso'; a.setAttribute('role', 'status'); a.className = error ? 'error' : ''; a.textContent = txt;   // solo textContent
+    document.body.appendChild(a); setTimeout(() => { if (a.parentNode) a.remove(); }, 7000);
+  }
+  function cargarScript(src) { return new Promise((ok, mal) => { if ([...document.scripts].some(s => s.src === src)) return ok(); const s = document.createElement('script'); s.src = src; s.onload = () => ok(); s.onerror = () => mal(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); }); }
+
+  /* Adaptador sobre Firebase (se puede reemplazar en pruebas con window.aresPushAdapter) */
+  const Real = {
+    async token(cfg) {
+      for (const s of SDK) await cargarScript(s);
+      if (!firebase.apps.length) firebase.initializeApp(cfg.web);
+      const reg = await navigator.serviceWorker.ready;
+      return firebase.messaging().getToken({ vapidKey: cfg.vapid, serviceWorkerRegistration: reg });
+    },
+    async borrar() { try { if (window.firebase && firebase.apps.length) await firebase.messaging().deleteToken(); } catch (_) { /* ya no estaba */ } }
+  };
+  const AD = () => window.aresPushAdapter || Real;
+
+  async function config() { if (cfgCache) return cfgCache; const r = await api('MSG_PUSH_CONFIG'); if (r.status === 'success') cfgCache = r; return r; }
+
+  async function activar() {
+    if (ocupado) return; ocupado = true; pintar();
+    try {
+      if (!window.aresPushAdapter) {
+        if (esIOS && !instalada()) { aviso('En iPhone primero instale la app: Compartir → «Agregar a inicio». Luego abra A.R.E.S. desde el ícono y active los avisos.', true); return; }
+        if (!soportado()) { aviso('Este navegador no admite avisos. Pruebe con Chrome o Edge actualizados.', true); return; }
+      }
+      const cfg = await config();
+      if (cfg.status !== 'success' || !cfg.activo || !cfg.web || !cfg.vapid) { aviso('Los avisos al celular todavía no están habilitados en este sistema.', true); return; }
+      if (!window.aresPushAdapter) {
+        const p = await Notification.requestPermission();
+        if (p !== 'granted') { aviso(p === 'denied' ? 'Los avisos están bloqueados en este navegador. Habilítelos en la configuración del sitio y vuelva a intentar.' : 'No se activaron los avisos.', true); return; }
+      }
+      const tok = await AD().token(cfg);
+      if (!tok) { aviso('No se pudo obtener el dispositivo. Intente de nuevo.', true); return; }
+      const r = await api('MSG_PUSH_REG', { token: tok, agente: (navigator.userAgent.match(/(Chrome|Firefox|Edg|Safari)\/[\d.]+/) || ['navegador'])[0] + (/Android/i.test(navigator.userAgent) ? ' Android' : (esIOS ? ' iOS' : '')) });
+      if (r.status !== 'success') { aviso(r.message || 'No se pudo activar.', true); return; }
+      guarda(K_TOK, tok); guarda(K_USR, miEmail()); activo = true;
+      aviso('Listo: este dispositivo recibirá un aviso cuando llegue un mensaje.');
+    } catch (e) { if (String(e && e.message) !== 'sesion') aviso('No se pudo activar los avisos: ' + String((e && e.message) || e).slice(0, 100), true); }
+    finally { ocupado = false; pintar(); }
+  }
+  async function desactivar() {
+    if (ocupado) return; ocupado = true; pintar();
+    try { const t = lee(K_TOK); if (t) await api('MSG_PUSH_BAJA', { token: t }); if (AD().borrar) await AD().borrar(); } catch (_) { /* si falla la red, queda para la baja automatica */ }
+    guarda(K_TOK, ''); guarda(K_USR, ''); activo = false; ocupado = false; pintar(); aviso('Avisos desactivados en este dispositivo.');
+  }
+  async function probar() {
+    try { const r = await api('MSG_PUSH_PROBAR'); aviso(r.status === 'success' ? 'Enviada. En unos segundos debería llegarle la notificación.' : (r.message || 'No se pudo probar.'), r.status !== 'success'); }
+    catch (e) { if (String(e && e.message) !== 'sesion') aviso('No se pudo enviar la prueba.', true); }
+  }
+
+  /* Al ingresar: renueva el dispositivo propio, o suelta el de otra persona que usaba este mismo equipo */
+  let revisado = '';
+  async function alIngresar() {
+    const em = miEmail(); if (!em || revisado === em) return; revisado = em;
+    const t = lee(K_TOK), due = lee(K_USR);
+    if (!t) { activo = false; pintar(); return; }
+    try {
+      if (due !== em) { await api('MSG_PUSH_BAJA', { token: t }); guarda(K_TOK, ''); guarda(K_USR, ''); activo = false; pintar(); return; }
+      activo = true; pintar();
+      if (window.aresPushAdapter || (soportado() && Notification.permission === 'granted')) {
+        const cfg = await config(); if (cfg.status === 'success' && cfg.activo && cfg.web) {
+          const n = await AD().token(cfg); if (n && n !== t) { const r = await api('MSG_PUSH_REG', { token: n }); if (r.status === 'success') guarda(K_TOK, n); }
+          else if (n) await api('MSG_PUSH_REG', { token: n });                    // vuelve a quedar a su nombre si otra persona lo tomo
+        }
+      }
+    } catch (_) { /* sin red: se reintenta en el proximo ingreso */ }
+  }
+  /* Al cerrar sesion el telefono deja de recibir los avisos de esa persona */
+  const salirOriginal = window.cerrarSesionCOP;
+  if (typeof salirOriginal === 'function') {
+    window.cerrarSesionCOP = function () {
+      const t = lee(K_TOK);
+      if (t && logueado()) {
+        try { fetch(COP_API_URL, { method: 'POST', keepalive: true, body: JSON.stringify({ action: 'MSG_PUSH_BAJA', email: sesionActiva.email, pin: sesionActiva.pin, token: t }) }); } catch (_) { /* nada */ }
+        guarda(K_TOK, ''); guarda(K_USR, '');
+      }
+      return salirOriginal.apply(this, arguments);
+    };
+  }
+
+  /* Botones en el menu de usuario */
+  function mk(id, txt, fn) { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); b.textContent = txt; return b; }
+  function pintar() {
+    const b = $('btn-push'); if (!b) return;
+    b.classList.toggle('on', activo); b.disabled = ocupado;
+    b.textContent = ''; const p = document.createElement('span'); p.className = 'push-punto'; b.appendChild(p);
+    const t = document.createElement('span'); t.textContent = activo ? ' Avisos al celular: activados' : ' Activar avisos en este dispositivo'; b.appendChild(t);
+    b.title = activo ? 'Tocar para desactivar los avisos en este dispositivo' : 'Recibir una notificación en el celular cuando llegue un mensaje';
+    const pr = $('btn-push-probar'); if (pr) pr.style.display = activo ? '' : 'none';
+  }
+  function armar() {
+    if (!logueado()) return;
+    const panel = $('ares-user-panel') || null;
+    if (!panel || $('btn-push')) { alIngresar(); return; }
+    const b = mk('btn-push', '', () => (activo ? desactivar() : activar())), pr = mk('btn-push-probar', 'Enviar aviso de prueba', probar);
+    const salir = panel.querySelector('.t-salir');
+    panel.insertBefore(b, salir || null); panel.insertBefore(pr, salir || null);
+    pintar(); alIngresar();
+  }
+  setInterval(armar, 700);
+  window.aresPush = { activar: activar, desactivar: desactivar, probar: probar, activo: () => activo };
+})();
+</script>
+<!-- ===== FIN BLOQUE PUSH ===== -->
 </body>
 </html>
