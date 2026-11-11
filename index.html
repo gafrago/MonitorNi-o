@@ -3557,6 +3557,7 @@ window.addEventListener('DOMContentLoaded', () => {
 <!-- ===== INICIO BLOQUE MODULOS: pegar ULTIMO (despues del bloque de teatros), antes de </body> ===== -->
 <style id="mod-css">
   body.mod-no-hidrico #panel-rios, body.mod-no-hidrico #panel-auto-inundaciones, body.mod-no-hidrico .mod-h { display: none !important; }
+  body #rios-panel .rios-visible { display: block !important; }
   body.mod-no-meteo .mod-m { display: none !important; }
   body.mod-no-juris .mod-j { display: none !important; }
   .torm-ico { display:flex; align-items:center; justify-content:center; border-radius:50%; border:2px solid #fff; color:#fff; font-weight:bold; box-shadow:0 0 6px rgba(0,0,0,.6); }
@@ -6701,7 +6702,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const pdf = $('input-pdf-pna'), dPdf = pdf && pdf.closest('details'), form = document.querySelector('form[onsubmit*="cargarNivelManual"]'), dMan = form && form.closest('details');
     if (!dPdf || !dMan) return;                    // todavia no esta la pantalla armada: se reintenta
     armarPanel();
-    dPdf.open = true; dMan.open = true; panel.appendChild(dPdf); panel.appendChild(dMan);
+    dPdf.open = true; dMan.open = true;
+    [dPdf, dMan].forEach(x => { x.classList.remove('mod-h', 'solo-autenticado'); x.classList.add('rios-visible'); x.style.display = 'block'; });
+    panel.appendChild(dPdf); panel.appendChild(dMan);
     /* mancha de inundacion (solo .geojson) */
     const d = el('details'); d.className = 'form-panel'; d.open = true; d.style.borderLeftColor = '#dc2626';
     d.appendChild(el('summary', '', '🌊🟥 Mancha de inundación (.geojson)'));
