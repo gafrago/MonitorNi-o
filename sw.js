@@ -1,8 +1,9 @@
 /* A.R.E.S. C4I - Service Worker (solo lectura sin conexion)
    Guarda: la aplicacion, las librerias, los niveles de rios (datos publicos) y los mosaicos de mapa ya vistos.
    NO guarda: unidades, personal, misiones, aeronaves ni ninguna respuesta con sesion (eso solo viaja por POST y jamas se almacena).
-   Al cambiar la aplicacion, subir VERSION para que los celulares se actualicen. */
-const VERSION = 'ares-v2';
+   Al cambiar la aplicacion, subir VERSION para que los celulares se actualicen.
+   AVISOS PUSH: recibe el aviso generico que manda el servidor (sin el texto del mensaje) y lo muestra; al tocarlo abre la aplicacion. */
+const VERSION = 'ares-v3';
 const CACHE_APP = VERSION + '-app', CACHE_LIB = VERSION + '-lib', CACHE_TILES = VERSION + '-tiles', CACHE_RIOS = VERSION + '-rios';
 const PRECARGA = ['./', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 const MAX_TILES = 400;
@@ -51,4 +52,22 @@ self.addEventListener('fetch', e => {
   if (/tile\.openstreetmap\.org$|basemaps\.cartocdn\.com$/.test(u.hostname)) { e.respondWith(revalidar(req, CACHE_TILES, MAX_TILES)); return; }
   if (/tilecache\.rainviewer\.com$|gibs\.earthdata\.nasa\.gov$/.test(u.hostname)) { e.respondWith(red_primero(req, CACHE_TILES)); return; }
   // pronosticos, ruteo, busqueda de direcciones, etc.: siempre en linea (un dato viejo de clima engaña)
+});
+
+/* ---------- Avisos push (Firebase Cloud Messaging) ---------- */
+self.addEventListener('push', e => {
+  let d = {};
+  try { const j = e.data ? e.data.json() : {}; d = j.data || j.notification || j || {}; } catch (_) { d = {}; }
+  const urg = d.urgente === '1', titulo = d.titulo || d.title || 'A.R.E.S. C4I', cuerpo = d.cuerpo || d.body || 'Hay novedades: abra la aplicación.';
+  e.waitUntil(self.registration.showNotification(titulo, {
+    body: cuerpo, icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag || 'ares-msg', renotify: true,
+    requireInteraction: urg, vibrate: urg ? [250, 120, 250, 120, 250] : [120], data: { url: './' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(l => {
+    for (const c of l) if ('focus' in c) return c.focus();
+    return self.clients.openWindow('./');
+  }));
 });
