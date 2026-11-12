@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbylaNYuAkOzVQc1yrk14XCueliLaxfO8ALtePSJlGYQ3onuXBIbQuZfIAHk_IIgqAm8cg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwDYKYVZkzZz9J43n8E_uky7Kx2erqIk9yvK0TtzCnIHKVuiPOu7B_Vk4lLt5_d47E6TA/exec";
 
 
 ;
@@ -8613,6 +8613,7 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'MOV': return n(e.u) + ' avanza ' + km(e.a, e.b).toFixed(1) + ' km' + (e.ll ? ' y llega a destino' : '');
       case 'FUEGO': return n(e.a) + ' dispara a ' + n(e.d) + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano;
       case 'BAJA': return n(e.u) + ': fuerza ' + e.antes + ' → ' + e.despues;
+      case 'ENTORNO': return n(e.u) + ' — ' + e.x;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
       case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
       case 'CARGA': return n(e.u) + (e.modo === 'CARGAR' ? ' carga de ' : ' descarga en ') + n(e.o) + ': ' + recTxt(e);
@@ -8811,7 +8812,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
@@ -9668,6 +9669,21 @@ window.addEventListener('DOMContentLoaded', () => {
     const g = el('div', 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px'); const m = sel([['ESTANDAR', 'Modo estándar'], ['DECISION', 'Modo decisión (el control conduce al AZUL)']], X.modo, 260); m.onchange = () => { X.modo = m.value; mk(); }; g.appendChild(m);
     const nb = el('label'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!X.niebla.on; ck.onchange = () => { X.niebla.on = ck.checked; mk(); }; nb.appendChild(ck); nb.appendChild(document.createTextNode(' niebla de guerra, radio (km) ')); const nr = inp('number', X.niebla.radio, 56); nr.onchange = () => { X.niebla.radio = Number(nr.value); mk(); }; nb.appendChild(nr); g.appendChild(nb);
     const tl = el('label'); tl.appendChild(document.createTextNode('tiempo límite por turno (s, 0 = sin) ')); const ti = inp('number', X.tlim, 60); ti.onchange = () => { X.tlim = Number(ti.value); mk(); }; tl.appendChild(ti); g.appendChild(tl); c.appendChild(g);
+    c.appendChild(L('Entorno real (agua y clima)'));
+    { const en = d.entorno, bx = el('div', 'font-size:12px;border:1px solid #334155;border-radius:6px;padding:7px 9px;background:#0f172a');
+      if (en) {
+        bx.appendChild(el('div', 'font-weight:bold;color:#86efac', '✔ Entorno real activo (copiado el ' + new Date(en.ts).toLocaleString('es-AR') + ')'));
+        bx.appendChild(el('div', 'margin-top:3px', '🌊 Agua: ' + (en.agua.length ? en.agua.join(' · ') : 'ninguna') + ' — las fuerzas terrestres avanzan a un cuarto de su velocidad dentro de la zona anegada.'));
+        bx.appendChild(el('div', 'margin-top:3px', '⛈ Clima: ' + (en.clima.length ? en.clima.join(' · ') : 'ninguno') + ' — reduce velocidad, puntería y detección según el fenómeno y su severidad.'));
+        if (en.omitidas) bx.appendChild(el('div', 'margin-top:3px;color:#fbbf24', 'Hay ' + en.omitidas + ' zona(s) más que no entraron (se usan las más grandes y graves).'));
+      } else bx.appendChild(el('div', 'color:#94a3b8', 'Sin entorno: las unidades se mueven en línea recta y sin clima. Puede copiar las manchas de agua y las áreas meteorológicas que publicó el Meteorólogo.'));
+      const bb = el('div', 'margin-top:6px;display:flex;gap:6px;flex-wrap:wrap');
+      const cambiar = async (op, ok) => { const r = await api('SIM_ENTORNO', { id: ejId, op: op }); if (r.status === 'success') { aviso(ok, true); refrescar(true); } else aviso('⚠ ' + r.message, false); };
+      const b1 = btn(en ? '🔄 Actualizar con el entorno de ahora' : '🌦 Copiar el entorno actual', '#0369a1', () => { cambiar('CAPTURAR', 'Entorno copiado: se usa en todas las corridas y en el planificador.'); });
+      bb.appendChild(b1); if (en) bb.appendChild(btn('✕ Quitar', '#7f1d1d', () => { cambiar('QUITAR', 'Entorno quitado.'); }));
+      if (d.turno > 0) { b1.disabled = true; b1.style.opacity = '0.5'; bb.appendChild(el('span', 'font-size:11px;color:#fbbf24;align-self:center', 'Solo en el turno 0: reinicie para cambiarlo.')); }
+      bx.appendChild(bb); c.appendChild(bx);
+      c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:3px', 'Es una copia: el ejercicio se repite igual aunque el Meteorólogo cambie sus áreas después. Efectos ajustables en el servidor (SIM_ENT_).')); }
     c.appendChild(L('Doctrina del rojo (reglas automáticas)'));
     const rj = rojos(); if (!rj.length) c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'No hay fuerzas ROJO en el ejercicio.'));
     rj.forEach(u => { const cf = X.ia[u.id] || null; const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); f.appendChild(el('span', 'min-width:90px;font-weight:bold', u.n));
