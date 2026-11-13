@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwDYKYVZkzZz9J43n8E_uky7Kx2erqIk9yvK0TtzCnIHKVuiPOu7B_Vk4lLt5_d47E6TA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxPLjF3RYyYO_z9ACkEkTdYM8b4qNSVfPuu6xqglyo5PccIlietwCCVsHqDPqnr42G35w/exec";
 
 
 ;
@@ -4509,6 +4509,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!activa() || document.hidden) return;
     try {
       const r = await api('MSG_ESTADO'); if (r.status !== 'success') return;
+      if (r.rol && sesionActiva && sesionActiva.rol && String(r.rol).toLowerCase() !== String(sesionActiva.rol).toLowerCase()) {   // el Jefe le cambio el rol: se reinicia la sesion para que la pantalla se arme con el rol nuevo
+        const cartel = el('div', 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:2147483600;background:#b45309;color:#fff;padding:10px 16px;border-radius:8px;font:bold 13px sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.5);max-width:92vw', 'Su rol cambió a ' + r.rol + '. Se reinicia la sesión: vuelva a entrar.'); document.body.appendChild(cartel);
+        if (timer) { clearInterval(timer); timer = null; } setTimeout(() => { try { location.reload(); } catch (_) { /* nada */ } }, 2500); return;
+      }
       estado = { n: r.n || 0, u: r.u || 0 };
       if (estado.n > ultimoN && !panel) aviso(estado.u ? '🔴 Tiene un mensaje URGENTE sin leer' : '✉️ Tiene ' + estado.n + ' mensaje' + (estado.n > 1 ? 's' : '') + ' sin leer', !!estado.u);
       ultimoN = estado.n; pintarBoton();
@@ -8499,8 +8503,12 @@ window.addEventListener('DOMContentLoaded', () => {
       const m = el('div', 'margin-top:8px;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:8px'); m.className = 'cb-cat-form'; const x = k || { dominio: 'TIERRA', categoria: '', nombre: '', simbolo: 'GEN', alcance: '', notas: '', activo: true };
       const dom = campo(m, 'Dominio', 'select', null, i => ['TIERRA', 'AIRE', 'MAR'].forEach(d => { const o = el('option', '', d); o.value = d; i.appendChild(o); })); dom.value = x.dominio;
       const grp = campo(m, 'Grupo (para ordenar)', 'text', x.categoria), nom = campo(m, 'Nombre de la categoría', 'text', x.nombre), sim = campo(m, 'Símbolo', 'select', null, i => SIMBOLOS.forEach(s => { const o = el('option', '', s[1]); o.value = s[0]; i.appendChild(o); })); sim.value = x.simbolo;
-      const alc = campo(m, 'Alcance de referencia en km (opcional)', 'number', x.alcance || ''); const act = campo(m, 'Estado', 'select', null, i => [['SI', 'Activa'], ['NO', 'Inactiva']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); })); act.value = x.activo ? 'SI' : 'NO';
-      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
+      const alc = campo(m, 'Alcance de referencia en km (opcional)', 'number', x.alcance || '');
+      const aer = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin-top:6px'); aer.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Datos de la aeronave (solo aire). Con velocidad y radio cargados, la simulación aplica el ciclo de salida: despega de su base, regresa al llegar a la reserva de combustible, aterriza y rearma antes de volver a salir. Sin estos datos se comporta como antes.'));
+      const vel = campo(aer, 'Velocidad de crucero (km/h)', 'number', x.vel || ''), rad = campo(aer, 'Radio de acción (km): distancia máxima de ida desde su base', 'number', x.radio || ''), aut = campo(aer, 'Autonomía total (km) — vacío = 2,5 veces el radio', 'number', x.autonomia || ''), rea = campo(aer, 'Tiempo de rearme y reabastecimiento (horas) — vacío = 2', 'number', x.rearme || '');
+      m.appendChild(aer); const verAer = () => { aer.style.display = dom.value === 'AIRE' ? 'block' : 'none'; }; dom.onchange = verAer; verAer();
+      const act = campo(m, 'Estado', 'select', null, i => [['SI', 'Activa'], ['NO', 'Inactiva']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); })); act.value = x.activo ? 'SI' : 'NO';
+      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, vel: vel.value, radio: rad.value, autonomia: aut.value, rearme: rea.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
     }
   }
   function pintar() {
@@ -8614,6 +8622,7 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'FUEGO': return n(e.a) + ' dispara a ' + n(e.d) + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano;
       case 'BAJA': return n(e.u) + ': fuerza ' + e.antes + ' → ' + e.despues;
       case 'ENTORNO': return n(e.u) + ' — ' + e.x;
+      case 'AIR': return '✈ ' + n(e.u) + ' — ' + e.x;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
       case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
       case 'CARGA': return n(e.u) + (e.modo === 'CARGAR' ? ' carga de ' : ' descarga en ') + n(e.o) + ': ' + recTxt(e);
@@ -8812,7 +8821,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
@@ -10419,8 +10428,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function posU(id, t) {
     const n = R.snaps.length - 1, i = Math.min(n, Math.max(0, Math.floor(t))), fr = Math.min(1, Math.max(0, t - i)), A = R.snaps[i].act[id]; if (!A) return null;
-    const B = (i < n && fr > 0) ? R.snaps[i + 1].act[id] : null; if (!B) return { lat: A.lat, lon: A.lon, f: A.f, e: A.e, s: A.s, cg: A.cg };
-    const C = fr >= 0.5 ? B : A; return { lat: A.lat + (B.lat - A.lat) * fr, lon: A.lon + (B.lon - A.lon) * fr, f: C.f, e: C.e, s: C.s, cg: C.cg };
+    const B = (i < n && fr > 0) ? R.snaps[i + 1].act[id] : null; if (!B) return { lat: A.lat, lon: A.lon, f: A.f, e: A.e, s: A.s, cg: A.cg, ms: A.ms, rt: A.rt, sal: A.sal };
+    const C = fr >= 0.5 ? B : A; return { lat: A.lat + (B.lat - A.lat) * fr, lon: A.lon + (B.lon - A.lon) * fr, f: C.f, e: C.e, s: C.s, cg: C.cg, ms: C.ms, rt: C.rt, sal: C.sal };
   }
   const vivoE = p => p.f > 0.0001 && (p.e === 'OPERATIVO' || p.e === 'DEGRADADO');
   function limpiar() { const M = mapa(); if (M) [grupo, fuego].forEach(g => { if (g && M.hasLayer(g)) M.removeLayer(g); }); grupo = fuego = null; mk = {}; ic = {}; tr = {}; ci = {}; trI = -1; trB = {}; }
@@ -10443,7 +10452,7 @@ window.addEventListener('DOMContentLoaded', () => {
     fuego.clearLayers(); if (fr >= 0.3 || tau >= R.snaps.length - 1) { const tt = fr >= 0.3 && tau < R.snaps.length - 1 ? i + 1 : i; R.eventos.forEach(e => { if (e.t !== 'FUEGO' || e.turno !== tt || tt < 1) return; const a = posU(e.a, tau), d = posU(e.d, tau); if (a && d) fuego.addLayer(L.polyline([[a.lat, a.lon], [d.lat, d.lon]], { color: '#ef4444', weight: 2, dashArray: '6 4', interactive: false })); }); }
     pintarReloj();
   }
-  function popup(u) { const p = posU(u.id, tau) || {}, d = el('div', 'font-size:12px'); d.appendChild(el('b', '', u.n)); d.appendChild(el('div', '', (u.af || '') + ' · ' + (u.c || '') + ' · ' + String(u.d || '').toLowerCase())); d.appendChild(el('div', '', 'Fuerza ' + Math.ceil(p.f || 0) + ' de ' + u.q)); if (p.s) d.appendChild(el('div', '', 'Munición ' + Math.round(p.s.m) + '% · Combustible ' + Math.round(p.s.c) + '% · Víveres ' + Math.round(p.s.v) + '%')); return d; }
+  function popup(u) { const p = posU(u.id, tau) || {}, d = el('div', 'font-size:12px'); d.appendChild(el('b', '', u.n)); d.appendChild(el('div', '', (u.af || '') + ' · ' + (u.c || '') + ' · ' + String(u.d || '').toLowerCase())); d.appendChild(el('div', '', 'Fuerza ' + Math.ceil(p.f || 0) + ' de ' + u.q)); if (p.s) d.appendChild(el('div', '', 'Munición ' + Math.round(p.s.m) + '% · Combustible ' + Math.round(p.s.c) + '% · Víveres ' + Math.round(p.s.v) + '%')); if (p.ms) d.appendChild(el('div', 'font-weight:bold;color:#7dd3fc', '✈ ' + ({ B: 'En su base, lista para salir', V: 'En vuelo', R: 'Regresando a su base', T: 'En tierra rearmando (' + (p.rt || 0) + ' turno(s))' }[p.ms] || '') + (p.sal ? ' · salidas: ' + p.sal : ''))); return d; }
   const horas = t => { const m = Math.round(t * (R ? R.turnoMin : 60)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60; return (d ? 'día ' + (d + 1) + ' · ' : '') + 'H+' + String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); };
   function pintarReloj() {
     if (!bar || !R) return; const n = R.snaps.length - 1, r = bar.querySelector('.tr-reloj'), s = bar.querySelector('input[type=range]');
