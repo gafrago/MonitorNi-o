@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwjbQuYczICiLYsayKvj_qf9362wpV-o1GKuSzqe-hKWRFEoTDfwgT6Qhc5Adk4F3sM9Q/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyeZG4y1E-tnEEmG0cCVNp1LSWPDM8LUiuBU6jdNXvWeqyTix_ayRyto0emr2xw3IxCbA/exec";
 
 
 ;
@@ -8571,7 +8571,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const EST = { OPERATIVO: 'operativo', DEGRADADO: 'degradado', NO_OPERATIVO: 'fuera de combate', INACTIVO: 'inactivo' };
   let lista = null, ejId = '', ej = null, base = [], act = {}, ord = {}, ver = '', rep = null, panel = null, tab = 'ejercicios', sel = '', modoClic = false, ocupado = false, ultimo = '';
   let capa = null, capaLin = null, repIdx = 0, repTimer = null, ocultarReal = true, verAlc = true, ultimosEventos = [];
-  let bas = [], fB = { n: '', af: 'AZUL', lat: '', lon: '', cap: '', rad: '', dep: '', rep: '' };   // bases aereas del ejercicio y borrador del formulario
+  let bas = [], fB = { n: '', af: 'AZUL', lat: '', lon: '', cap: '', rad: '', dep: '', rep: '', reab: '' };   // bases aereas del ejercicio y borrador del formulario
   const puede = () => !!((ej && ej.puedeConducir) || (lista && lista.puedeConducir));
 
   async function api(a, extra) {
@@ -8599,7 +8599,7 @@ window.addEventListener('DOMContentLoaded', () => {
     return L.divIcon({ className: 'sm-div', html: w, iconSize: [34, 34], iconAnchor: [17, 17] });
   }
   function limpiarMapa() { const M = mapa(); if (M) { [capa, capaLin].forEach(c => { if (c && M.hasLayer(c)) M.removeLayer(c); }); } capa = capaLin = null; }
-  function dibujar(snapAct, lineas) {
+  function dibujar(snapAct, lineas, basOv) {
     const M = mapa(); if (!M || !base.length) return; limpiarMapa(); capa = L.layerGroup(); capaLin = L.layerGroup();
     unidades(snapAct).forEach(u => { if (!isFinite(u.lat) || !isFinite(u.lon)) return;
       const m = L.marker([u.lat, u.lon], { icon: iconoDe(u), zIndexOffset: 700, keyboard: false }); m.on('click', () => { sel = u.id; if (panel) pintar(); dibujar(snapAct, lineas); });
@@ -8608,7 +8608,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (verAlc && u.al > 0 && vivo(u)) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: u.al * 1000, color: (COL[u.af] || COL.DESCONOCIDO)[0], weight: 1.5, dashArray: '8 6', fillOpacity: .04, interactive: false }));
       if (verAlc && u.s === 'LOG' && vivo(u) && ej && ej.params) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: ej.params.radioReab * 1000, color: '#10b981', weight: 1.5, dashArray: '2 4', fillOpacity: .05, interactive: false }));
       const o = !snapAct && ord[u.id]; if (o) capaLin.addLayer(L.polyline([[u.lat, u.lon], [o.lat, o.lon]], { color: '#facc15', weight: 2, dashArray: '4 6', interactive: false })); });
-    bas.forEach(b => { const ok = b.pi >= 30, col = b.af === 'AZUL' ? '#0369a1' : '#b91c1c', w = el('div', 'width:30px;height:30px;border-radius:50%;background:#0f172a;border:3px solid ' + (ok ? col : '#f59e0b') + ';color:#fff;font-size:16px;line-height:24px;text-align:center', '🛫');
+    (basOv || bas).forEach(b => { const ok = b.pi >= 30, col = b.af === 'AZUL' ? '#0369a1' : '#b91c1c', w = el('div', 'width:30px;height:30px;border-radius:50%;background:#0f172a;border:3px solid ' + (ok ? col : '#f59e0b') + ';color:#fff;font-size:16px;line-height:24px;text-align:center', '🛫');
       const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: 'sm-div', html: w, iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 600, keyboard: false });
       m.bindPopup(() => { const d = el('div', 'font-size:12px'); d.appendChild(el('b', '', b.n)); d.appendChild(el('div', '', (b.af === 'AZUL' ? 'Azul' : 'Rojo') + ' · pista ' + Math.round(b.pi) + ' %' + (ok ? '' : ' — INOPERATIVA'))); d.appendChild(el('div', '', 'Depósito ' + Math.round(b.dp) + ' · capacidad ' + b.cap + ' mov./turno')); return d; }); capa.addLayer(m);
       if (verAlc) capaLin.addLayer(L.circle([b.lat, b.lon], { radius: b.rad * 1000, color: ok ? col : '#f59e0b', weight: 1.5, dashArray: '3 5', fillOpacity: .06, interactive: false })); });
@@ -8658,7 +8658,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (tab !== 'replay') dibujar(); if (panel && !(tab === 'params' && panel.querySelector('input:focus'))) pintar();
     } catch (_) { /* se reintenta */ } finally { ocupado = false; }
   }
-  async function cargarRep() { if (!ejId) return null; const r = await api('SIM_REPLAY', { id: ejId }); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); return null; } rep = { turno: r.ejercicio.turno, snaps: r.snapshots, eventos: r.eventos, base: r.base }; return rep; }
+  async function cargarRep() { if (!ejId) return null; const r = await api('SIM_REPLAY', { id: ejId }); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); return null; } rep = { turno: r.ejercicio.turno, snaps: r.snapshots, eventos: r.eventos, base: r.base, bases: r.bases || [] }; return rep; }
   async function accion(a, extra, okMsg, despues) {
     aviso('Procesando…', true); try { const r = await api(a, extra); if (r.status === 'success') { aviso(okMsg || 'Listo.', true); if (despues) despues(r); return r; } aviso('⚠ ' + (r.message || 'No se pudo.'), false); return r; } catch (_) { aviso('⚠ Sin conexión.', false); return null; }
   }
@@ -8774,7 +8774,7 @@ window.addEventListener('DOMContentLoaded', () => {
     bas.forEach(b => { const ok = b.pi >= 30, f = el('div', 'border:1px solid ' + (ok ? '#334155' : '#b45309') + ';border-radius:6px;padding:6px 8px;margin-top:6px;background:#0f172a');
       const h = el('div', 'display:flex;justify-content:space-between;align-items:center;gap:6px'); h.appendChild(el('b', 'color:' + (b.af === 'AZUL' ? '#7dd3fc' : '#fca5a5'), '🛫 ' + b.n)); const kk = btn('Ver', '#334155', () => { const M = mapa(); if (M) M.setView([b.lat, b.lon], Math.max(M.getZoom(), 9)); }); h.appendChild(kk); f.appendChild(h);
       f.appendChild(el('div', 'font-size:12px;margin-top:3px;color:' + (ok ? '#86efac' : '#fbbf24'), 'Pista ' + Math.round(b.pi) + ' %' + (ok ? '' : ' — INOPERATIVA (opera desde 30 %)') + ' · reparación ' + b.rep + ' %/turno'));
-      f.appendChild(el('div', 'font-size:12px;color:#cbd5e1', 'Depósito ' + Math.round(b.dp) + ' de ' + b.dep + ' (1 por aeronave rearmada) · capacidad ' + b.cap + ' mov./turno · radio ' + b.rad + ' km'));
+      f.appendChild(el('div', 'font-size:12px;color:#cbd5e1', 'Depósito ' + Math.round(b.dp) + ' de ' + b.dep + ' (1 por aeronave rearmada; repone ' + (b.reab || 0) + '/turno) · capacidad ' + b.cap + ' mov./turno · radio ' + b.rad + ' km'));
       const ac = base.filter(u => u.ap && act[u.id] && act[u.id].bi === b.id); if (ac.length) f.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Aeronaves: ' + ac.map(u => u.n + ' (' + ({ B: 'lista', T: 'rearmando', V: 'en vuelo', R: 'regresando' }[act[u.id].ms] || '—') + ')').join(', ')));
       if (cond && t0) f.appendChild(btn('Quitar', '#991b1b', () => { accion('SIM_BASES', { id: ejId, op: 'QUITAR', baseId: b.id }, 'Base quitada.', () => refrescar(true)); }));
       c.appendChild(f); });
@@ -8782,13 +8782,13 @@ window.addEventListener('DOMContentLoaded', () => {
     c.appendChild(el('div', 'margin-top:10px;font-weight:bold;font-size:12.5px', 'Nueva base'));
     const [ln, inN] = campo('Nombre', 'text', fB.n); inN.maxLength = 40; const [la, sa] = campo('Bando', 'select'); ['AZUL', 'ROJO'].forEach(v => { const o = el('option', '', v === 'AZUL' ? 'Azul (propio)' : 'Rojo (enemigo)'); o.value = v; sa.appendChild(o); }); sa.value = fB.af;
     const [lla, inLa] = campo('Latitud', 'number', fB.lat), [llo, inLo] = campo('Longitud', 'number', fB.lon); inLa.step = inLo.step = 'any';
-    const [lc, inC] = campo('Capacidad de pista (movimientos por turno, 1 a 20; vacío = 4)', 'number', fB.cap), [lr, inR] = campo('Radio de la base (km, 0,5 a 20; vacío = 3)', 'number', fB.rad), [ld, inD] = campo('Depósito inicial (aeronaves a rearmar, 0 a 500; vacío = 20)', 'number', fB.dep), [lp, inP] = campo('Reparación de pista (% por turno, 0 a 100; vacío = 15)', 'number', fB.rep);
-    const g = () => { fB = { n: inN.value, af: sa.value, lat: inLa.value, lon: inLo.value, cap: inC.value, rad: inR.value, dep: inD.value, rep: inP.value }; };
-    [inN, sa, inLa, inLo, inC, inR, inD, inP].forEach(i => { i.oninput = i.onchange = g; });
-    [ln, la, lla, llo, lc, lr, ld, lp].forEach(x => c.appendChild(x));
+    const [lc, inC] = campo('Capacidad de pista (movimientos por turno, 1 a 20; vacío = 4)', 'number', fB.cap), [lr, inR] = campo('Radio de la base (km, 0,5 a 20; vacío = 3)', 'number', fB.rad), [ld, inD] = campo('Depósito inicial (aeronaves a rearmar, 0 a 500; vacío = 20)', 'number', fB.dep), [lp, inP] = campo('Reparación de pista (% por turno, 0 a 100; vacío = 15)', 'number', fB.rep), [lb, inB] = campo('Reposición del depósito (por turno, 0 a 100; vacío = 2)', 'number', fB.reab);
+    const g = () => { fB = { n: inN.value, af: sa.value, lat: inLa.value, lon: inLo.value, cap: inC.value, rad: inR.value, dep: inD.value, rep: inP.value, reab: inB.value }; };
+    [inN, sa, inLa, inLo, inC, inR, inD, inP, inB].forEach(i => { i.oninput = i.onchange = g; });
+    [ln, la, lla, llo, lc, lr, ld, lp, lb].forEach(x => c.appendChild(x));
     c.appendChild(btn('📍 Elegir la posición en el mapa', '#1d4ed8', () => { const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); g(); aviso('Haga clic en el mapa para ubicar la base.', true); M.once('click', ev => { fB.lat = String(Math.round(ev.latlng.lat * 1e5) / 1e5); fB.lon = String(Math.round(ev.latlng.lng * 1e5) / 1e5); aviso('', true); pintar(); }); }));
     c.appendChild(btn('Guardar base', '#15803d', () => { g(); if (!fB.n.trim()) return aviso('⚠ Falta el nombre.', false); if (fB.lat === '' || fB.lon === '') return aviso('⚠ Falta la posición.', false);
-      accion('SIM_BASES', { id: ejId, op: 'GUARDAR', base: { n: fB.n.trim(), af: fB.af, lat: Number(fB.lat), lon: Number(fB.lon), cap: fB.cap, rad: fB.rad, dep: fB.dep, rep: fB.rep } }, 'Base guardada.', () => { fB = { n: '', af: fB.af, lat: '', lon: '', cap: '', rad: '', dep: '', rep: '' }; refrescar(true); }); }));
+      accion('SIM_BASES', { id: ejId, op: 'GUARDAR', base: { n: fB.n.trim(), af: fB.af, lat: Number(fB.lat), lon: Number(fB.lon), cap: fB.cap, rad: fB.rad, dep: fB.dep, rep: fB.rep, reab: fB.reab } }, 'Base guardada.', () => { fB = { n: '', af: fB.af, lat: '', lon: '', cap: '', rad: '', dep: '', rep: '', reab: '' }; refrescar(true); }); }));
   }
   async function tabBitacora(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando bitácora…')); const r = await cargarRep(); if (!r || tab !== 'bitacora') return; return pintar(); }
@@ -8802,7 +8802,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!rep || !rep.snaps.length) return; const s = rep.snaps[Math.max(0, Math.min(repIdx, rep.snaps.length - 1))], lineas = [], pos = id => { const a = (s.act || {})[id]; return a ? [a.lat, a.lon] : null; };
     const prev = repIdx > 0 ? rep.snaps[repIdx - 1].act : null;
     rep.eventos.filter(e => e.turno === s.t).forEach(e => { if (e.t === 'MOV') lineas.push({ p: [e.a, e.b], c: '#38bdf8', w: 3 }); else if (e.t === 'FUEGO') { const a = pos(e.a), d = pos(e.d); if (a && d) lineas.push({ p: [a, d], c: '#ef4444', w: 2, d: '6 4' }); } });
-    dibujar(s.act, lineas);
+    const bT = (rep.bases || []).map(b => { let pi = 100, dp = b.dep; rep.eventos.forEach(e => { if (e.t === 'PISTA' && e.k === 'ESTADO' && e.b === b.id && e.turno <= s.t) { pi = e.pi; dp = e.dp; } }); return Object.assign({}, b, { pi: pi, dp: dp }); });
+    dibujar(s.act, lineas, bT);
   }
   async function tabReplay(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); const r = await cargarRep(); if (!r || tab !== 'replay') return; repIdx = rep.snaps.length - 1; return pintar(); }
