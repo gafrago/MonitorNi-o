@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxPLjF3RYyYO_z9ACkEkTdYM8b4qNSVfPuu6xqglyo5PccIlietwCCVsHqDPqnr42G35w/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzGlEPj-N40z2zAwHuEGeScjNpywasPTH_LmiYoL07X0ZoLQU56ftBH9ZlUwt_St9Sp9Q/exec";
 
 
 ;
@@ -3092,7 +3092,7 @@ window.addEventListener('DOMContentLoaded', () => {
   try { NO_GUARDAR.forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
 
   /* 3) Sin pistas en el login (el formato de correo institucional no se publica) */
-  var em = document.getElementById('login-email'); if (em) { em.placeholder = 'correo institucional'; em.autocomplete = 'off'; }
+  var em = document.getElementById('login-email'); if (em) { em.placeholder = 'usuario o correo'; em.autocomplete = 'off'; }
   var pin = document.getElementById('login-pin'); if (pin) pin.autocomplete = 'off';
 
   /* 4) Politica de contenido: solo se permite conectar con los servicios que la app usa realmente */
@@ -4192,7 +4192,7 @@ window.addEventListener('DOMContentLoaded', () => {
     function formUsuario(pre) {
       const pr = pre && typeof pre.email === 'string' ? pre : null;
       modal(pr ? '🔑 Restablecer la clave de ' + (pr.nombre || pr.email) : '👤 Nuevo usuario', (c, msg, cerrar) => {
-        const em = campo(c, 'Correo (será su usuario)', 'text', 'nombre@correo', pr ? pr.email : '', i => { i.maxLength = 100; i.autocomplete = 'off'; if (pr) i.readOnly = true; });
+        const em = campo(c, 'Usuario: correo o nombre de usuario (3 a 20 letras minúsculas, números, . _ -)', 'text', 'nombre@correo  o  jperez', pr ? pr.email : '', i => { i.maxLength = 100; i.autocomplete = 'off'; if (pr) i.readOnly = true; });
         const nom = campo(c, 'Nombre y rango', 'text', 'Tte. Apellido', pr ? (pr.nombre || '') : '', i => { i.maxLength = 80; });
         const pin = campo(c, 'Clave temporal (4 a 12 letras o números; mejor 8 o más)', 'password', '', '', i => { i.maxLength = 12; i.autocomplete = 'new-password'; });
         c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:8px', 'Es una clave TEMPORAL: el usuario deberá cambiarla en su próximo ingreso y sus sesiones abiertas se cerrarán. No se puede volver a ver. Entréguela por un canal privado.' + (pr ? '' : ' Después asigne el usuario a un teatro desde su tarjeta (botón Accesos).')));
@@ -8212,7 +8212,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function formUsuario(t) {
     modal('👤 Nueva persona en ' + t.id, (c, msg, cerrar) => {
       c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Se crea la cuenta con una clave temporal. La persona debe cambiarla en su primer ingreso. Entregue la clave en mano, nunca por mensaje.'));
-      const nom = campo(c, 'Nombre y rango', 'text', 'Sgto. Pérez'), em = campo(c, 'Correo', 'email', 'nombre@dominio');
+      const nom = campo(c, 'Nombre y rango', 'text', 'Sgto. Pérez'), em = campo(c, 'Usuario: correo o nombre de usuario (ej. jperez)', 'text', 'nombre@dominio  o  jperez');
       const rol = campo(c, 'Rol en este teatro', 'select'); (datos.rolesDisponibles || []).forEach(r => { const o = el('option', '', r); o.value = r; rol.appendChild(o); }); rol.value = 'Operador';
       const pin = campo(c, 'Clave temporal (6 a 12 letras o números)', 'text', '', claveAzar()); pin.style.fontFamily = 'monospace';
       const g = btn('🎲 Otra clave', '#475569', () => { pin.value = claveAzar(); }); g.style.marginTop = '6px'; c.appendChild(g);
@@ -8240,7 +8240,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function formAgregar(t) {
     modal('➕ Agregar a ' + t.id + ' a una persona que ya tiene cuenta', (c, msg, cerrar) => {
       c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Su clave no se toca. Solo se le da acceso a este teatro con el rol que elija.'));
-      const em = campo(c, 'Correo', 'email', 'nombre@dominio'); const rol = campo(c, 'Rol en este teatro', 'select');
+      const em = campo(c, 'Usuario: correo o nombre de usuario (ej. jperez)', 'text', 'nombre@dominio  o  jperez'); const rol = campo(c, 'Rol en este teatro', 'select');
       (datos.rolesDisponibles || []).forEach(r => { const o = el('option', '', r); o.value = r; rol.appendChild(o); }); rol.value = 'Operador';
       botones(c, 'Agregar', async () => { msg.style.color = '#94a3b8'; msg.textContent = 'Guardando…'; resultado(msg, await api('MIEMBRO', { correo: em.value.trim(), teatro: t.id, rol: rol.value }), cerrar); }, cerrar);
     });
