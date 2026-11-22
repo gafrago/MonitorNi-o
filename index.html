@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzgu5Tkon26TCPN18-vlbMw1z1ISOuHEFOFUh0Uxit3CAbs7NZ7hyyqR58vqUVgcsRedw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwjbQuYczICiLYsayKvj_qf9362wpV-o1GKuSzqe-hKWRFEoTDfwgT6Qhc5Adk4F3sM9Q/exec";
 
 
 ;
@@ -8571,6 +8571,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const EST = { OPERATIVO: 'operativo', DEGRADADO: 'degradado', NO_OPERATIVO: 'fuera de combate', INACTIVO: 'inactivo' };
   let lista = null, ejId = '', ej = null, base = [], act = {}, ord = {}, ver = '', rep = null, panel = null, tab = 'ejercicios', sel = '', modoClic = false, ocupado = false, ultimo = '';
   let capa = null, capaLin = null, repIdx = 0, repTimer = null, ocultarReal = true, verAlc = true, ultimosEventos = [];
+  let bas = [], fB = { n: '', af: 'AZUL', lat: '', lon: '', cap: '', rad: '', dep: '', rep: '' };   // bases aereas del ejercicio y borrador del formulario
   const puede = () => !!((ej && ej.puedeConducir) || (lista && lista.puedeConducir));
 
   async function api(a, extra) {
@@ -8607,6 +8608,10 @@ window.addEventListener('DOMContentLoaded', () => {
       if (verAlc && u.al > 0 && vivo(u)) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: u.al * 1000, color: (COL[u.af] || COL.DESCONOCIDO)[0], weight: 1.5, dashArray: '8 6', fillOpacity: .04, interactive: false }));
       if (verAlc && u.s === 'LOG' && vivo(u) && ej && ej.params) capaLin.addLayer(L.circle([u.lat, u.lon], { radius: ej.params.radioReab * 1000, color: '#10b981', weight: 1.5, dashArray: '2 4', fillOpacity: .05, interactive: false }));
       const o = !snapAct && ord[u.id]; if (o) capaLin.addLayer(L.polyline([[u.lat, u.lon], [o.lat, o.lon]], { color: '#facc15', weight: 2, dashArray: '4 6', interactive: false })); });
+    bas.forEach(b => { const ok = b.pi >= 30, col = b.af === 'AZUL' ? '#0369a1' : '#b91c1c', w = el('div', 'width:30px;height:30px;border-radius:50%;background:#0f172a;border:3px solid ' + (ok ? col : '#f59e0b') + ';color:#fff;font-size:16px;line-height:24px;text-align:center', '🛫');
+      const m = L.marker([b.lat, b.lon], { icon: L.divIcon({ className: 'sm-div', html: w, iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 600, keyboard: false });
+      m.bindPopup(() => { const d = el('div', 'font-size:12px'); d.appendChild(el('b', '', b.n)); d.appendChild(el('div', '', (b.af === 'AZUL' ? 'Azul' : 'Rojo') + ' · pista ' + Math.round(b.pi) + ' %' + (ok ? '' : ' — INOPERATIVA'))); d.appendChild(el('div', '', 'Depósito ' + Math.round(b.dp) + ' · capacidad ' + b.cap + ' mov./turno')); return d; }); capa.addLayer(m);
+      if (verAlc) capaLin.addLayer(L.circle([b.lat, b.lon], { radius: b.rad * 1000, color: ok ? col : '#f59e0b', weight: 1.5, dashArray: '3 5', fillOpacity: .06, interactive: false })); });
     (lineas || []).forEach(l => capaLin.addLayer(L.polyline(l.p, { color: l.c, weight: l.w || 2, dashArray: l.d || null, interactive: false })));
     capaLin.addTo(M); capa.addTo(M);
     try { if (window.aresCombate && window.aresCombate.mostrarCapa) window.aresCombate.mostrarCapa(!ocultarReal); } catch (_) { /* nada */ }
@@ -8623,6 +8628,7 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'BAJA': return n(e.u) + ': fuerza ' + e.antes + ' → ' + e.despues;
       case 'ENTORNO': return n(e.u) + ' — ' + e.x;
       case 'AIR': return '✈ ' + n(e.u) + ' — ' + e.x;
+      case 'PISTA': return e.k === 'FUEGO' ? '🛬 ' + n(e.a) + ' dispara a la pista de ' + e.n + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano : '🛬 ' + e.x;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
       case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
       case 'CARGA': return n(e.u) + (e.modo === 'CARGAR' ? ' carga de ' : ' descarga en ') + n(e.o) + ': ' + recTxt(e);
@@ -8639,7 +8645,7 @@ window.addEventListener('DOMContentLoaded', () => {
       default: return e.t;
     }
   }
-  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24', INY: '#f0abfc', IA: '#fda4af' }[t] || '#cbd5e1');
+  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24', INY: '#f0abfc', IA: '#fda4af', PISTA: '#fdba74' }[t] || '#cbd5e1');
 
   /* ---------- carga ---------- */
   async function cargarLista() { try { const r = await api('SIM_LISTAR'); if (r.status === 'success') { lista = r; if (panel && tab === 'ejercicios') pintar(); } else aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); } catch (_) { aviso('⚠ Sin conexión.', false); } }
@@ -8648,7 +8654,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try { const r = await api('SIM_ESTADO', { id: ejId, ver: forzar ? '' : ver });
       if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); return; }
       if (r.sinCambios) return;
-      ej = Object.assign({}, r.ejercicio, { puedeConducir: r.puedeConducir }); base = r.base; act = r.act; ord = r.ord; ver = r.ver; if (rep && rep.turno !== ej.turno) rep = null;
+      ej = Object.assign({}, r.ejercicio, { puedeConducir: r.puedeConducir }); base = r.base; act = r.act; ord = r.ord; bas = r.bases || []; ver = r.ver; if (rep && rep.turno !== ej.turno) rep = null;
       if (tab !== 'replay') dibujar(); if (panel && !(tab === 'params' && panel.querySelector('input:focus'))) pintar();
     } catch (_) { /* se reintenta */ } finally { ocupado = false; }
   }
@@ -8657,7 +8663,7 @@ window.addEventListener('DOMContentLoaded', () => {
     aviso('Procesando…', true); try { const r = await api(a, extra); if (r.status === 'success') { aviso(okMsg || 'Listo.', true); if (despues) despues(r); return r; } aviso('⚠ ' + (r.message || 'No se pudo.'), false); return r; } catch (_) { aviso('⚠ Sin conexión.', false); return null; }
   }
   function abrirEj(id) { ejId = id; ver = ''; ej = null; rep = null; sel = ''; tab = 'conducir'; refrescar(true); pintar(); }
-  function cerrarEj() { ejId = ''; ej = null; base = []; act = {}; ord = {}; ver = ''; rep = null; sel = ''; detenerRep(); limpiarMapa(); try { if (window.aresCombate && window.aresCombate.mostrarCapa) window.aresCombate.mostrarCapa(true); } catch (_) { /* nada */ } tab = 'ejercicios'; cargarLista(); pintar(); }
+  function cerrarEj() { ejId = ''; ej = null; base = []; bas = []; act = {}; ord = {}; ver = ''; rep = null; sel = ''; detenerRep(); limpiarMapa(); try { if (window.aresCombate && window.aresCombate.mostrarCapa) window.aresCombate.mostrarCapa(true); } catch (_) { /* nada */ } tab = 'ejercicios'; cargarLista(); pintar(); }
 
   /* ---------- pestañas ---------- */
   function tabEjercicios(c) {
@@ -8761,6 +8767,29 @@ window.addEventListener('DOMContentLoaded', () => {
       accion('SIM_PARAMS', { id: ejId, params: p }, 'Parámetros guardados.', () => refrescar(true)); }));
     else c.appendChild(el('div', 'margin-top:8px;font-size:11.5px;color:#fbbf24', (lista && lista.puedeConducir) ? 'El ejercicio terminó: los parámetros ya no se editan.' : 'Solo el árbitro edita los parámetros.'));
   }
+  function tabBases(c) {
+    if (!ej) return; const cond = !!(lista && lista.puedeConducir) && ej.estado !== 'TERMINADO', t0 = ej.turno === 0;
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:6px', 'Una base tiene pista con capacidad por turno (despegues + aterrizajes) y un depósito para rearmar aeronaves. Las aeronaves que nacen a menos de 5 km de una base de su bando pertenecen a ella. El enemigo puede dañar la pista, y una pista dañada no opera hasta repararse. Se cargan con el ejercicio en el turno 0.'));
+    if (!bas.length) c.appendChild(el('div', 'padding:8px;color:#94a3b8;font-size:12px', 'Este ejercicio no tiene bases: las aeronaves salen y aterrizan sin límite de pista ni de insumos.'));
+    bas.forEach(b => { const ok = b.pi >= 30, f = el('div', 'border:1px solid ' + (ok ? '#334155' : '#b45309') + ';border-radius:6px;padding:6px 8px;margin-top:6px;background:#0f172a');
+      const h = el('div', 'display:flex;justify-content:space-between;align-items:center;gap:6px'); h.appendChild(el('b', 'color:' + (b.af === 'AZUL' ? '#7dd3fc' : '#fca5a5'), '🛫 ' + b.n)); const kk = btn('Ver', '#334155', () => { const M = mapa(); if (M) M.setView([b.lat, b.lon], Math.max(M.getZoom(), 9)); }); h.appendChild(kk); f.appendChild(h);
+      f.appendChild(el('div', 'font-size:12px;margin-top:3px;color:' + (ok ? '#86efac' : '#fbbf24'), 'Pista ' + Math.round(b.pi) + ' %' + (ok ? '' : ' — INOPERATIVA (opera desde 30 %)') + ' · reparación ' + b.rep + ' %/turno'));
+      f.appendChild(el('div', 'font-size:12px;color:#cbd5e1', 'Depósito ' + Math.round(b.dp) + ' de ' + b.dep + ' (1 por aeronave rearmada) · capacidad ' + b.cap + ' mov./turno · radio ' + b.rad + ' km'));
+      const ac = base.filter(u => u.ap && act[u.id] && act[u.id].bi === b.id); if (ac.length) f.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Aeronaves: ' + ac.map(u => u.n + ' (' + ({ B: 'lista', T: 'rearmando', V: 'en vuelo', R: 'regresando' }[act[u.id].ms] || '—') + ')').join(', ')));
+      if (cond && t0) f.appendChild(btn('Quitar', '#991b1b', () => { accion('SIM_BASES', { id: ejId, op: 'QUITAR', baseId: b.id }, 'Base quitada.', () => refrescar(true)); }));
+      c.appendChild(f); });
+    if (!cond || !t0) { c.appendChild(el('div', 'margin-top:8px;font-size:11.5px;color:#fbbf24', !cond ? ((lista && lista.puedeConducir) ? 'El ejercicio terminó.' : 'Solo el árbitro carga bases.') : 'Para cargar o quitar bases, reinicie el ejercicio (turno 0).')); return; }
+    c.appendChild(el('div', 'margin-top:10px;font-weight:bold;font-size:12.5px', 'Nueva base'));
+    const [ln, inN] = campo('Nombre', 'text', fB.n); inN.maxLength = 40; const [la, sa] = campo('Bando', 'select'); ['AZUL', 'ROJO'].forEach(v => { const o = el('option', '', v === 'AZUL' ? 'Azul (propio)' : 'Rojo (enemigo)'); o.value = v; sa.appendChild(o); }); sa.value = fB.af;
+    const [lla, inLa] = campo('Latitud', 'number', fB.lat), [llo, inLo] = campo('Longitud', 'number', fB.lon); inLa.step = inLo.step = 'any';
+    const [lc, inC] = campo('Capacidad de pista (movimientos por turno, 1 a 20; vacío = 4)', 'number', fB.cap), [lr, inR] = campo('Radio de la base (km, 0,5 a 20; vacío = 3)', 'number', fB.rad), [ld, inD] = campo('Depósito inicial (aeronaves a rearmar, 0 a 500; vacío = 20)', 'number', fB.dep), [lp, inP] = campo('Reparación de pista (% por turno, 0 a 100; vacío = 15)', 'number', fB.rep);
+    const g = () => { fB = { n: inN.value, af: sa.value, lat: inLa.value, lon: inLo.value, cap: inC.value, rad: inR.value, dep: inD.value, rep: inP.value }; };
+    [inN, sa, inLa, inLo, inC, inR, inD, inP].forEach(i => { i.oninput = i.onchange = g; });
+    [ln, la, lla, llo, lc, lr, ld, lp].forEach(x => c.appendChild(x));
+    c.appendChild(btn('📍 Elegir la posición en el mapa', '#1d4ed8', () => { const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); g(); aviso('Haga clic en el mapa para ubicar la base.', true); M.once('click', ev => { fB.lat = String(Math.round(ev.latlng.lat * 1e5) / 1e5); fB.lon = String(Math.round(ev.latlng.lng * 1e5) / 1e5); aviso('', true); pintar(); }); }));
+    c.appendChild(btn('Guardar base', '#15803d', () => { g(); if (!fB.n.trim()) return aviso('⚠ Falta el nombre.', false); if (fB.lat === '' || fB.lon === '') return aviso('⚠ Falta la posición.', false);
+      accion('SIM_BASES', { id: ejId, op: 'GUARDAR', base: { n: fB.n.trim(), af: fB.af, lat: Number(fB.lat), lon: Number(fB.lon), cap: fB.cap, rad: fB.rad, dep: fB.dep, rep: fB.rep } }, 'Base guardada.', () => { fB = { n: '', af: fB.af, lat: '', lon: '', cap: '', rad: '', dep: '', rep: '' }; refrescar(true); }); }));
+  }
   async function tabBitacora(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando bitácora…')); const r = await cargarRep(); if (!r || tab !== 'bitacora') return; return pintar(); }
     if (!rep.eventos.length) { c.appendChild(el('div', 'color:#94a3b8', 'Todavía no hay eventos. Avance un turno.')); return; }
@@ -8821,7 +8850,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
@@ -8829,10 +8858,10 @@ window.addEventListener('DOMContentLoaded', () => {
   /* ---------- panel ---------- */
   function pintar() {
     if (!panel) return; const tabs = panel.querySelector('.sm-tabs'), cu = panel.querySelector('.sm-cuerpo'); tabs.textContent = ''; cu.textContent = '';
-    const T = [['ejercicios', 'Ejercicios']]; if (ejId) T.push(['conducir', 'Conducción'], ['params', 'Parámetros'], ['bitacora', 'Bitácora'], ['replay', 'Replay'], ['informe', 'Informe']);
+    const T = [['ejercicios', 'Ejercicios']]; if (ejId) T.push(['conducir', 'Conducción'], ['bases', 'Bases'], ['params', 'Parámetros'], ['bitacora', 'Bitácora'], ['replay', 'Replay'], ['informe', 'Informe']);
     T.forEach(([k, t]) => { const b = btn(t, tab === k ? '#1d4ed8' : '#334155', () => { if (k !== 'replay') detenerRep(); tab = k; modoClic = false; pintar(); if (k === 'conducir') dibujar(); }); tabs.appendChild(b); });
     if (tab !== 'replay') detenerRep();
-    if (tab === 'ejercicios') tabEjercicios(cu); else if (tab === 'conducir') tabConducir(cu); else if (tab === 'params') tabParams(cu); else if (tab === 'bitacora') tabBitacora(cu); else if (tab === 'replay') tabReplay(cu); else if (tab === 'informe') tabInforme(cu);
+    if (tab === 'ejercicios') tabEjercicios(cu); else if (tab === 'conducir') tabConducir(cu); else if (tab === 'bases') tabBases(cu); else if (tab === 'params') tabParams(cu); else if (tab === 'bitacora') tabBitacora(cu); else if (tab === 'replay') tabReplay(cu); else if (tab === 'informe') tabInforme(cu);
     if (ejId) { const x = btn('← Salir del ejercicio', '#475569', cerrarEj); x.style.marginTop = '8px'; cu.appendChild(x); }
   }
   function abrir() {
