@@ -8493,9 +8493,56 @@ window.addEventListener('DOMContentLoaded', () => {
     c.appendChild(btn('📋 Copiar resumen de situación', '#1d4ed8', async () => { const t = resumenTexto(); try { await navigator.clipboard.writeText(t); aviso('Resumen copiado.', true); } catch (_) { aviso('No se pudo copiar.', false); } })); const pre = el('pre', 'margin-top:8px;white-space:pre-wrap;font-size:11.5px;color:#cbd5e1;background:#0f172a;padding:8px;border-radius:4px'); pre.className = 'cb-resumen'; pre.textContent = resumenTexto(); c.appendChild(pre);
     const lg = el('div', 'margin-top:8px;font-size:11px;color:#94a3b8', 'Marcos: rectángulo azul = propia; rombo rojo = enemiga; cuadrado verde = neutral; trébol amarillo = desconocida; arco = aire.'); c.appendChild(lg);
   }
+  /* ---------- biblioteca de modelos reales: valores aproximados de fuentes abiertas, no oficiales; el superadministrador los revisa y ajusta ---------- */
+  const BIB_NOTA = 'Valor aproximado de fuentes abiertas, no oficial. Revisar y ajustar.';
+  const BIB_BLOQUES = [
+    { id: 'faa', t: 'Flota FAA actual (cazas, entrenamiento y ataque ligero)', m: [
+      ['AIRE', 'FAA — Cazas', 'F-16AM/BM Fighting Falcon', 'CAZ', 80, 900, 550, 3200, 2, 0.6],
+      ['AIRE', 'FAA — Entrenamiento y ataque ligero', 'IA-63 Pampa III', 'ATA', 10, 700, 400, 1700, 2, 1],
+      ['AIRE', 'FAA — Entrenamiento y ataque ligero', 'IA-63 Pampa II (AT-63)', 'ATA', 5, 650, 350, 1500, 2, 1],
+      ['AIRE', 'FAA — Entrenamiento y ataque ligero', 'T-6C+ Texan II', 'ATA', 5, 450, 400, 1600, 1, 1],
+      ['AIRE', 'FAA — Entrenamiento y ataque ligero', 'EMB-312 Tucano', 'ATA', 5, 420, 400, 1900, 1, 1]] },
+    { id: 'reg', t: 'Cazas y aviones de ataque de la región', m: [
+      ['AIRE', 'Región — Cazas y ataque', 'JAS 39 Gripen C/D', 'CAZ', 80, 900, 800, 3200, 1, 0.5],
+      ['AIRE', 'Región — Cazas y ataque', 'JAS 39 Gripen E/F', 'CAZ', 100, 900, 1000, 4000, 1, 0.4],
+      ['AIRE', 'Región — Cazas y ataque', 'F-5E Tiger II', 'CAZ', 40, 850, 300, 2800, 2, 0.8],
+      ['AIRE', 'Región — Cazas y ataque', 'A-4 Skyhawk (A-4AR retirado de la FAA en 2026)', 'ATA', 20, 800, 450, 3300, 2, 0.9],
+      ['AIRE', 'Región — Cazas y ataque', 'EMB-314 Super Tucano', 'ATA', 5, 520, 500, 1500, 1, 1]] },
+    { id: 'hel', t: 'Helicópteros y transporte', m: [
+      ['AIRE', 'FAA — Transporte', 'C-130H Hercules', 'TRA', '', 540, 1800, 3800, 3, 3],
+      ['AIRE', 'FAA — Transporte', 'KC-130H Hercules (reabastecedor)', 'TRA', '', 540, 1800, 4000, 3, 3],
+      ['AIRE', 'FAA — Transporte', 'Embraer ERJ-140/145', 'TRA', '', 800, 1500, 3000, 2, 2],
+      ['AIRE', 'FAA — Transporte', 'Beechcraft King Air 200', 'TRA', '', 480, 1200, 2500, 1, 1.5],
+      ['AIRE', 'FAA — Helicópteros', 'Bell 412', 'HEL', '', 220, 250, 650, 1, 1.2],
+      ['AIRE', 'FAA — Helicópteros', 'Bell 212', 'HEL', '', 200, 200, 440, 1, 1.2],
+      ['AIRE', 'FAA — Helicópteros', 'Bell 407GXi', 'HEL', '', 240, 250, 600, 1, 1],
+      ['AIRE', 'FAA — Helicópteros', 'MD 500 (Hughes 500)', 'HEL', 5, 230, 200, 480, 1, 0.9],
+      ['AIRE', 'FAA — Helicópteros', 'SA 315B Lama', 'HEL', '', 190, 200, 500, 1, 1],
+      ['AIRE', 'Región — Helicópteros', 'Mi-35M (helicóptero de ataque)', 'HEL', 6, 250, 200, 450, 2, 1.3]] },
+    { id: 'rad', t: 'Radares y defensa antiaérea (por clase)', m: [
+      ['TIERRA', 'Radares', 'Radar de vigilancia 3D de largo alcance (clase)', 'RAD', 400, '', '', '', '', '', 40],
+      ['TIERRA', 'Radares', 'Radar de vigilancia primario de medio alcance (clase)', 'RAD', 250, '', '', '', '', '', 35],
+      ['TIERRA', 'Radares', 'Radar de defensa antiaérea de corto alcance (clase)', 'RAD', 60, '', '', '', '', '', 80],
+      ['TIERRA', 'Defensa antiaérea', 'Cañón antiaéreo de 35 mm (clase)', 'ADA', 4],
+      ['TIERRA', 'Defensa antiaérea', 'Misil antiaéreo portátil (clase)', 'MIS', 6],
+      ['TIERRA', 'Defensa antiaérea', 'Misil antiaéreo de corto alcance (clase)', 'MIS', 6],
+      ['TIERRA', 'Defensa antiaérea', 'Misil antiaéreo de medio alcance (clase)', 'MIS', 40]] }];
+  function bibModelo(x) { const aire = x[0] === 'AIRE'; return { id: '', dominio: x[0], categoria: x[1], nombre: x[2], simbolo: x[3], alcance: x[4], vel: aire ? x[5] : '', radio: aire ? x[6] : '', autonomia: aire ? x[7] : '', rearme: aire ? x[8] : '', firma: aire ? x[9] : '', radBaja: x[3] === 'RAD' ? x[10] : '', notas: BIB_NOTA, activo: true }; }
+  function bloqueBiblioteca(c, cat) {
+    const bx = el('div', 'margin:8px 0;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:8px'); bx.className = 'cb-biblioteca';
+    bx.appendChild(el('div', 'font-weight:bold;font-size:12.5px', 'Biblioteca de modelos reales'));
+    bx.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin:2px 0 6px', 'Carga modelos con velocidad, radio de acción, autonomía y firma radar ya cargados, para elegirlos al crear una fuerza. Son valores aproximados de fuentes abiertas, no oficiales: revíselos y ajústelos con ✏️. Los que ya existen en el catálogo no se repiten.'));
+    const cks = {}; BIB_BLOQUES.forEach(b => { const lb = el('label', 'display:flex;gap:6px;align-items:center;font-size:12px;margin:2px 0;cursor:pointer'), ck = el('input'); ck.type = 'checkbox'; ck.dataset.bib = b.id; ck.checked = true; cks[b.id] = ck; lb.appendChild(ck); lb.appendChild(el('span', '', b.t + ' (' + b.m.length + ')')); bx.appendChild(lb); });
+    const st = el('div', 'font-size:11.5px;color:#cbd5e1;margin-top:4px');
+    const bt = btn('Importar al catálogo', '#16a34a', async () => { bt.disabled = true; let n = 0, ya = 0, mal = 0;
+      for (const b of BIB_BLOQUES) { if (!cks[b.id].checked) continue; for (const x of b.m) { if (cat.some(k => k.dominio === x[0] && String(k.nombre).toLowerCase() === x[2].toLowerCase())) { ya++; continue; }
+        try { const r = await api('ADMIN', { op: 'ARMA', m: bibModelo(x) }); if (r && r.status === 'success') n++; else mal++; } catch (_) { mal++; } st.textContent = 'Importando… ' + (n + ya + mal); await new Promise(res => setTimeout(res, 120)); } }
+      aviso(n + ' modelo(s) importado(s), ' + ya + ' ya estaban' + (mal ? ', ' + mal + ' con error' : '') + '.', !mal); await recargar(true); }); bx.appendChild(bt); bx.appendChild(st); c.appendChild(bx);
+  }
   function tabCatalogo(c) {
     if (!puedeEnemigo()) { c.appendChild(el('div', 'color:#94a3b8', 'El catálogo lo edita el superadministrador.')); return; }
     const cat = datos.catalogo || [];
+    bloqueBiblioteca(c, cat);
     if (!cat.length) { c.appendChild(el('div', 'font-size:12px;margin-bottom:6px', 'El catálogo está vacío. Cargue las categorías genéricas (sin modelos ni cifras) y complete usted los alcances.')); c.appendChild(btn('Cargar categorías iniciales', '#16a34a', () => accion('ADMIN', { op: 'ARMA_INICIAL' }, 'Catálogo inicial cargado.'))); }
     cat.forEach(k => { const r = el('div', 'display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:12px'); r.className = 'cb-cat-fila'; r.appendChild(imgSimbolo({ afiliacion: 'AZUL', simbolo: k.simbolo, dominio: k.dominio }, 22)); r.appendChild(el('div', 'flex:1' + (k.activo ? '' : ';opacity:.5'), k.nombre + ' · ' + k.dominio.toLowerCase() + ' · ' + (k.alcance ? k.alcance + ' km' : 'alcance sin definir') + (k.radBaja ? ' · bajos ' + k.radBaja + ' %' : '') + (k.firma ? ' · firma ' + k.firma : '') + (k.activo ? '' : ' · inactiva'))); r.appendChild(btn('✏️', '#1d4ed8', () => formCat(k))); c.appendChild(r); });
     c.appendChild(btn('➕ Nueva categoría', '#15803d', () => formCat(null)));
