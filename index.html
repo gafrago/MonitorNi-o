@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyeZG4y1E-tnEEmG0cCVNp1LSWPDM8LUiuBU6jdNXvWeqyTix_ayRyto0emr2xw3IxCbA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzgsUoY_rbca_eoyTQLFjE1p89SBPYDWs5wByWjBdCUHdK6335nl6EvbvW2rnlwh0yqbg/exec";
 
 
 ;
@@ -8497,7 +8497,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!puedeEnemigo()) { c.appendChild(el('div', 'color:#94a3b8', 'El catálogo lo edita el superadministrador.')); return; }
     const cat = datos.catalogo || [];
     if (!cat.length) { c.appendChild(el('div', 'font-size:12px;margin-bottom:6px', 'El catálogo está vacío. Cargue las categorías genéricas (sin modelos ni cifras) y complete usted los alcances.')); c.appendChild(btn('Cargar categorías iniciales', '#16a34a', () => accion('ADMIN', { op: 'ARMA_INICIAL' }, 'Catálogo inicial cargado.'))); }
-    cat.forEach(k => { const r = el('div', 'display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:12px'); r.className = 'cb-cat-fila'; r.appendChild(imgSimbolo({ afiliacion: 'AZUL', simbolo: k.simbolo, dominio: k.dominio }, 22)); r.appendChild(el('div', 'flex:1' + (k.activo ? '' : ';opacity:.5'), k.nombre + ' · ' + k.dominio.toLowerCase() + ' · ' + (k.alcance ? k.alcance + ' km' : 'alcance sin definir') + (k.activo ? '' : ' · inactiva'))); r.appendChild(btn('✏️', '#1d4ed8', () => formCat(k))); c.appendChild(r); });
+    cat.forEach(k => { const r = el('div', 'display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:12px'); r.className = 'cb-cat-fila'; r.appendChild(imgSimbolo({ afiliacion: 'AZUL', simbolo: k.simbolo, dominio: k.dominio }, 22)); r.appendChild(el('div', 'flex:1' + (k.activo ? '' : ';opacity:.5'), k.nombre + ' · ' + k.dominio.toLowerCase() + ' · ' + (k.alcance ? k.alcance + ' km' : 'alcance sin definir') + (k.radBaja ? ' · bajos ' + k.radBaja + ' %' : '') + (k.firma ? ' · firma ' + k.firma : '') + (k.activo ? '' : ' · inactiva'))); r.appendChild(btn('✏️', '#1d4ed8', () => formCat(k))); c.appendChild(r); });
     c.appendChild(btn('➕ Nueva categoría', '#15803d', () => formCat(null)));
     function formCat(k) {
       const m = el('div', 'margin-top:8px;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:8px'); m.className = 'cb-cat-form'; const x = k || { dominio: 'TIERRA', categoria: '', nombre: '', simbolo: 'GEN', alcance: '', notas: '', activo: true };
@@ -8506,9 +8506,12 @@ window.addEventListener('DOMContentLoaded', () => {
       const alc = campo(m, 'Alcance de referencia en km (opcional)', 'number', x.alcance || '');
       const aer = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin-top:6px'); aer.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Datos de la aeronave (solo aire). Con velocidad y radio cargados, la simulación aplica el ciclo de salida: despega de su base, regresa al llegar a la reserva de combustible, aterriza y rearma antes de volver a salir. Sin estos datos se comporta como antes.'));
       const vel = campo(aer, 'Velocidad de crucero (km/h)', 'number', x.vel || ''), rad = campo(aer, 'Radio de acción (km): distancia máxima de ida desde su base', 'number', x.radio || ''), aut = campo(aer, 'Autonomía total (km) — vacío = 2,5 veces el radio', 'number', x.autonomia || ''), rea = campo(aer, 'Tiempo de rearme y reabastecimiento (horas) — vacío = 2', 'number', x.rearme || '');
-      m.appendChild(aer); const verAer = () => { aer.style.display = dom.value === 'AIRE' ? 'block' : 'none'; }; dom.onchange = verAer; verAer();
+      const fir = campo(aer, 'Firma radar (1 = estándar; menos de 1 = más difícil de detectar; más de 1 = más fácil; 0,05 a 5)', 'number', x.firma || '');
+      const rdr = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin-top:6px'); rdr.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Datos del radar (símbolo Radar). El alcance de referencia es contra blancos altos. Un radar moderno conserva buena parte de su alcance contra blancos bajos; uno antiguo, poco. Sirve para decidir qué detecta cada bando (niebla de guerra) y se avisa en la Bitácora.'));
+      const rbj = campo(rdr, 'Alcance contra blancos bajos (% del alcance; 0 a 100; vacío = 50)', 'number', x.radBaja || '');
+      m.appendChild(aer); m.appendChild(rdr); const verAer = () => { aer.style.display = dom.value === 'AIRE' ? 'block' : 'none'; rdr.style.display = sim.value === 'RAD' ? 'block' : 'none'; }; dom.onchange = verAer; sim.onchange = verAer; verAer();
       const act = campo(m, 'Estado', 'select', null, i => [['SI', 'Activa'], ['NO', 'Inactiva']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); })); act.value = x.activo ? 'SI' : 'NO';
-      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, vel: vel.value, radio: rad.value, autonomia: aut.value, rearme: rea.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
+      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, vel: vel.value, radio: rad.value, autonomia: aut.value, rearme: rea.value, firma: fir.value, radBaja: rbj.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
     }
   }
   function pintar() {
@@ -8628,6 +8631,7 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'BAJA': return n(e.u) + ': fuerza ' + e.antes + ' → ' + e.despues;
       case 'ENTORNO': return n(e.u) + ' — ' + e.x;
       case 'AIR': return '✈ ' + n(e.u) + ' — ' + e.x;
+      case 'RADAR': return e.k === 'DETECTA' ? '📡 ' + n(e.r) + ' detecta a ' + n(e.u) + ' (' + e.km + ' km, altitud ' + e.alt + ')' : '📡 se pierde el contacto con ' + n(e.u);
       case 'PISTA': return e.k === 'FUEGO' ? '🛬 ' + n(e.a) + ' dispara a la pista de ' + e.n + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano : '🛬 ' + e.x;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
       case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
@@ -8645,7 +8649,7 @@ window.addEventListener('DOMContentLoaded', () => {
       default: return e.t;
     }
   }
-  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24', INY: '#f0abfc', IA: '#fda4af', PISTA: '#fdba74' }[t] || '#cbd5e1');
+  const colEv = t => ({ FUEGO: '#fca5a5', BAJA: '#fb923c', ESTADO: '#fde047', FIN: '#86efac', ORDEN: '#93c5fd', REAB: '#6ee7b7', CARGA: '#6ee7b7', AGOT: '#f87171', BAJO: '#fbbf24', INY: '#f0abfc', IA: '#fda4af', PISTA: '#fdba74', RADAR: '#67e8f9' }[t] || '#cbd5e1');
 
   /* ---------- carga ---------- */
   async function cargarLista() { try { const r = await api('SIM_LISTAR'); if (r.status === 'success') { lista = r; if (panel && tab === 'ejercicios') pintar(); } else aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); } catch (_) { aviso('⚠ Sin conexión.', false); } }
@@ -8728,6 +8732,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const fila = el('div', 'margin-top:4px');
         fila.appendChild(btn(modoClic ? '📍 Haga clic en el mapa… (cancelar)' : '📍 Mover: elegir destino en el mapa', modoClic ? '#b45309' : '#1d4ed8', () => { modoClic = !modoClic; if (modoClic) pedirDestino(u); else { aviso('', true); pintar(); } }));
         fila.appendChild(btn('✋ Detener', '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, quieto: true }] }, 'Orden enviada.', () => refrescar(true)))); caja.appendChild(fila);
+        if (u.ap) { const ga = el('div', 'margin-top:8px;padding-top:6px;border-top:1px solid #334155'); ga.appendChild(el('div', 'font-size:11.5px;font-weight:bold', 'Altitud de vuelo: ' + ((act[u.id] || {}).alt === 'BAJA' ? 'baja' : 'alta')));
+          ga.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'A baja altura los radares la detectan a menos distancia (más cuanto más antiguo el radar). Rige desde el próximo turno.'));
+          const fa = el('div', 'display:flex;gap:6px;margin-top:3px'); fa.appendChild(btn('Alta', (act[u.id] || {}).alt === 'BAJA' ? '#475569' : '#1d4ed8', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, alt: 'ALTA' }] }, 'Altitud alta.', () => refrescar(true)))); fa.appendChild(btn('Baja', (act[u.id] || {}).alt === 'BAJA' ? '#1d4ed8' : '#475569', () => accion('SIM_ORDEN', { id: ejId, ordenes: [{ u: u.id, alt: 'BAJA' }] }, 'Altitud baja.', () => refrescar(true)))); ga.appendChild(fa); caja.appendChild(ga); }
         const A = act[u.id] || {}, lg = u.s === 'LOG', R0 = lg ? A.cg : A.s;
         if (R0) { const g = el('div', 'margin-top:8px;padding-top:6px;border-top:1px solid #334155'); g.appendChild(el('div', 'font-size:11.5px;font-weight:bold', lg ? 'Carga actual' : 'Recursos (% del máximo)'));
           const fl = el('div', 'display:flex;gap:6px'), ri = {}; RN3.forEach(([k, l, nom]) => { const [lb, i] = campo(nom, 'number', Math.round(R0[k] * 10) / 10, 'sm-rec-' + k); i.step = 'any'; lb.style.flex = '1'; ri[k] = i; fl.appendChild(lb); }); g.appendChild(fl);
@@ -8851,7 +8858,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA' || e.t === 'RADAR').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
