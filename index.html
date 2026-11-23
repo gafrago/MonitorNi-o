@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzgsUoY_rbca_eoyTQLFjE1p89SBPYDWs5wByWjBdCUHdK6335nl6EvbvW2rnlwh0yqbg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwg5p-IZ-Q93jf6YYXyqrySf2IH1c20xjkifiXtHvrJJea_Wz7iwAHjyuyYnY0MdH59iA/exec";
 
 
 ;
@@ -8643,7 +8643,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (e.cap) return 'Orden: capacidad de carga de ' + n(e.u) + ' fijada (' + RN3.map(r => r[2].toLowerCase() + ' ' + e.cap[r[0]]).join(', ') + ')';
         return e.q ? 'Orden: ' + n(e.u) + ' se detiene' : e.e ? 'Orden: ' + n(e.u) + ' cambia a ' + (EST[e.e] || e.e) : 'Orden: ' + n(e.u) + ' se dirige a ' + e.lat + ', ' + e.lon;
       case 'INY': return e.k === 'MENSAJE' ? '📨 ' + e.x : e.k === 'AVERIA' ? '⚠ Avería en ' + n(e.u) + (e.x ? ': ' + e.x : '') : e.k === 'RECURSOS' ? '📦 Variación de recursos en ' + n(e.u) + (e.x ? ': ' + e.x : '') : 'Inyecto del árbitro';
-      case 'IA': return 'Doctrina automática: ' + n(e.u) + ' pasa a ' + (e.m || '').toLowerCase();
+      case 'IA': if (e.x && e.m !== 'REPLEGAR') return '↩ Reacción del rojo: ' + n(e.u) + ' — ' + e.x; return 'Doctrina automática: ' + n(e.u) + ' pasa a ' + (e.m || '').toLowerCase();
       case 'PARAMS': return 'El árbitro modificó los parámetros';
       case 'FIN': return 'FIN: ' + e.m;
       default: return e.t;
@@ -8885,6 +8885,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (radar.det) deb.push('Se registraron ' + radar.det + ' detección(es) por radar. ¿Se aprovechó el aviso para decidir?');
     const PR = planRealDatos(); if (PR.total) { const nc = PR.total - PR.cuenta.CUMPLIDA; if (nc > 0) deb.push('De ' + PR.total + ' órdenes de movimiento, ' + nc + ' no se cumplieron como se previó' + (PR.top ? '; la causa más repetida fue: ' + PR.top + ' (' + PR.topN + ').' : '.') + ' ¿Qué dato faltó al planificar?'); else deb.push('Todas las órdenes de movimiento se cumplieron en el tiempo previsto. ¿El plan fue demasiado conservador?'); if (PR.cuenta.REEMPLAZADA) deb.push(PR.cuenta.REEMPLAZADA + ' orden(es) se cambiaron antes de llegar. ¿Fue una decisión por nueva información o falta de claridad inicial?'); }
     deb.push('¿Qué se haría distinto con la misma semilla? Comparar con otra corrida (Decisión → Corridas) y con el plan original.');
+    const rea = { CONTRAATACAR: 0, REFORZAR: 0, ESQUIVAR: 0, ABASTECER: 0 }; ev.forEach(e => { if (e.t === 'IA' && e.x && rea[e.m] !== undefined) rea[e.m]++; }); const nR = rea.CONTRAATACAR + rea.REFORZAR + rea.ESQUIVAR + rea.ABASTECER; if (nR) resumen.push('Reacciones automáticas del rojo: ' + nR + ' (' + rea.CONTRAATACAR + ' contraataque(s), ' + rea.REFORZAR + ' refuerzo(s), ' + rea.ESQUIVAR + ' esquive(s) de radar, ' + rea.ABASTECER + ' abastecimiento(s)).');
     if (PR.total) resumen.push('Plan contra realidad: ' + PR.cuenta.CUMPLIDA + ' de ' + PR.total + ' órdenes de movimiento cumplidas en tiempo (' + PR.pct + ' %), ' + PR['cuenta']['CON DEMORA'] + ' con demora, ' + PR.cuenta.REEMPLAZADA + ' reemplazadas, ' + PR.cuenta['NO LLEGÓ'] + ' sin llegar.');
     return { resumen: resumen, hitos: hitos, debate: deb, nm: nm, plan: PR };
   }
@@ -9801,8 +9802,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const rj = rojos(); if (!rj.length) c.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'No hay fuerzas ROJO en el ejercicio.'));
     rj.forEach(u => { const cf = X.ia[u.id] || null; const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); f.appendChild(el('span', 'min-width:90px;font-weight:bold', u.n));
       const s = sel([['', '(sin doctrina: usa órdenes manuales)']].concat(IAM), cf ? cf.m : '', 210), la = inp('number', cf && cf.lat !== null ? cf.lat : '', 78, 'destino lat'), lo = inp('number', cf && cf.lon !== null ? cf.lon : '', 78, 'lon'), rp = inp('number', cf ? cf.rp : '', 56, 'repl. %'), bl = inp('number', cf && cf.bl !== null ? cf.bl : '', 78, 'base lat'), bo = inp('number', cf && cf.bo !== null ? cf.bo : '', 78, 'base lon'); [la, lo, bl, bo].forEach(x => { x.step = 'any'; }); rp.title = 'Se repliega si su fuerza baja de este % de la inicial';
-      const upd = () => { mk(); if (!s.value) { delete X.ia[u.id]; return; } const n = x => x.value === '' ? null : Number(x.value); X.ia[u.id] = { m: s.value, lat: n(la), lon: n(lo), rp: rp.value === '' ? 0 : Number(rp.value), bl: n(bl), bo: n(bo) }; };
-      [s, la, lo, rp, bl, bo].forEach(x => { x.onchange = upd; }); [s, la, lo, rp, bl, bo].forEach(x => f.appendChild(x)); c.appendChild(f); });
+      const RE = [['C', 'Contraataca a quien lo ataca'], ['R', 'Acude en ayuda de un aliado atacado'], ['D', 'Esquiva el radar (aeronaves)'], ['S', 'Busca reabastecerse']], cks = {}, fr = el('div', 'display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px 94px;font-size:11px;color:#cbd5e1'); fr.className = 'dc-reac';
+      const upd = () => { mk(); if (!s.value) { delete X.ia[u.id]; return; } const n = x => x.value === '' ? null : Number(x.value); X.ia[u.id] = { m: s.value, lat: n(la), lon: n(lo), rp: rp.value === '' ? 0 : Number(rp.value), bl: n(bl), bo: n(bo), re: RE.filter(q => cks[q[0]].checked).map(q => q[0]).join('') }; };
+      RE.forEach(q => { const lb = el('label', 'display:flex;gap:3px;align-items:center;cursor:pointer'), ck = el('input'); ck.type = 'checkbox'; ck.checked = !!(cf && (cf.re || '').indexOf(q[0]) >= 0); ck.dataset.re = q[0]; cks[q[0]] = ck; ck.onchange = upd; lb.appendChild(ck); lb.appendChild(el('span', '', q[1])); fr.appendChild(lb); });
+      [s, la, lo, rp, bl, bo].forEach(x => { x.onchange = upd; }); [s, la, lo, rp, bl, bo].forEach(x => f.appendChild(x)); c.appendChild(f); c.appendChild(fr); });
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Reacciones (opcionales, requieren doctrina): cuando se activan, la fuerza responde un máximo de 3 turnos a lo ocurrido en el turno anterior y luego vuelve a su doctrina; las aeronaves solo reaccionan al radar (bajan la altura y, si siguen detectadas, vuelven a su base).'));
     c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Destino: objetivo de avance o punto de patrulla. «Repl. %»: se repliega al bajar de ese % de fuerza, hacia la base indicada (o su posición inicial). Avanzar se detiene a disparar a 90 % de su alcance.'));
     c.appendChild(L('Inyectos por turno'));
     X.iny.forEach((y, i) => { const f = el('div', 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap;font-size:12px'); const t = inp('number', y.t, 50), k = sel(INYT, y.k, 190), tx = inp('text', y.x || '', 200, 'texto'), u = sel([['', '—']].concat(base.map(x => [x.id, x.n])), y.u || '', 120), ex = inp('number', y.k === 'AVERIA' ? y.c : '', 60, 'comb. −%'), md = sel(IAM, y.m || 'AVANZAR', 120), rc = inp('text', y.d ? ['m', 'c', 'v'].map(r => y.d[r] === undefined ? '' : y.d[r]).join(',') : '', 90, 'm,c,v');
