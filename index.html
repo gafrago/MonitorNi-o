@@ -8836,6 +8836,33 @@ window.addEventListener('DOMContentLoaded', () => {
         if (e.t === 'BAJA') { const u = B.filter(x => x.id === e.u)[0], b = u && bando(u.af), d = e.antes - e.despues; if (b === 'AZUL') f.azulBajas += d; else if (b === 'ROJO') f.rojoBajas += d; } }); f.azulBajas = Math.round(f.azulBajas * 10) / 10; f.rojoBajas = Math.round(f.rojoBajas * 10) / 10; porTurno.push(f); }
     const fe = rep.eventos.filter(e => e.t === 'FIN').pop(); return { res: res, porTurno: porTurno, fin: fe ? fe.m : 'Ejercicio en curso o sin cierre registrado.', nm: nm, ini: ini };
   }
+  /* ---------- análisis posterior (AAR): se arma solo con lo que registró el ejercicio ---------- */
+  function aarDatos(d) {
+    const B = rep.base, nm = d.nm, bandoDe = id => { const u = B.filter(x => x.id === id)[0]; return u ? bando(u.af) : ''; }, RN = { m: 'munición', c: 'combustible', v: 'víveres' }, ev = rep.eventos, hitos = [], R = d.res, pct = (a, b) => b > 0 ? Math.round(100 * (b - a) / b) : 0;
+    const perd = b => pct(R[b].final, R[b].inicial), tot = k => d.porTurno.reduce((s, f) => s + f[k], 0), bAz = Math.round(tot('azulBajas') * 10) / 10, bRo = Math.round(tot('rojoBajas') * 10) / 10;
+    const resumen = ['Resultado: ' + d.fin, 'Efectivo azul: ' + R.AZUL.inicial + ' → ' + R.AZUL.final + ' (pérdida ' + perd('AZUL') + ' %). Efectivo rojo: ' + R.ROJO.inicial + ' → ' + R.ROJO.final + ' (pérdida ' + perd('ROJO') + ' %).'];
+    if (bAz > 0) resumen.push('Relación de intercambio (bajas rojas por cada baja azul): ' + (Math.round(10 * bRo / bAz) / 10)); else if (bRo > 0) resumen.push('El azul no tuvo bajas; el rojo perdió ' + bRo + ' efectivos.');
+    const pico = d.porTurno.reduce((m, f) => f.disparos > (m ? m.disparos : 0) ? f : m, null); if (pico) resumen.push('Turno de mayor actividad de fuego: ' + pico.turno + ' (' + pico.disparos + ' disparos).');
+    let fuego = null, bajaA = null, bajaR = null; const fuera = [], agot = [], aire = { perdidas: 0, espera: 0, insumos: 0, salidas: 0 }, pista = [], radar = { det: 0, primero: null };
+    ev.forEach(e => { if (e.t === 'FUEGO' && !fuego) fuego = e; if (e.t === 'BAJA') { const b = bandoDe(e.u); if (b === 'AZUL' && !bajaA) bajaA = e; if (b === 'ROJO' && !bajaR) bajaR = e; }
+      if (e.t === 'ESTADO' && e.e === 'NO_OPERATIVO') fuera.push(e); if (e.t === 'AGOT') agot.push(e);
+      if (e.t === 'AIR') { if (e.k === 'PERDIDA') aire.perdidas++; else if (e.k === 'ESPERA_PISTA' || e.k === 'ESPERA_ATERRIZAJE') aire.espera++; else if (e.k === 'SIN_INSUMOS') aire.insumos++; else if (e.k === 'DESPEGA') aire.salidas++; }
+      if (e.t === 'PISTA' && e.k === 'INOPERATIVA') pista.push(e); if (e.t === 'RADAR' && e.k === 'DETECTA') { radar.det++; if (!radar.primero) radar.primero = e; } });
+    if (fuego) hitos.push([fuego.turno, 'Primer intercambio de fuego: ' + nm(fuego.a) + ' contra ' + nm(fuego.d) + '.']);
+    if (bajaA) hitos.push([bajaA.turno, 'Primera baja azul: ' + nm(bajaA.u) + '.']); if (bajaR) hitos.push([bajaR.turno, 'Primera baja roja: ' + nm(bajaR.u) + '.']);
+    fuera.slice(0, 12).forEach(e => hitos.push([e.turno, nm(e.u) + ' queda fuera de combate.'])); agot.slice(0, 8).forEach(e => hitos.push([e.turno, nm(e.u) + ' agota ' + (RN[e.r] || e.r) + '.']));
+    pista.slice(0, 6).forEach(e => hitos.push([e.turno, 'La pista de ' + e.n + ' queda inoperativa.'])); if (radar.primero) hitos.push([radar.primero.turno, 'Primera detección por radar propio: ' + nm(radar.primero.u) + '.']);
+    hitos.sort((a, b) => a[0] - b[0]);
+    const deb = []; if (perd('AZUL') > perd('ROJO')) deb.push('Las pérdidas propias (' + perd('AZUL') + ' %) superaron a las del rojo (' + perd('ROJO') + ' %). ¿Qué decisión concentró el desgaste y qué alternativa había?'); else if (bAz > 0) deb.push('Se cumplió con menos desgaste que el rojo. ¿Qué lo permitió y se puede repetir con otra semilla?');
+    if (agot.length) deb.push('Hubo ' + agot.length + ' agotamiento(s) de recursos. ¿Estaba prevista la logística (depósitos, reabastecimiento) y a qué turno había que anticiparla?');
+    if (aire.perdidas) deb.push('Se perdieron ' + aire.perdidas + ' aeronave(s) sin combustible. ¿Se respetó el radio de acción y la reserva al planificar los destinos?');
+    if (aire.espera) deb.push('Hubo ' + aire.espera + ' espera(s) por pista ocupada o inoperativa. ¿La capacidad de pista alcanzó para el ritmo de salidas planificado?');
+    if (aire.insumos) deb.push('El rearme se detuvo por falta de insumos en ' + aire.insumos + ' ocasión(es). ¿Se dimensionó el depósito de la base?');
+    if (pista.length) deb.push('Una pista quedó inoperativa. ¿Se protegió la base y qué plan había para mantener la operación sin ella?');
+    if (radar.det) deb.push('Se registraron ' + radar.det + ' detección(es) por radar. ¿Se aprovechó el aviso para decidir?');
+    deb.push('¿Qué se haría distinto con la misma semilla? Comparar con otra corrida (Decisión → Corridas) y con el plan original.');
+    return { resumen: resumen, hitos: hitos, debate: deb, nm: nm };
+  }
   async function tabInforme(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); const r = await cargarRep(); if (!r || tab !== 'informe') return; return pintar(); }
     const d = informeDatos(); if (!d || !rep.snaps.length) return; const box = el('div'); box.className = 'sm-informe';
@@ -8846,7 +8873,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const tl = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse'); tl.className = 'sm-log'; const hl = el('tr'); ['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'].forEach(t => hl.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); tl.appendChild(hl);
     ['AZUL', 'ROJO'].forEach(b => { const r = d.res[b], tr = el('tr'); [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); tl.appendChild(tr); }); box.appendChild(tl);
     box.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Bajas por turno (en efectivos)')); const t2 = el('table', 'width:100%;font-size:11.5px;border-collapse:collapse'); const h2 = el('tr'); ['Turno', 'Azul', 'Rojo', 'Disparos'].forEach(t => h2.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); t2.appendChild(h2);
-    d.porTurno.forEach(f => { const tr = el('tr'); [f.turno, f.azulBajas, f.rojoBajas, f.disparos].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); t2.appendChild(tr); }); box.appendChild(t2); c.appendChild(box);
+    d.porTurno.forEach(f => { const tr = el('tr'); [f.turno, f.azulBajas, f.rojoBajas, f.disparos].forEach(x => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b', String(x)))); t2.appendChild(tr); }); box.appendChild(t2);
+    const A = aarDatos(d), ab = el('div', 'margin-top:12px;padding-top:8px;border-top:2px solid #334155'); ab.className = 'sm-aar'; ab.appendChild(el('div', 'font-weight:bold;font-size:13px', 'Análisis posterior de la práctica (AAR)'));
+    ab.appendChild(el('div', 'margin-top:4px;font-weight:bold;font-size:12px', 'Resumen')); A.resumen.forEach(x => ab.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:2px', '• ' + x)));
+    ab.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Hitos de la práctica')); if (!A.hitos.length) ab.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Sin hitos registrados (no hubo combate, bajas ni agotamientos).')); A.hitos.forEach(h => ab.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:2px', 't' + h[0] + ' — ' + h[1])));
+    ab.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Puntos para el debate')); A.debate.forEach(x => ab.appendChild(el('div', 'font-size:12px;color:#fde68a;margin-top:2px', '? ' + x)));
+    ab.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Generado automáticamente con lo registrado por el ejercicio; en modo decisión solo incluye lo que el alumno pudo ver. Es una guía para el debate, no una evaluación.')); box.appendChild(ab); c.appendChild(box);
     c.appendChild(el('div', 'margin-top:8px')).appendChild(btn('⬇ Informe en PDF', '#1d4ed8', () => pdf(d), 'Descargar el informe'));
   }
   function pdf(d) {
@@ -8858,6 +8890,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
+    const A = aarDatos(d); AT(['Análisis posterior (AAR) — resumen'], A.resumen.map(x => [x])); if (A.hitos.length) AT(['Turno', 'Hito'], A.hitos.map(h => [String(h[0]), h[1]])); AT(['Puntos para el debate'], A.debate.map(x => [x]));
     const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA' || e.t === 'RADAR').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
