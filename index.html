@@ -8632,7 +8632,7 @@ window.addEventListener('DOMContentLoaded', () => {
       case 'ENTORNO': return n(e.u) + ' — ' + e.x;
       case 'AIR': return '✈ ' + n(e.u) + ' — ' + e.x;
       case 'RADAR': return e.k === 'DETECTA' ? '📡 ' + n(e.r) + ' detecta a ' + n(e.u) + ' (' + e.km + ' km, altitud ' + e.alt + ')' : '📡 se pierde el contacto con ' + n(e.u);
-      case 'PISTA': return e.k === 'FUEGO' ? '🛬 ' + n(e.a) + ' dispara a la pista de ' + e.n + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano : '🛬 ' + e.x;
+      case 'PISTA': if (!e.x && e.k !== 'FUEGO') return 'Estado de pista actualizado.'; return e.k === 'FUEGO' ? '🛬 ' + n(e.a) + ' dispara a la pista de ' + e.n + ' (' + e.km + ' km, prob. ' + e.p + '): ' + e.imp + ' impacto(s), daño ' + e.dano : '🛬 ' + e.x;
       case 'ESTADO': return n(e.u) + ' pasa a ' + (EST[e.e] || e.e);
       case 'REAB': return n(e.u) + ' se reabastece de ' + n(e.de) + ': ' + recTxt(e);
       case 'CARGA': return n(e.u) + (e.modo === 'CARGAR' ? ' carga de ' : ' descarga en ') + n(e.o) + ': ' + recTxt(e);
@@ -8717,7 +8717,7 @@ window.addEventListener('DOMContentLoaded', () => {
       ac2.appendChild(btn('↺ Reiniciar (semilla nueva)', '#92400e', () => { if (confirm('¿Volver al turno 0 con otra semilla?')) accion('SIM_REINICIAR', { id: ejId, nuevaSemilla: true }, 'Reiniciado con semilla nueva.', () => { rep = null; refrescar(true); }); }));
       if (!fin) ac2.appendChild(btn('■ Terminar', '#991b1b', () => { if (confirm('¿Terminar el ejercicio?')) accion('SIM_TERMINAR', { id: ejId }, 'Ejercicio terminado.', () => refrescar(true)); })); c.appendChild(ac2); }
     if (ultimosEventos.length) { const u = el('div', 'max-height:110px;overflow:auto;font-size:11px;background:#0b1220;border-radius:4px;padding:4px 6px;margin-bottom:6px'); u.className = 'sm-ultimo';
-      ultimosEventos.filter(e => e.t !== 'MOV').slice(-12).forEach(e => u.appendChild(el('div', 'color:' + colEv(e.t), 'T' + e.turno + ' · ' + textoEv(e)))); c.appendChild(u); }
+      ultimosEventos.filter(e => e.t !== 'MOV' && !(e.t === 'PISTA' && e.k === 'ESTADO')).slice(-12).forEach(e => u.appendChild(el('div', 'color:' + colEv(e.t), 'T' + e.turno + ' · ' + textoEv(e)))); c.appendChild(u); }
     const uni = unidades(); const fl = el('div', 'display:flex;gap:4px;margin-bottom:4px;font-size:11px;color:#94a3b8'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = verAlc; ck.onchange = () => { verAlc = ck.checked; dibujar(); }; fl.appendChild(ck); fl.appendChild(el('span', '', 'Anillos de alcance'));
     const ck2 = el('input'); ck2.type = 'checkbox'; ck2.checked = ocultarReal; ck2.style.marginLeft = '10px'; ck2.onchange = () => { ocultarReal = ck2.checked; dibujar(); }; fl.appendChild(ck2); fl.appendChild(el('span', '', 'Ocultar fuerzas reales')); c.appendChild(fl);
     uni.forEach(u => { const f = el('div', 'display:flex;gap:6px;align-items:center;padding:4px 2px;border-bottom:1px solid #1e293b;cursor:pointer' + (sel === u.id ? ';background:#1e293b' : '')); f.className = 'sm-u'; f.dataset.id = u.id; f.onclick = () => { sel = u.id; pintar(); dibujar(); };
@@ -8800,7 +8800,7 @@ window.addEventListener('DOMContentLoaded', () => {
   async function tabBitacora(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando bitácora…')); const r = await cargarRep(); if (!r || tab !== 'bitacora') return; return pintar(); }
     if (!rep.eventos.length) { c.appendChild(el('div', 'color:#94a3b8', 'Todavía no hay eventos. Avance un turno.')); return; }
-    const por = {}; rep.eventos.forEach(e => { (por[e.turno] = por[e.turno] || []).push(e); });
+    const por = {}; rep.eventos.filter(e => !(e.t === 'PISTA' && e.k === 'ESTADO')).forEach(e => { (por[e.turno] = por[e.turno] || []).push(e); });
     Object.keys(por).map(Number).sort((a, b) => b - a).forEach(t => { c.appendChild(el('div', 'margin-top:6px;font-weight:bold;font-size:12px;color:#e2e8f0;border-bottom:1px solid #334155', t === 0 ? 'Antes del turno 1' : 'Turno ' + t));
       por[t].forEach(e => { const f = el('div', 'font-size:11.5px;padding:1px 0;color:' + colEv(e.t), textoEv(e)); f.className = 'sm-ev'; c.appendChild(f); }); });
   }
@@ -8820,7 +8820,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const rg = el('input', 'flex:1'); rg.type = 'range'; rg.min = 0; rg.max = n; rg.value = repIdx; rg.className = 'sm-rep-rg'; rg.oninput = () => { repIdx = Number(rg.value); lab.textContent = 'Turno ' + repIdx + ' de ' + n; dibujarRep(); lista2(); };
     t.append(btn('⏮', '#475569', () => { repIdx = 0; pintar(); dibujarRep(); }), rg, lab, btn(repTimer ? '⏸' : '▶', '#15803d', () => { if (repTimer) { detenerRep(); pintar(); return; } if (repIdx >= n) repIdx = 0; repTimer = setInterval(() => { if (repIdx >= n) { detenerRep(); pintar(); return; } repIdx++; pintar(); dibujarRep(); }, 1000); pintar(); }, 'Reproducir')); c.appendChild(t);
     const cont = el('div', 'max-height:220px;overflow:auto'); cont.className = 'sm-rep-ev'; c.appendChild(cont);
-    function lista2() { cont.textContent = ''; const evs = rep.eventos.filter(e => e.turno === repIdx && e.t !== 'MOV' || (e.turno === repIdx && e.t === 'MOV')); if (!evs.length) cont.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', repIdx === 0 ? 'Posición inicial.' : 'Sin eventos en este turno.')); evs.forEach(e => cont.appendChild(el('div', 'font-size:11.5px;padding:1px 0;color:' + colEv(e.t), textoEv(e)))); }
+    function lista2() { cont.textContent = ''; const evs = rep.eventos.filter(e => e.turno === repIdx && !(e.t === 'PISTA' && e.k === 'ESTADO')); if (!evs.length) cont.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', repIdx === 0 ? 'Posición inicial.' : 'Sin eventos en este turno.')); evs.forEach(e => cont.appendChild(el('div', 'font-size:11.5px;padding:1px 0;color:' + colEv(e.t), textoEv(e)))); }
     lista2(); dibujarRep();
   }
   function informeDatos() {
@@ -8891,7 +8891,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
     const A = aarDatos(d); AT(['Análisis posterior (AAR) — resumen'], A.resumen.map(x => [x])); if (A.hitos.length) AT(['Turno', 'Hito'], A.hitos.map(h => [String(h[0]), h[1]])); AT(['Puntos para el debate'], A.debate.map(x => [x]));
-    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA' || e.t === 'RADAR').slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
+    const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA' || e.t === 'RADAR').filter(e => !(e.t === 'PISTA' && e.k === 'ESTADO')).slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
   }
