@@ -8836,6 +8836,29 @@ window.addEventListener('DOMContentLoaded', () => {
         if (e.t === 'BAJA') { const u = B.filter(x => x.id === e.u)[0], b = u && bando(u.af), d = e.antes - e.despues; if (b === 'AZUL') f.azulBajas += d; else if (b === 'ROJO') f.rojoBajas += d; } }); f.azulBajas = Math.round(f.azulBajas * 10) / 10; f.rojoBajas = Math.round(f.rojoBajas * 10) / 10; porTurno.push(f); }
     const fe = rep.eventos.filter(e => e.t === 'FIN').pop(); return { res: res, porTurno: porTurno, fin: fe ? fe.m : 'Ejercicio en curso o sin cierre registrado.', nm: nm, ini: ini };
   }
+  /* ---------- plan contra realidad: cada orden de movimiento frente a lo que ocurrió ---------- */
+  function planRealDatos() {
+    const B = rep.base, ev = rep.eventos, snaps = rep.snaps, ult = snaps.length - 1, filas = [], nm = id => (B.filter(u => u.id === id)[0] || {}).n || id;
+    const snapEn = t => { for (let i = 0; i < snaps.length; i++) if (snaps[i].t === t) return snaps[i]; return snaps[Math.max(0, Math.min(t, ult))]; };
+    const kmMax = {}; ev.forEach(e => { if (e.t === 'MOV' && e.a && e.b) kmMax[e.u] = Math.max(kmMax[e.u] || 0, km(e.a, e.b)); });
+    const por = {}; ev.filter(e => e.t === 'ORDEN' && typeof e.lat === 'number' && typeof e.lon === 'number' && !e.q && !e.rec).forEach(e => { const te = e.p ? e.turno : e.turno + 1; (por[e.u] = por[e.u] || []).push({ te: te, lat: e.lat, lon: e.lon, plan: !!e.p }); });
+    Object.keys(por).forEach(id => { const L = por[id].sort((a, b) => a.te - b.te); L.forEach((o, i) => {
+      if (o.te > ult) return; const sig = L[i + 1] && L[i + 1].te <= ult ? L[i + 1].te : null, fin = sig !== null ? sig - 1 : ult, ini = (snapEn(o.te - 1).act || {})[id]; if (!ini) return;
+      const d0 = km([ini.lat, ini.lon], [o.lat, o.lon]); let tLleg = null; const causas = {};
+      ev.forEach(e => { if (e.turno < o.te || e.turno > fin) return; if (e.t === 'MOV' && e.u === id && e.ll && tLleg === null) tLleg = e.turno;
+        if (e.u !== id && e.a !== id) return; if (e.t === 'ESTADO' && e.e === 'NO_OPERATIVO') causas['quedó fuera de combate (t' + e.turno + ')'] = 1;
+        if (e.t === 'AGOT') causas['se agotó ' + ({ m: 'la munición', c: 'el combustible', v: 'los víveres' }[e.r] || e.r) + ' (t' + e.turno + ')'] = 1;
+        if (e.t === 'AIR' && e.k === 'ESPERA_PISTA') causas['esperó por la pista'] = 1; if (e.t === 'AIR' && e.k === 'ORDEN_EN_TIERRA') causas['estaba en tierra rearmando'] = 1; if (e.t === 'AIR' && e.k === 'PERDIDA') causas['se perdió la aeronave'] = 1; if (e.t === 'AIR' && e.k === 'RTB') causas['regresó a su base'] = 1; if (e.t === 'AIR' && e.k === 'SIN_INSUMOS') causas['rearme detenido por falta de insumos'] = 1;
+        if (e.t === 'ENTORNO') causas['terreno o clima redujo la marcha'] = 1; });
+      const prev = kmMax[id] > 0 ? Math.max(1, Math.ceil(d0 / kmMax[id])) : null, real = tLleg !== null ? tLleg - o.te + 1 : null, fa = (snapEn(fin).act || {})[id], resto = fa ? km([fa.lat, fa.lon], [o.lat, o.lon]) : null;
+      let est; if (tLleg !== null) est = prev !== null && real > prev ? 'CON DEMORA' : 'CUMPLIDA'; else est = sig !== null ? 'REEMPLAZADA' : 'NO LLEGÓ';
+      filas.push({ u: id, n: nm(id), te: o.te, plan: o.plan, d0: Math.round(d0 * 10) / 10, prev: prev, real: real, tLleg: tLleg, est: est, resto: resto === null ? null : Math.round(resto * 10) / 10, causas: Object.keys(causas), sig: sig }); }); });
+    filas.sort((a, b) => a.te - b.te || (a.n < b.n ? -1 : 1));
+    const cuenta = { CUMPLIDA: 0, 'CON DEMORA': 0, REEMPLAZADA: 0, 'NO LLEGÓ': 0 }; filas.forEach(f => { cuenta[f.est]++; });
+    const dem = filas.filter(f => f.est === 'CON DEMORA' && f.prev !== null).map(f => f.real - f.prev), freq = {}; filas.filter(f => f.est !== 'CUMPLIDA').forEach(f => f.causas.forEach(c => { const k = c.replace(/ \(t\d+\)/, ''); freq[k] = (freq[k] || 0) + 1; }));
+    const top = Object.keys(freq).sort((a, b) => freq[b] - freq[a])[0] || null;
+    return { filas: filas, cuenta: cuenta, total: filas.length, pct: filas.length ? Math.round(100 * cuenta.CUMPLIDA / filas.length) : null, demMedia: dem.length ? Math.round(10 * dem.reduce((a, b) => a + b, 0) / dem.length) / 10 : 0, top: top, topN: top ? freq[top] : 0 };
+  }
   /* ---------- análisis posterior (AAR): se arma solo con lo que registró el ejercicio ---------- */
   function aarDatos(d) {
     const B = rep.base, nm = d.nm, bandoDe = id => { const u = B.filter(x => x.id === id)[0]; return u ? bando(u.af) : ''; }, RN = { m: 'munición', c: 'combustible', v: 'víveres' }, ev = rep.eventos, hitos = [], R = d.res, pct = (a, b) => b > 0 ? Math.round(100 * (b - a) / b) : 0;
@@ -8860,8 +8883,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (aire.insumos) deb.push('El rearme se detuvo por falta de insumos en ' + aire.insumos + ' ocasión(es). ¿Se dimensionó el depósito de la base?');
     if (pista.length) deb.push('Una pista quedó inoperativa. ¿Se protegió la base y qué plan había para mantener la operación sin ella?');
     if (radar.det) deb.push('Se registraron ' + radar.det + ' detección(es) por radar. ¿Se aprovechó el aviso para decidir?');
+    const PR = planRealDatos(); if (PR.total) { const nc = PR.total - PR.cuenta.CUMPLIDA; if (nc > 0) deb.push('De ' + PR.total + ' órdenes de movimiento, ' + nc + ' no se cumplieron como se previó' + (PR.top ? '; la causa más repetida fue: ' + PR.top + ' (' + PR.topN + ').' : '.') + ' ¿Qué dato faltó al planificar?'); else deb.push('Todas las órdenes de movimiento se cumplieron en el tiempo previsto. ¿El plan fue demasiado conservador?'); if (PR.cuenta.REEMPLAZADA) deb.push(PR.cuenta.REEMPLAZADA + ' orden(es) se cambiaron antes de llegar. ¿Fue una decisión por nueva información o falta de claridad inicial?'); }
     deb.push('¿Qué se haría distinto con la misma semilla? Comparar con otra corrida (Decisión → Corridas) y con el plan original.');
-    return { resumen: resumen, hitos: hitos, debate: deb, nm: nm };
+    if (PR.total) resumen.push('Plan contra realidad: ' + PR.cuenta.CUMPLIDA + ' de ' + PR.total + ' órdenes de movimiento cumplidas en tiempo (' + PR.pct + ' %), ' + PR['cuenta']['CON DEMORA'] + ' con demora, ' + PR.cuenta.REEMPLAZADA + ' reemplazadas, ' + PR.cuenta['NO LLEGÓ'] + ' sin llegar.');
+    return { resumen: resumen, hitos: hitos, debate: deb, nm: nm, plan: PR };
   }
   async function tabInforme(c) {
     if (!rep) { c.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); const r = await cargarRep(); if (!r || tab !== 'informe') return; return pintar(); }
@@ -8877,6 +8902,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const A = aarDatos(d), ab = el('div', 'margin-top:12px;padding-top:8px;border-top:2px solid #334155'); ab.className = 'sm-aar'; ab.appendChild(el('div', 'font-weight:bold;font-size:13px', 'Análisis posterior de la práctica (AAR)'));
     ab.appendChild(el('div', 'margin-top:4px;font-weight:bold;font-size:12px', 'Resumen')); A.resumen.forEach(x => ab.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:2px', '• ' + x)));
     ab.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Hitos de la práctica')); if (!A.hitos.length) ab.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Sin hitos registrados (no hubo combate, bajas ni agotamientos).')); A.hitos.forEach(h => ab.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:2px', 't' + h[0] + ' — ' + h[1])));
+    ab.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Plan contra realidad (órdenes de movimiento)'));
+    if (!A.plan.total) ab.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'No hay órdenes de movimiento registradas.'));
+    else { const tp = el('table', 'width:100%;font-size:11px;border-collapse:collapse'); tp.className = 'sm-planreal'; const hp = el('tr'); ['Unidad', 'Orden t', 'Dist. km', 'Previsto', 'Real', 'Resultado', 'Motivo / resto'].forEach(t => hp.appendChild(el('th', 'text-align:left;color:#94a3b8;font-weight:normal;padding:2px 4px', t))); tp.appendChild(hp);
+      A.plan.filas.slice(0, 60).forEach(f => { const tr = el('tr'), col = f.est === 'CUMPLIDA' ? '#86efac' : f.est === 'CON DEMORA' ? '#fde68a' : '#fca5a5'; [f.n, 't' + f.te + (f.plan ? ' (plan)' : ''), f.d0, f.prev === null ? '-' : f.prev + ' t', f.real === null ? '-' : f.real + ' t', f.est, f.est === 'CUMPLIDA' ? '' : (f.causas.join('; ') || (f.est === 'REEMPLAZADA' ? 'cambiada en t' + f.sig : '')) + (f.est !== 'CON DEMORA' && f.resto !== null ? (f.causas.length || f.est === 'REEMPLAZADA' ? ' · ' : '') + 'quedó a ' + f.resto + ' km' : '')].forEach((x, i) => tr.appendChild(el('td', 'padding:2px 4px;border-top:1px solid #1e293b' + (i === 5 ? ';color:' + col : ''), String(x)))); tp.appendChild(tr); }); ab.appendChild(tp);
+      if (A.plan.filas.length > 60) ab.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Se muestran las primeras 60 de ' + A.plan.filas.length + ' órdenes.'));
+      ab.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:3px', 'Previsto = turnos que habría tardado con la mejor marcha que esa unidad logró en el ejercicio (estimación).')); }
     ab.appendChild(el('div', 'margin-top:8px;font-weight:bold;font-size:12px', 'Puntos para el debate')); A.debate.forEach(x => ab.appendChild(el('div', 'font-size:12px;color:#fde68a;margin-top:2px', '? ' + x)));
     ab.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Generado automáticamente con lo registrado por el ejercicio; en modo decisión solo incluye lo que el alumno pudo ver. Es una guía para el debate, no una evaluación.')); box.appendChild(ab); c.appendChild(box);
     c.appendChild(el('div', 'margin-top:8px')).appendChild(btn('⬇ Informe en PDF', '#1d4ed8', () => pdf(d), 'Descargar el informe'));
@@ -8890,7 +8921,7 @@ window.addEventListener('DOMContentLoaded', () => {
     AT(['Bando', 'Fuerzas', 'Efectivo inicial', 'Efectivo final', 'Operativas', 'Disparos', 'Impactos'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.unidades, r.inicial, r.final, r.operativas, r.disparos, r.impactos].map(String); }));
     AT(['Bando', 'Munición %', 'Combustible %', 'Víveres %', 'Agotamientos M/C/V', 'Reabastecido M/C/V'], ['AZUL', 'ROJO'].map(b => { const r = d.res[b]; return [b, r.rec.m === null ? '-' : r.rec.m, r.rec.c === null ? '-' : r.rec.c, r.rec.v === null ? '-' : r.rec.v, r.agot.m + ' / ' + r.agot.c + ' / ' + r.agot.v, r.reab.m + ' / ' + r.reab.c + ' / ' + r.reab.v].map(String); }));
     AT(['Turno', 'Bajas azul', 'Bajas rojo', 'Disparos'], d.porTurno.map(f => [f.turno, f.azulBajas, f.rojoBajas, f.disparos].map(String)));
-    const A = aarDatos(d); AT(['Análisis posterior (AAR) — resumen'], A.resumen.map(x => [x])); if (A.hitos.length) AT(['Turno', 'Hito'], A.hitos.map(h => [String(h[0]), h[1]])); AT(['Puntos para el debate'], A.debate.map(x => [x]));
+    const A = aarDatos(d); AT(['Análisis posterior (AAR) — resumen'], A.resumen.map(x => [x])); if (A.hitos.length) AT(['Turno', 'Hito'], A.hitos.map(h => [String(h[0]), h[1]])); if (A.plan.total) AT(['Unidad', 'Orden', 'Dist. km', 'Previsto', 'Real', 'Resultado', 'Motivo / resto'], A.plan.filas.slice(0, 80).map(f => [f.n, 't' + f.te, f.d0, f.prev === null ? '-' : f.prev, f.real === null ? '-' : f.real, f.est, (f.est === 'CUMPLIDA' ? '' : f.causas.join('; ') + (f.resto !== null && f.est !== 'CON DEMORA' ? ' · a ' + f.resto + ' km' : '')) ].map(String))); AT(['Puntos para el debate'], A.debate.map(x => [x]));
     const evs = rep.eventos.filter(e => e.t === 'FUEGO' || e.t === 'ESTADO' || e.t === 'FIN' || e.t === 'ORDEN' || e.t === 'AGOT' || e.t === 'REAB' || e.t === 'CARGA' || e.t === 'ENTORNO' || e.t === 'AIR' || e.t === 'PISTA' || e.t === 'RADAR').filter(e => !(e.t === 'PISTA' && e.k === 'ESTADO')).slice(0, 500); AT(['Turno', 'Evento'], evs.map(e => [String(e.turno), textoEv(e)]));
     doc.setFontSize(8); doc.text('Simulación con parámetros genéricos y ficticios; resultados con fines de adiestramiento y planificación, no predicciones.', 14, 287);
     doc.save('Simulacion_' + ej.nombre.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '.pdf'); aviso('Informe descargado.', true);
