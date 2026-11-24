@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwHb5pePdJtjVOitchxCuUllkPVGlRNO0l1cgLNuUe1OMihLmaqZ4OTPGuCh7_JTO0K/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbz7J6UGgUg6-ULq-HxjqsPHsrPFCJX47py3C7wfzYs9qGF2tTcijN1D3X5n2xRPNEkZGw/exec";
 
 
 ;
@@ -9685,6 +9685,79 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <!-- ===== FIN BLOQUE SANIDAD ===== -->
+<!-- ===== INICIO BLOQUE MARISCAL ===== -->
+<script>
+/* A.R.E.S.: MARISCAL, guía del Administrador para crear, planificar y manejar el teatro.
+   Revisa qué falta, responde preguntas y PROPONE cambios que el administrador confirma. Nunca cambia nada solo.
+   Por defecto contesta por reglas (sin enviar nada afuera); si el superadministrador conectó la IA en el servidor, las preguntas libres las contesta la IA. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
+  const rolOk = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()); };
+  let panel = null, log = null, ia = false, ultimo = '', saludado = false, ocupado = false;
+  async function api(a, extra) { const s = sesion(); if (!s) throw new Error('Sesión cerrada.'); return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json(); }
+  const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:5px 10px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:2px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
+  const TEMAS = [['Crear un teatro', '¿Cómo creo un teatro nuevo?'], ['Módulos', '¿Qué módulos hay y cuál habilito?'], ['Roles', '¿Qué roles hay y qué hace cada uno?'], ['Sectores', '¿Cómo cargo los sectores?'], ['Medios', '¿Cómo cargo medios y unidades?'], ['Planificar', '¿Cuál es el siguiente paso para planificar?']];
+  function msg(quien, texto, estilo) {
+    const m = el('div', 'margin:6px 0;padding:7px 9px;border-radius:6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;' + (quien === 'yo' ? 'background:#1e3a8a;margin-left:28px' : 'background:#1e293b;margin-right:12px') + (estilo || ''), texto); m.className = 'ma-msg ma-' + quien; log.appendChild(m); log.scrollTop = log.scrollHeight; return m;
+  }
+  function tarjetaPropuesta(p) {
+    const c = el('div', 'margin:6px 12px 6px 0;padding:8px;border-radius:6px;border:1px dashed #38bdf8;background:#0c4a6e;font-size:12.5px'); c.className = 'ma-prop';
+    c.appendChild(el('div', 'font-weight:bold', '📝 Propuesta: ' + p.texto));
+    if (!p.puedeAplicar) { c.appendChild(el('div', 'margin-top:4px;color:#fcd34d;font-size:11.5px', 'Habilitar módulos le corresponde al Jefe de Teatro o al superadministrador. Pídaselo: «habilitar ' + p.modulo + ' en este teatro».')); log.appendChild(c); log.scrollTop = log.scrollHeight; return; }
+    let paso = 0; const b = btn('✅ Aplicar', '#15803d', async () => {
+      if (paso === 0) { paso = 1; b.textContent = '¿Confirma? Pulse otra vez'; b.style.background = '#b45309'; return; }
+      b.disabled = true; b.textContent = 'Aplicando…';
+      try { const r = await api('MAR_APLICAR', { propuesta: { tipo: p.tipo, modulo: p.modulo } }); b.remove(); c.appendChild(el('div', 'margin-top:4px;color:' + (r.status === 'success' ? '#86efac' : '#fca5a5'), r.message || 'Sin respuesta.')); }
+      catch (e) { b.disabled = false; b.textContent = '✅ Aplicar'; paso = 0; c.appendChild(el('div', 'color:#fca5a5', 'No se pudo aplicar: ' + e.message)); }
+    }); c.appendChild(b); c.appendChild(btn('Ahora no', '#475569', () => c.remove())); log.appendChild(c); log.scrollTop = log.scrollHeight;
+  }
+  async function revisar() {
+    if (ocupado) return; ocupado = true; const m = msg('mariscal', 'Revisando el teatro…');
+    try {
+      const r = await api('MAR_DIAGNOSTICO'); m.remove(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude revisar el teatro.'); return; }
+      ia = !!r.ia; modo(); const R = r.resumen;
+      msg('mariscal', 'Teatro ' + R.nombre + ' (' + R.tipo + ') · ' + R.modulos.length + ' módulo(s) · ' + R.sectores + ' sector(es).');
+      (r.hallazgos || []).forEach(x => { const col = x.nivel === 'OK' ? '#166534' : x.nivel === 'FALTA' ? '#7f1d1d' : '#78350f'; const ic = x.nivel === 'OK' ? '✅ ' : x.nivel === 'FALTA' ? '⛔ ' : '⚠️ ';
+        const d = msg('mariscal', ic + x.texto + (x.paso ? '\n→ ' + x.paso : ''), ';background:' + col); d.className += ' ma-hall'; if (x.propuesta) tarjetaPropuesta(x.propuesta); });
+    } catch (e) { m.remove(); msg('mariscal', 'No pude revisar el teatro: ' + e.message); } finally { ocupado = false; }
+  }
+  async function preguntar(t) {
+    t = String(t || '').trim(); if (!t || ocupado) return; ocupado = true; msg('yo', t); const m = msg('mariscal', 'Pensando…');
+    try { const r = await api('MAR_CONSULTAR', { texto: t }); m.remove(); ia = !!r.ia; modo(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude responder.'); return; }
+      msg('mariscal', r.respuesta); (r.propuestas || []).forEach(tarjetaPropuesta); }
+    catch (e) { m.remove(); msg('mariscal', 'No pude responder: ' + e.message); } finally { ocupado = false; }
+  }
+  function modo() { const e = panel && panel.querySelector('.ma-modo'); if (e) e.textContent = ia ? 'IA conectada' : 'Guía por reglas'; }
+  function abrir() {
+    if (panel) { cerrar(); return; }
+    panel = el('div', 'position:fixed;top:60px;right:10px;bottom:70px;width:min(380px,calc(100vw - 20px));z-index:2147483000;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px #000a;display:flex;flex-direction:column;font-family:sans-serif'); panel.id = 'ma-panel';
+    const cab = el('div', 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #334155;background:#1e293b;border-radius:8px 8px 0 0');
+    const tt = el('div', 'flex:1'); tt.appendChild(el('b', 'font-size:14px', '🎖 MARISCAL')); tt.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Guía del Administrador · ')).appendChild(el('span', '', ia ? 'IA conectada' : 'Guía por reglas')).className = 'ma-modo';
+    cab.append(tt, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
+    const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado'));
+    TEMAS.forEach(t => barra.appendChild(btn(t[0], '#334155', () => preguntar(t[1])))); panel.appendChild(barra);
+    log = el('div', 'flex:1;overflow:auto;padding:6px 8px'); panel.appendChild(log);
+    const pie = el('div', 'display:flex;gap:6px;padding:8px;border-top:1px solid #334155'); const inp = el('input', 'flex:1;padding:7px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff;font-size:12.5px'); inp.type = 'text'; inp.maxLength = 500; inp.placeholder = 'Pregunte a Mariscal…'; inp.className = 'ma-entrada';
+    const env = () => { const v = inp.value; inp.value = ''; preguntar(v); }; inp.onkeydown = e => { if (e.key === 'Enter') env(); }; pie.append(inp, btn('Enviar', '#2563eb', env)); panel.appendChild(pie);
+    document.body.appendChild(panel);
+    if (!saludado) { saludado = true; msg('mariscal', 'A sus órdenes. Soy Mariscal. Puedo revisar su teatro, explicarle cómo crearlo, configurarlo y planificarlo, y proponerle cambios que usted confirma. Yo no modifico nada por mi cuenta.'); revisar(); }
+    else { log.appendChild(el('div', 'font-size:11px;color:#94a3b8;padding:4px', 'Pulse «Revisar mi teatro» para actualizar el diagnóstico.')); }
+    try { inp.focus(); } catch (_) {}
+  }
+  function cerrar() { if (panel) { panel.remove(); panel = null; log = null; } }
+  function boton() {
+    if (!rolOk()) { const b = $('btn-mariscal'); if (b) b.remove(); return; } if ($('btn-mariscal')) return;
+    const b = el('button', 'position:fixed;left:12px;bottom:64px;z-index:2147482900;padding:8px 12px;border-radius:20px;border:1px solid #38bdf8;background:#0c4a6e;color:#fff;cursor:pointer;font-size:13px;box-shadow:0 2px 10px #0008', '🎖 Mariscal'); b.id = 'btn-mariscal'; b.type = 'button'; b.title = 'Guía del Administrador'; b.onclick = abrir; document.body.appendChild(b);
+  }
+  function reiniciar() { cerrar(); saludado = false; const b = $('btn-mariscal'); if (b) b.remove(); }
+  setInterval(() => { const s = sesion(), k = s && rolOk() ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : ''; if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton(); }, 1500);
+  window.aresMariscal = { abrir: abrir, cerrar: cerrar, estado: () => ({ ia: ia, abierto: !!panel }) };
+})();
+</script>
+<!-- ===== FIN BLOQUE MARISCAL ===== -->
 <!-- ===== INICIO BLOQUE FUEGO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
 /* A.R.E.S.: gestión de incendios forestales (módulo FUEGO). Se carga el punto de ignición, el combustible, la pendiente, el pronóstico (viento, humedad, temperatura por tramos),
