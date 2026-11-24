@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwg5p-IZ-Q93jf6YYXyqrySf2IH1c20xjkifiXtHvrJJea_Wz7iwAHjyuyYnY0MdH59iA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbykfP4bqABa3Lw7uMOI9XVoTxkiFyPrVCgVHW-srOpFjcPLpWZx8lh-oP31-WPCqJAKNg/exec";
 
 
 ;
@@ -8539,10 +8539,43 @@ window.addEventListener('DOMContentLoaded', () => {
         try { const r = await api('ADMIN', { op: 'ARMA', m: bibModelo(x) }); if (r && r.status === 'success') n++; else mal++; } catch (_) { mal++; } st.textContent = 'Importando… ' + (n + ya + mal); await new Promise(res => setTimeout(res, 120)); } }
       aviso(n + ' modelo(s) importado(s), ' + ya + ' ya estaban' + (mal ? ', ' + mal + ' con error' : '') + '.', !mal); await recargar(true); }); bx.appendChild(bt); bx.appendChild(st); c.appendChild(bx);
   }
+  /* ---------- importador de planilla (CSV o pegado desde Excel): cualquier sistema de cualquier país ---------- */
+  let ultImp = '';
+  const CSV_COLS = ['dominio', 'grupo', 'nombre', 'simbolo', 'alcance_km', 'vel_kmh', 'radio_km', 'autonomia_km', 'rearme_h', 'firma', 'rad_baja_pct', 'pais', 'notas'];
+  const CSV_SIN = { dominio: 'dominio', grupo: 'grupo', categoria: 'grupo', nombre: 'nombre', modelo: 'nombre', sistema: 'nombre', simbolo: 'simbolo', alcance: 'alcance_km', alcancekm: 'alcance_km', vel: 'vel_kmh', velkmh: 'vel_kmh', velocidad: 'vel_kmh', velocidadkmh: 'vel_kmh', radio: 'radio_km', radiokm: 'radio_km', radiodeaccion: 'radio_km', autonomia: 'autonomia_km', autonomiakm: 'autonomia_km', rearme: 'rearme_h', rearmeh: 'rearme_h', firma: 'firma', firmaradar: 'firma', radbaja: 'rad_baja_pct', radbajapct: 'rad_baja_pct', alcancebajos: 'rad_baja_pct', pais: 'pais', origen: 'pais', notas: 'notas', nota: 'notas', observaciones: 'notas' };
+  function csvParse(t) {
+    t = String(t || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n'); const l0 = t.split('\n')[0] || '', cnt = c => l0.split(c).length - 1, d = cnt('\t') > 0 ? '\t' : cnt(';') > cnt(',') ? ';' : ','; const filas = []; let f = [], v = '', q = false;
+    for (let i = 0; i < t.length; i++) { const c = t[i]; if (q) { if (c === '"') { if (t[i + 1] === '"') { v += '"'; i++; } else q = false; } else v += c; } else if (c === '"') q = true; else if (c === d) { f.push(v); v = ''; } else if (c === '\n') { f.push(v); filas.push(f); f = []; v = ''; } else v += c; }
+    if (v !== '' || f.length) { f.push(v); filas.push(f); } return filas;
+  }
+  function csvModelos(texto) {
+    const F = csvParse(texto), errores = [], modelos = []; if (F.filter(r => r.some(x => String(x).trim() !== '')).length < 2) return { modelos: modelos, errores: ['La planilla necesita una fila de títulos y al menos un sistema.'] };
+    const sinAc = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''), idx = {}; F[0].forEach((c, i) => { const k = CSV_SIN[sinAc(c)]; if (k && idx[k] === undefined) idx[k] = i; });
+    if (idx.dominio === undefined || idx.nombre === undefined) return { modelos: modelos, errores: ['Faltan las columnas "dominio" y "nombre" en la primera fila.'] };
+    const DOM = { aire: 'AIRE', aereo: 'AIRE', aerea: 'AIRE', air: 'AIRE', tierra: 'TIERRA', terrestre: 'TIERRA', land: 'TIERRA', mar: 'MAR', naval: 'MAR', maritimo: 'MAR', sea: 'MAR' };
+    if (F.length - 1 > 300) errores.push('Se leen solo las primeras 300 filas.');
+    F.slice(1, 301).forEach((r, n) => { if (!r.some(x => String(x).trim() !== '')) return; const ln = n + 2, g = k => idx[k] === undefined ? '' : String(r[idx[k]] === undefined ? '' : r[idx[k]]).trim(), num = k => g(k).replace(',', '.');
+      const dom = DOM[sinAc(g('dominio'))] || '', nom = g('nombre'); if (!dom) { errores.push('Fila ' + ln + ': dominio inválido (use AIRE, TIERRA o MAR).'); return; } if (!nom) { errores.push('Fila ' + ln + ': falta el nombre.'); return; }
+      const sg = g('simbolo'), sb = SIMBOLOS.filter(s => s[0] === sg.toUpperCase() || sinAc(s[1]) === sinAc(sg))[0], pais = g('pais'), nt = g('notas');
+      modelos.push({ ln: ln, m: { id: '', dominio: dom, categoria: g('grupo') || (pais ? pais : dom), nombre: nom, simbolo: sb ? sb[0] : 'GEN', alcance: num('alcance_km'), vel: num('vel_kmh'), radio: dom === 'AIRE' ? num('radio_km') : '', autonomia: num('autonomia_km'), rearme: dom === 'AIRE' ? num('rearme_h') : '', firma: dom === 'AIRE' ? num('firma') : '', radBaja: sb && sb[0] === 'RAD' ? num('rad_baja_pct') : '', notas: ((pais ? 'País: ' + pais + '. ' : '') + (nt || 'Importado de planilla. Revisar y ajustar.')).slice(0, 200), activo: true } }); });
+    return { modelos: modelos, errores: errores };
+  }
+  function bloqueImportador(c, cat) {
+    const bx = el('div', 'margin:8px 0;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:8px'); bx.className = 'cb-importador';
+    bx.appendChild(el('div', 'font-weight:bold;font-size:12.5px', 'Importar planilla (cualquier sistema de cualquier país)'));
+    bx.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin:2px 0 6px', 'Pegue las filas copiadas de Excel o suba un archivo CSV. Primera fila con los títulos: ' + CSV_COLS.join(', ') + '. Solo dominio y nombre son obligatorios. Los que ya existen no se repiten. Hasta 300 filas por vez.'));
+    const ta = el('textarea', 'width:100%;min-height:90px;box-sizing:border-box;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:4px;font-size:11px;font-family:monospace'); ta.placeholder = 'dominio;grupo;nombre;simbolo;alcance_km;vel_kmh;pais\nTIERRA;Tanques;Ejemplo de tanque;BLI;4;60;Argentina'; bx.appendChild(ta);
+    const fi = el('input'); fi.type = 'file'; fi.accept = '.csv,.txt,text/csv,text/plain'; fi.style.cssText = 'font-size:11px;margin-top:4px;max-width:100%'; fi.onchange = () => { const f = fi.files && fi.files[0]; if (!f) return; if (f.size > 500000) { aviso('El archivo es demasiado grande (máximo 500 KB).', false); return; } const rd = new FileReader(); rd.onload = () => { ta.value = String(rd.result || ''); }; rd.readAsText(f, 'UTF-8'); }; bx.appendChild(fi);
+    const st = el('div', 'font-size:11.5px;color:#cbd5e1;margin-top:4px;white-space:pre-wrap'); st.className = 'cb-imp-res'; st.textContent = ultImp;
+    bx.appendChild(btn('Descargar plantilla', '#334155', () => { const t = CSV_COLS.join(';') + '\nAIRE;Ejemplo - Cazas;EJEMPLO caza;CAZ;80;900;550;3200;2;0.6;;País de ejemplo;Reemplazar por datos reales\nMAR;Ejemplo - Buques;EJEMPLO fragata;BUQ;120;55;;8000;;;;País de ejemplo;Reemplazar por datos reales\nTIERRA;Ejemplo - Tanques;EJEMPLO tanque;BLI;4;60;;500;;;;País de ejemplo;Reemplazar por datos reales\nTIERRA;Ejemplo - Radares;EJEMPLO radar;RAD;300;;;;;;40;País de ejemplo;Reemplazar por datos reales\n'; try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + t], { type: 'text/csv;charset=utf-8' })); a.download = 'plantilla_catalogo_ares.csv'; document.body.appendChild(a); a.click(); a.remove(); } catch (_) { aviso('No se pudo descargar la plantilla.', false); } }));
+    const bt = btn('Importar planilla', '#16a34a', async () => { const L = csvModelos(ta.value); if (!L.modelos.length) { st.textContent = L.errores.join('\n') || 'No hay filas para importar.'; return; } bt.disabled = true; let n = 0, ya = 0; const er = L.errores.slice();
+      for (const x of L.modelos) { if (cat.some(k => k.dominio === x.m.dominio && String(k.nombre).toLowerCase() === x.m.nombre.toLowerCase())) { ya++; continue; } try { const r = await api('ADMIN', { op: 'ARMA', m: x.m }); if (r && r.status === 'success') n++; else er.push('Fila ' + x.ln + ' (' + x.m.nombre + '): ' + ((r && r.message) || 'no se pudo guardar.')); } catch (_) { er.push('Fila ' + x.ln + ' (' + x.m.nombre + '): sin conexión.'); } st.textContent = 'Importando… ' + (n + ya + er.length) + ' de ' + L.modelos.length; await new Promise(res => setTimeout(res, 120)); }
+      ultImp = st.textContent = n + ' importado(s), ' + ya + ' ya existían, ' + er.length + ' con problema.' + (er.length ? '\n' + er.slice(0, 12).join('\n') + (er.length > 12 ? '\n… y ' + (er.length - 12) + ' más.' : '') : ''); aviso(n + ' sistema(s) importado(s).', !er.length); bt.disabled = false; await recargar(true); }); bx.appendChild(bt); bx.appendChild(st); c.appendChild(bx);
+  }
   function tabCatalogo(c) {
     if (!puedeEnemigo()) { c.appendChild(el('div', 'color:#94a3b8', 'El catálogo lo edita el superadministrador.')); return; }
     const cat = datos.catalogo || [];
-    bloqueBiblioteca(c, cat);
+    bloqueBiblioteca(c, cat); bloqueImportador(c, cat);
     if (!cat.length) { c.appendChild(el('div', 'font-size:12px;margin-bottom:6px', 'El catálogo está vacío. Cargue las categorías genéricas (sin modelos ni cifras) y complete usted los alcances.')); c.appendChild(btn('Cargar categorías iniciales', '#16a34a', () => accion('ADMIN', { op: 'ARMA_INICIAL' }, 'Catálogo inicial cargado.'))); }
     cat.forEach(k => { const r = el('div', 'display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:12px'); r.className = 'cb-cat-fila'; r.appendChild(imgSimbolo({ afiliacion: 'AZUL', simbolo: k.simbolo, dominio: k.dominio }, 22)); r.appendChild(el('div', 'flex:1' + (k.activo ? '' : ';opacity:.5'), k.nombre + ' · ' + k.dominio.toLowerCase() + ' · ' + (k.alcance ? k.alcance + ' km' : 'alcance sin definir') + (k.radBaja ? ' · bajos ' + k.radBaja + ' %' : '') + (k.firma ? ' · firma ' + k.firma : '') + (k.activo ? '' : ' · inactiva'))); r.appendChild(btn('✏️', '#1d4ed8', () => formCat(k))); c.appendChild(r); });
     c.appendChild(btn('➕ Nueva categoría', '#15803d', () => formCat(null)));
@@ -8556,9 +8589,11 @@ window.addEventListener('DOMContentLoaded', () => {
       const fir = campo(aer, 'Firma radar (1 = estándar; menos de 1 = más difícil de detectar; más de 1 = más fácil; 0,05 a 5)', 'number', x.firma || '');
       const rdr = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin-top:6px'); rdr.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Datos del radar (símbolo Radar). El alcance de referencia es contra blancos altos. Un radar moderno conserva buena parte de su alcance contra blancos bajos; uno antiguo, poco. Sirve para decidir qué detecta cada bando (niebla de guerra) y se avisa en la Bitácora.'));
       const rbj = campo(rdr, 'Alcance contra blancos bajos (% del alcance; 0 a 100; vacío = 50)', 'number', x.radBaja || '');
-      m.appendChild(aer); m.appendChild(rdr); const verAer = () => { aer.style.display = dom.value === 'AIRE' ? 'block' : 'none'; rdr.style.display = sim.value === 'RAD' ? 'block' : 'none'; }; dom.onchange = verAer; sim.onchange = verAer; verAer();
+      const mov = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin-top:6px'); mov.className = 'cb-cat-mov'; mov.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Datos de movimiento (buques y vehículos). Con la velocidad cargada, la simulación mueve a la fuerza a esa velocidad en vez de la general del dominio. La autonomía queda registrada como dato.'));
+      const velM = campo(mov, 'Velocidad (km/h; 0 a 250)', 'number', x.dominio === 'AIRE' ? '' : (x.vel || '')), autM = campo(mov, 'Autonomía (km; opcional)', 'number', x.dominio === 'AIRE' ? '' : (x.autonomia || ''));
+      m.appendChild(aer); m.appendChild(mov); m.appendChild(rdr); const verAer = () => { aer.style.display = dom.value === 'AIRE' ? 'block' : 'none'; mov.style.display = dom.value === 'AIRE' ? 'none' : 'block'; rdr.style.display = sim.value === 'RAD' ? 'block' : 'none'; }; dom.onchange = verAer; sim.onchange = verAer; verAer();
       const act = campo(m, 'Estado', 'select', null, i => [['SI', 'Activa'], ['NO', 'Inactiva']].forEach(o => { const op = el('option', '', o[1]); op.value = o[0]; i.appendChild(op); })); act.value = x.activo ? 'SI' : 'NO';
-      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, vel: vel.value, radio: rad.value, autonomia: aut.value, rearme: rea.value, firma: fir.value, radBaja: rbj.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
+      m.appendChild(btn('Guardar', '#16a34a', async () => { const r = await accion('ADMIN', { op: 'ARMA', m: { id: k ? k.id : '', dominio: dom.value, categoria: grp.value, nombre: nom.value, simbolo: sim.value, alcance: alc.value, vel: dom.value === 'AIRE' ? vel.value : velM.value, radio: rad.value, autonomia: dom.value === 'AIRE' ? aut.value : autM.value, rearme: rea.value, firma: fir.value, radBaja: rbj.value, activo: act.value === 'SI' } }, 'Categoría guardada.'); if (r && r.status === 'success') { m.remove(); } })); m.appendChild(btn('Cancelar', '#475569', () => m.remove())); c.appendChild(m);
     }
   }
   function pintar() {
