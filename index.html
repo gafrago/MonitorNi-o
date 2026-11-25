@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxwzCezl2UUHE9b2KrjjnxkL_oE18M8fttnMq1iSBd6uMuhpSxUZ9RVZjOPYhOpeY6F6Q/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyuuDB4llGGFA2LTJslcJVpQzeMZNyb9RNiPXaDaxutKrhAyq-pMQCAEUdc_uWACzgH1Q/exec";
 
 
 ;
@@ -3532,6 +3532,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       const u = r.usuario;
       sesionActiva = { autenticado: true, invitado: false, email: u.email, nombre: u.nombre, rol: u.rol, pin: r.token || pinInput, teatro: teatro ? teatro.id : '' };
+      try { if (window.aresOffline) window.aresOffline.iniciar(u.email, pinInput, teatro ? teatro.id : ''); } catch (_) { /* sin modo offline */ }
       if (teatro) prepararTeatro(teatro);
       ['panel-alta', 'panel-misiones', 'panel-auto-inundaciones'].forEach(id => { const e = $(id); if (e) e.style.display = ''; });
       const formNivel = document.querySelector('form[onsubmit="cargarNivelManual(event)"]');
@@ -7939,7 +7940,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       const r = await api('ELEC_LISTAR', forzar ? {} : { ver: ver }); if (r.status !== 'success') return;
       desfase = Number(r.ahora) ? Number(r.ahora) - Date.now() : desfase; const g0 = puedeGestionar; puedeGestionar = !!r.puedeGestionar; yo = r.yo || yo; if (r.miembros) miembros = r.miembros;
-      if (!r.sinCambios) { locales = r.locales || []; ver = r.ver || ''; dibujar(); if (panel) pintar(); } else if (g0 !== puedeGestionar && panel) pintar();
+      if (!r.sinCambios) { locales = aplicarPend(r.locales || []); ver = r.ver || ''; dibujar(); if (panel) pintar(); } else if (g0 !== puedeGestionar && panel) pintar();
       boton();
     } catch (_) { /* sin conexion: queda lo ultimo que vio */ } finally { ocupado = false; }
   }
@@ -8118,6 +8119,18 @@ window.addEventListener('DOMContentLoaded', () => {
     const nombre = 'Acta_' + a.id + '_' + latinE(a.local).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 30) + '.pdf'; P.cerrar(nombre); P.doc.save(nombre); return nombre;
   }
 
+  /* ---------- Lo guardado sin conexion se ve aplicado (con ⏳) hasta que el servidor lo confirme ---------- */
+  function aplicarPend(ls) {
+    try { const P = window.aresOffline ? window.aresOffline.pendientes() : []; if (!P.length) return ls;
+      P.forEach(it => { const l = ls.find(x => x.id === it.b.id); if (!l) return;
+        if (it.a === 'ELEC_FASE' && FASES.indexOf(it.b.fase) >= 0) { l.fase = it.b.fase; l.faseTs = it.ts; l.pend = true; }
+        else if (it.a === 'ELEC_INCIDENTE') { l.incidente = String(it.b.texto || ''); l.incidenteTs = l.incidente ? it.ts : 0; l.pend = true; } });
+    } catch (_) { /* sin pendientes */ } return ls;
+  }
+  function aplicarPendLotes(ls) {
+    try { const P = window.aresOffline ? window.aresOffline.pendientes('ELEC_LOTE_PARADA') : []; P.forEach(it => { const L = ls.find(x => x.id === it.b.id); if (!L) return; const p = L.paradas.find(x => x.id === it.b.idLocal); if (p && !p.real) { p.real = it.ts; p.pend = true; } }); } catch (_) { /* nada */ } return ls;
+  }
+  window.addEventListener('ares-offline-sync', () => { if (!iniciado) return; lotes = null; actas = null; cargar(true); if (panel) pintar(); });
   /* ---------- Traslados (lotes) ---------- */
   try { const st = document.createElement('style'); st.textContent = '.el-lot-num{background:none;border:0;box-shadow:none;color:#0f172a;font-weight:bold;padding:0}.el-lot-num:before{display:none}'; document.head.appendChild(st); } catch (_) { /* sin estilo */ }
   let lotes = null, lotInfo = { tipos: [], miembros: [] }, lotMsg = '', lotForm = null, lotConf = '', capaT = null, insLista = null;
@@ -8125,7 +8138,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const pad2 = n => String(n).padStart(2, '0');
   const aLocalInput = ms => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
   const nuevoLote = () => { const c = (function () { try { const m = mapa(); const q = m && m.getCenter(); return q ? q : null; } catch (_) { return null; } })(); const cl = locales.filter(l => isFinite(l.lat)); return { id: '', nombre: '', tipoMedio: 'CAMION', medio: '', vel: '', paradaMin: 20, baseLat: c ? c.lat.toFixed(4) : (cl[0] ? cl[0].lat : ''), baseLon: c ? c.lng.toFixed(4) : (cl[0] ? cl[0].lon : ''), baseNombre: '', salida: aLocalInput(ahora() + 3600000), responsableEmail: '', notas: '', paradas: [], vinculo: null, plan: null, aviso: '' }; };
-  async function cargarLotes() { try { const r = await api('ELEC_LOTE_LISTAR'); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudieron cargar los traslados.'); lotes = []; } else { lotes = r.lotes || []; lotInfo = { tipos: r.tipos || [], miembros: r.miembros || [] }; } } catch (_) { lotMsg = '⚠ Sin conexión.'; lotes = lotes || []; } if (panel && tab === 'traslados') pintar(); }
+  async function cargarLotes() { try { const r = await api('ELEC_LOTE_LISTAR'); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudieron cargar los traslados.'); lotes = []; } else { lotes = aplicarPendLotes(r.lotes || []); lotInfo = { tipos: r.tipos || [], miembros: r.miembros || [] }; } } catch (_) { lotMsg = '⚠ Sin conexión.'; lotes = lotes || []; } if (panel && tab === 'traslados') pintar(); }
   async function cargarIns() { insLista = []; try { const t = teatro(); if (!t || !Array.isArray(t.modulos) || t.modulos.map(m => String(m).toUpperCase()).indexOf('INSTALACIONES') < 0) return; const r = await api('INS_LISTAR'); if (r.status === 'success') insLista = r.instalaciones || []; } catch (_) { /* sin instalaciones */ } if (panel && tab === 'traslados' && lotForm) pintar(); }
   const lotMsgEl = w => { if (lotMsg) { const m = el('div', 'font-size:12px;margin:3px 0;padding:4px 6px;border-radius:4px;background:#1e293b;color:' + (/^⚠/.test(lotMsg) ? '#fca5a5' : '#86efac'), lotMsg); m.className = 'el-lot-msg'; w.appendChild(m); } };
   async function accionLote(accion, o, okTxt) { lotMsg = 'Procesando…'; pintar(); try { const r = await api(accion, o); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudo.'); pintar(); return r; } lotMsg = (okTxt || 'Listo.') + (r.aviso ? ' ' + r.aviso : ''); lotConf = ''; await cargar(true); await cargarLotes(); return r; } catch (e) { lotMsg = '⚠ ' + e.message; pintar(); } }
@@ -8151,7 +8164,7 @@ window.addEventListener('DOMContentLoaded', () => {
     L.paradas.forEach((p, i) => { const r = el('div', 'display:flex;gap:6px;align-items:center;font-size:12px;margin-top:3px;padding:2px 0;border-top:1px solid #1e293b'); r.className = 'el-lote-parada';
       const tarde = L.estado === 'EN_RUTA' && !p.real && ahora() > p.eta + 15 * 60000;
       r.appendChild(el('span', 'width:18px;color:#94a3b8', (i + 1) + '.')); r.appendChild(el('span', 'flex:1', p.nombre + ' (' + p.mesas + ' mesas)'));
-      r.appendChild(el('span', 'color:' + (p.real ? '#86efac' : tarde ? '#fca5a5' : '#cbd5e1'), p.real ? '✔ ' + hhmm(p.real) : (tarde ? '⏰ ' : '') + 'ETA ' + hhmm(p.eta)));
+      r.appendChild(el('span', 'color:' + (p.real ? '#86efac' : tarde ? '#fca5a5' : '#cbd5e1'), p.real ? '✔ ' + hhmm(p.real) + (p.pend ? ' ⏳ sin enviar' : '') : (tarde ? '⏰ ' : '') + 'ETA ' + hhmm(p.eta)));
       if (puedeMarcar && !p.real) r.appendChild(btnE('✔ Entregado aquí', () => accionLote('ELEC_LOTE_PARADA', { id: L.id, idLocal: p.id }, 'Entrega marcada.'), '#15803d')); c.appendChild(r); });
     const b = el('div', 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px'); b.appendChild(btnE('🗺 Ver ruta', () => verRuta(L)));
     const conf = (k, tx, fn, col) => { if (lotConf === L.id + k) { b.appendChild(el('span', 'font-size:12px;color:#fcd34d;align-self:center', '¿Seguro?')); b.appendChild(btnE('Sí', fn, col || '#b91c1c')); b.appendChild(btnE('No', () => { lotConf = ''; pintar(); })); } else b.appendChild(btnE(tx, () => { lotConf = L.id + k; pintar(); }, col)); };
@@ -8370,6 +8383,142 @@ window.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 <!-- ===== FIN BLOQUE ELECTORAL ===== -->
+<!-- ===== INICIO BLOQUE SIN CONEXION ===== -->
+<script>
+/* A.R.E.S.: modo sin conexion para cualquier teatro.
+   - Con la sesion abierta, si se pierde la senal: las lecturas devuelven lo ultimo visto (solo en memoria, nunca en disco) y las acciones de campo se GUARDAN EN EL EQUIPO y se envian solas al volver la senal.
+   - Lo guardado en el equipo va CIFRADO (AES-GCM) con una clave derivada de la clave de acceso del usuario: sin esa clave no se puede leer. Se guarda solo la accion, no datos del tablero.
+   - Cada accion lleva un identificador unico (el servidor no la aplica dos veces) y la hora del dispositivo (el servidor registra ademas su propia hora).
+   - El servidor valida al sincronizar: si rechaza una accion (permiso, fase ya avanzada...), queda marcada «rechazada» con el motivo para que el operador la revise.
+   - Requieren conexion (no se guardan para despues): ingreso y cambio de clave, borrados y bajas, calculos y simulaciones, Mariscal, archivos adjuntos, administracion.
+   - Limite: si la pagina se recarga sin senal no se puede volver a ingresar (el ingreso lo valida el servidor); lo pendiente se conserva cifrado y se envia al ingresar de nuevo con senal. */
+(function () {
+  'use strict';
+  const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+  const API = (function () { try { return COP_API_URL; } catch (_) { return ''; } })();
+  const ESCRIBIR = { ELEC_FASE: 'Cambio de fase de un local', ELEC_INCIDENTE: 'Incidente de un local', ELEC_LOTE_PARADA: 'Entrega de un lote', ELEC_LOTE_GUARDAR: 'Lote de traslado', ELEC_LOTE_ESTADO: 'Estado de un lote', ELEC_ACTA_CREAR: 'Acta de entrega o repliegue', ELEC_ACTA_CONFIRMAR: 'Confirmación de acta', ELEC_GUARDAR: 'Edición de un local', ELEC_IMPORTAR: 'Carga de locales',
+    MSG_ENVIAR: 'Mensaje', MSG_LEIDO: 'Mensaje leído', MSG_ESTADO: 'Estado de mensaje', INS_GUARDAR: 'Instalación', INS_DESPACHAR: 'Despacho de medios', INS_DESP_ESTADO: 'Estado de un despliegue', FUE_BITACORA: 'Bitácora de incendio', FUE_ESTADO: 'Estado de incendio', FUE_GUARDAR: 'Incendio', SAN_GUARDAR: 'Sanidad', TAREA_GUARDAR: 'Tarea', TAREA_ESTADO: 'Estado de tarea',
+    TRAZO_GUARDAR: 'Trazo en el mapa', TRAZO_ESTADO: 'Estado de un trazo', MET_AREA_GUARDAR: 'Área meteorológica', MET_ZONA_GUARDAR: 'Zona', MET_MANCHA_GUARDAR: 'Mancha', MET_PARTE_EMITIR: 'Parte meteorológico', FASE_GUARDAR: 'Fase del operativo', EPI_CREAR: 'Epidemia', EPI_ESTADO: 'Estado de epidemia' };
+  const LEER = /(_LISTAR|^LISTAR|_VER$|_HITOS$|_LEER$|_SERIE$|_INFORME$|^GET_SECURE_DATA$|^MSG_LISTAR$)/;
+  const NUNCA = /^(LOGIN|ELEGIR_TEATRO|CAMBIAR_CLAVE|ADMIN|JEFE|PANEL_MANDO|USUARIO|MIEMBRO|TEATRO)$|^MAR_|^MSG_PUSH_|^MSG_ADJUNTO$|_BORRAR$|_BAJA$/;
+  const MAX_ITEMS = 200, MAX_ITEM_BYTES = 400000, MAX_CACHE = 80, MAX_CACHE_BYTES = 600000, T_LEER = 20000, T_ESCRIBIR = 30000;
+  const f0 = window.fetch; if (typeof f0 !== 'function' || !API) return;
+  let cola = [], clave = null, claveEmail = '', sinc = false, ilegible = false, abierto = false, confirmar = '', cache = new Map(), memModo = false, ultimo = '';
+  const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+  const yoEmail = () => { try { return String(sesionActiva.email || '').toLowerCase(); } catch (_) { return ''; } };
+  const yoTeatro = () => { try { return String(sesionActiva.teatro || ''); } catch (_) { return ''; } };
+  const hh = ms => new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const uuid = () => { try { return crypto.randomUUID(); } catch (_) { return 'op-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); } };
+  const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  const b64 = u8 => { let s = ''; u8.forEach(c => { s += String.fromCharCode(c); }); return btoa(s); };
+  const ub64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+  const llaveLS = () => 'ares_off_q_' + hash(claveEmail);
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+  const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); return true; } catch (_) { return false; } };
+
+  /* ---------- cifrado ---------- */
+  async function derivar(email, pin) {
+    const s = window.crypto && crypto.subtle; if (!s) return null;
+    let sal = lsGet('ares_off_salt'); if (!sal) { sal = b64(crypto.getRandomValues(new Uint8Array(16))); lsSet('ares_off_salt', sal); }
+    const km = await s.importKey('raw', new TextEncoder().encode(String(pin) + '|' + email.toLowerCase()), 'PBKDF2', false, ['deriveKey']);
+    return s.deriveKey({ name: 'PBKDF2', salt: ub64(sal || 'AAAAAAAAAAAAAAAAAAAAAA=='), iterations: 120000, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function guardar() {
+    if (!claveEmail) return; const k = llaveLS(); if (!cola.length) { lsSet(k, null); return; }
+    if (!clave) return;       // sin cifrado disponible: solo memoria
+    try { const iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, clave, new TextEncoder().encode(JSON.stringify(cola)))); lsSet(k, b64(iv) + '.' + b64(ct)); } catch (_) { /* queda en memoria */ }
+  }
+  async function cargarCola() {
+    cola = []; ilegible = false; const t = lsGet(llaveLS()); if (!t) return; if (!clave) return;
+    try { const p = t.split('.'), pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ub64(p[0]) }, clave, ub64(p[1])); const a = JSON.parse(new TextDecoder().decode(pt)); cola = Array.isArray(a) ? a.filter(x => x && x.id && x.a && x.email) : []; }
+    catch (_) { ilegible = true; lsSet(llaveLS() + '_ilegible', t); lsSet(llaveLS(), null); }
+  }
+  async function iniciar(email, pin, teatro) {
+    claveEmail = String(email || '').toLowerCase(); cache = new Map(); clave = null; memModo = false;
+    try { clave = await derivar(claveEmail, pin); } catch (_) { clave = null; } if (!clave) memModo = true;
+    await cargarCola(); pintar(); sincronizar();
+  }
+
+  /* ---------- fetch ---------- */
+  const conTiempo = (u, o, ms) => { if (o.signal || typeof AbortController === 'undefined') return f0.call(window, u, o); const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms); return f0.call(window, u, Object.assign({}, o, { signal: ac.signal })).finally(() => clearTimeout(t)); };
+  const resp = j => new Response(JSON.stringify(j), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const quitarAuth = b => { const c = Object.assign({}, b); delete c.email; delete c.pin; delete c.action; delete c.idOp; delete c.offlineTs; return c; };
+  const claveCache = (a, b) => { const c = quitarAuth(b); delete c.ver; return a + '|' + JSON.stringify(c, Object.keys(c).sort()); };
+  const pendientesMios = () => cola.filter(x => x.estado === 'PENDIENTE' && x.email === yoEmail() && x.teatro === yoTeatro());
+  function encolar(a, b, ts, id) {
+    const q = quitarAuth(b), peso = JSON.stringify(q).length;
+    if (peso > MAX_ITEM_BYTES) return { status: 'error', message: 'Sin conexión: esta acción es demasiado grande para guardarla. Envíela con señal.' };
+    if (cola.length >= MAX_ITEMS) return { status: 'error', message: 'Sin conexión: hay demasiadas acciones guardadas. Sincronice antes de seguir.' };
+    cola.push({ id: id || uuid(), a: a, b: q, ts: ts || Date.now(), email: yoEmail(), teatro: yoTeatro(), estado: 'PENDIENTE', motivo: '' }); guardar(); pintar();
+    return { status: 'success', _enCola: true, message: '📴 Sin conexión: la acción quedó guardada en el equipo y se enviará sola al volver la señal.' + (memModo ? ' (Atención: este equipo no permite guardarla cifrada; no cierre la página.)' : '') };
+  }
+  function recordar(k, j) { try { const t = JSON.stringify(j); if (t.length > MAX_CACHE_BYTES) return; cache.delete(k); cache.set(k, { j: j, ts: Date.now() }); while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value); } catch (_) { /* nada */ } }
+  window.fetch = function (u, o) {
+    let b = null, a = '';
+    try { if (String(u) === API && o && typeof o.body === 'string' && activa()) { b = JSON.parse(o.body); a = String(b.action || ''); } } catch (_) { b = null; }
+    if (!b || !a || NUNCA.test(a) || String(b.email || '').toLowerCase() !== yoEmail()) return f0.apply(this, arguments);
+    const esEsc = Object.prototype.hasOwnProperty.call(ESCRIBIR, a);
+    if (!esEsc && !LEER.test(a)) return f0.apply(this, arguments);
+    if (!esEsc) {
+      const k = claveCache(a, b);
+      return conTiempo(u, o, T_LEER).then(async r => { try { const j = await r.clone().json(); if (j && j.status === 'success' && !j.sinCambios) recordar(k, j); } catch (_) { /* no es JSON */ } ultimo = ''; pintar(); return r; })
+        .catch(err => { const h = cache.get(k); if (h) { pintar(true); return resp(Object.assign({}, h.j, { _sinConexion: true, _cacheTs: h.ts })); } throw err; });
+    }
+    const ahora = Date.now();
+    if (pendientesMios().length || !navigator.onLine) { const rr = encolar(a, b, ahora); if (rr.status === 'success') setTimeout(sincronizar, 50); return Promise.resolve(resp(rr)); }
+    b.idOp = uuid(); const o2 = Object.assign({}, o, { body: JSON.stringify(b) });
+    return conTiempo(u, o2, T_ESCRIBIR).catch(err => { const it = encolar(a, b, ahora, b.idOp); pintar(true); return resp(it); });
+  };
+
+  /* ---------- sincronizacion ---------- */
+  async function sincronizar() {
+    if (sinc || !activa() || !navigator.onLine) return; if (!cola.some(x => x.estado === 'PENDIENTE' && x.email === yoEmail() && x.teatro === yoTeatro())) return;
+    sinc = true; pintar(); let hecho = 0, rech = 0;
+    try {
+      for (const it of cola.slice()) {
+        if (it.estado !== 'PENDIENTE' || it.email !== yoEmail() || it.teatro !== yoTeatro()) continue;
+        let r; try { const res = await conTiempo(API, { method: 'POST', body: JSON.stringify(Object.assign({}, it.b, { action: it.a, email: sesionActiva.email, pin: sesionActiva.pin, idOp: it.id, offlineTs: it.ts })) }, T_ESCRIBIR); r = await res.json(); } catch (_) { break; }
+        if (r && r.status === 'success') { cola = cola.filter(x => x.id !== it.id); hecho++; }
+        else if (r && (/SESIÓN/.test(r.message || '') || r.reintentar)) break;
+        else { it.estado = 'RECHAZADA'; it.motivo = (r && r.message) || 'El servidor la rechazó.'; rech++; }
+        await guardar(); pintar();
+      }
+    } finally { sinc = false; await guardar(); pintar(); if (hecho || rech) { try { window.dispatchEvent(new CustomEvent('ares-offline-sync', { detail: { hecho: hecho, rech: rech } })); } catch (_) { /* nada */ } } }
+  }
+
+  /* ---------- indicador y panel ---------- */
+  function pintar(caido) {
+    let p = document.getElementById('off-pildora'), w = document.getElementById('off-panel');
+    const mias = cola.filter(x => x.email === yoEmail()), pend = mias.filter(x => x.estado === 'PENDIENTE').length, rech = mias.filter(x => x.estado === 'RECHAZADA').length;
+    const sin = !navigator.onLine || caido === true || ultimo === 'caido'; if (caido === true) ultimo = 'caido';
+    const visible = activa() && (sin || pend || rech || ilegible);
+    if (!visible) { if (p) p.remove(); if (w) w.remove(); abierto = false; return; }
+    if (!p) { p = el('button', ''); p.id = 'off-pildora'; p.type = 'button'; p.onclick = () => { abierto = !abierto; confirmar = ''; pintar(); }; document.body.appendChild(p); }
+    const col = rech ? '#b91c1c' : sin ? '#b45309' : '#1d4ed8';
+    p.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:2147483100;background:' + col + ';color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:20px;padding:7px 12px;font:700 12.5px system-ui,sans-serif;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.4)';
+    p.textContent = (sin ? '📴 Sin conexión' : sinc ? '🔄 Enviando…' : '📤 Pendientes') + (pend ? ' · ' + pend + ' por enviar' : '') + (rech ? ' · ⚠ ' + rech + ' rechazada(s)' : '');
+    if (!abierto) { if (w) w.remove(); return; }
+    if (!w) { w = el('div', ''); w.id = 'off-panel'; document.body.appendChild(w); } w.textContent = '';
+    w.style.cssText = 'position:fixed;left:10px;bottom:52px;z-index:2147483100;width:min(380px,calc(100vw - 20px));max-height:60vh;overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;font:12.5px system-ui,sans-serif';
+    w.appendChild(el('b', 'font-size:14px;display:block', '📴 Modo sin conexión'));
+    w.appendChild(el('div', 'color:#94a3b8;margin:3px 0 6px;font-size:12px', sin ? 'Sin señal: se ven los últimos datos y las acciones de campo se guardan cifradas en este equipo. Se envían solas al volver la señal.' : 'Hay acciones guardadas. Se envían solas; también puede enviarlas ahora.'));
+    if (ilegible) w.appendChild(el('div', 'color:#fca5a5;margin:3px 0', '⚠ Había acciones guardadas que no se pudieron leer (cambió la clave de acceso). Se apartaron y no se enviarán.'));
+    const bt = (t, fn, c) => { const b = el('button', 'background:' + (c || '#1e293b') + ';border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px', t); b.type = 'button'; b.onclick = fn; return b; };
+    if (!mias.length) w.appendChild(el('div', 'color:#94a3b8', 'No hay acciones guardadas.'));
+    mias.forEach(it => { const r = el('div', 'border-top:1px solid #1e293b;padding:5px 0'); r.className = 'off-item';
+      const ro = it.estado === 'RECHAZADA'; r.appendChild(el('div', 'font-weight:bold;color:' + (ro ? '#fca5a5' : '#e2e8f0'), (ro ? '⚠ ' : '⏳ ') + (ESCRIBIR[it.a] || it.a)));
+      r.appendChild(el('div', 'color:#94a3b8;font-size:11.5px', 'Hecha ' + hh(it.ts) + (it.teatro !== yoTeatro() ? ' · de otro teatro (se envía al ingresar a ese teatro)' : '') + (ro ? ' · ' + it.motivo : '')));
+      const bs = el('div', 'margin-top:3px;display:flex;gap:5px;align-items:center');
+      if (confirmar === it.id) { bs.appendChild(el('span', 'color:#fcd34d', '¿Descartar?')); bs.appendChild(bt('Sí', () => { cola = cola.filter(x => x.id !== it.id); confirmar = ''; guardar(); pintar(); }, '#b91c1c')); bs.appendChild(bt('No', () => { confirmar = ''; pintar(); })); }
+      else bs.appendChild(bt(ro ? 'Descartar' : 'Descartar sin enviar', () => { confirmar = it.id; pintar(); })); r.appendChild(bs); w.appendChild(r); });
+    const pie = el('div', 'margin-top:8px;display:flex;gap:6px'); if (pend) pie.appendChild(bt('📤 Enviar ahora', () => sincronizar(), '#15803d')); pie.appendChild(bt('Cerrar', () => { abierto = false; pintar(); })); w.appendChild(pie);
+  }
+  window.addEventListener('online', () => { ultimo = ''; pintar(); sincronizar(); }); window.addEventListener('offline', () => pintar());
+  setInterval(() => { if (!activa()) { if (clave || cola.length || cache.size) { clave = null; cola = []; cache = new Map(); claveEmail = ''; ilegible = false; pintar(); } return; } if (navigator.onLine && cola.some(x => x.estado === 'PENDIENTE')) sincronizar(); }, 15000);
+  window.aresOffline = { iniciar: iniciar, sincronizar: sincronizar, cola: () => cola.map(x => Object.assign({}, x)), pendientes: a => cola.filter(x => x.estado === 'PENDIENTE' && x.email === yoEmail() && (!a || x.a === a)).map(x => Object.assign({}, x)), enLinea: () => navigator.onLine, cifrado: () => !!clave, memoria: () => memModo };
+})();
+</script>
+<!-- ===== FIN BLOQUE SIN CONEXION ===== -->
 <!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
 /* A.R.E.S.: Gestión del Jefe de Teatro ("🏛 Mi unidad").
