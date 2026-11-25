@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXSuHrphJ7s11gtJfd6yX8uKKeKyqCSxdAY_FvCEv2FPaG0dxOJFi7pfxripDGSRx4/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbx2gPuhBU1S3MAkx23zzhCNZgJ4TGf1odRhMyeZPMHU9azwECwfVniVuOsk52Ent0oMVg/exec";
 
 
 ;
@@ -9731,12 +9731,25 @@ window.addEventListener('DOMContentLoaded', () => {
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
   const rolOk = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()); };
-  let panel = null, log = null, ia = false, ultimo = '', saludado = false, ocupado = false;
+  let panel = null, log = null, ia = false, ultimo = '', saludado = false, ocupado = false, hist = [], guias = null;
+  const IR = { sanidad: ['🩺 Abrir Sanidad', 'btn-sanidad'], instalaciones: ['🚒 Abrir Instalaciones', 'btn-instalaciones'], fuego: ['🔥 Abrir Fuego', 'btn-fuego'], combate: ['⚔️ Abrir Combate', 'btn-combate'], electoral: ['🗳 Abrir Electoral', 'btn-electoral'], mensajes: ['✉️ Abrir Mensajes', 'btn-mensajes'], planificar: ['🗺 Abrir Planificación', 'btn-planificacion'], medios: ['🚒 Abrir Instalaciones', 'btn-instalaciones'] };
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function emblema(px) {      // símbolo de Mariscal: estrella de mariscal sobre dos bastones cruzados, en azul y dorado (diseño propio)
+    const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('width', px); s.setAttribute('height', px); s.setAttribute('aria-hidden', 'true'); s.style.cssText = 'flex:none;vertical-align:middle'; s.setAttribute('class', 'ma-emblema');
+    const n = (t, a) => { const e = document.createElementNS(SVGNS, t); Object.keys(a).forEach(k => e.setAttribute(k, a[k])); s.appendChild(e); return e; };
+    n('circle', { cx: 32, cy: 32, r: 30, fill: '#0c2a5a', stroke: '#d4a017', 'stroke-width': 3 });
+    n('line', { x1: 14, y1: 49, x2: 50, y2: 13, stroke: '#d4a017', 'stroke-width': 4.5, 'stroke-linecap': 'round' }); n('line', { x1: 14, y1: 13, x2: 50, y2: 49, stroke: '#d4a017', 'stroke-width': 4.5, 'stroke-linecap': 'round' });
+    n('line', { x1: 14, y1: 49, x2: 50, y2: 13, stroke: '#7a5a00', 'stroke-width': 1, 'stroke-linecap': 'round' }); n('line', { x1: 14, y1: 13, x2: 50, y2: 49, stroke: '#7a5a00', 'stroke-width': 1, 'stroke-linecap': 'round' });
+    const pts = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 6.5 : 17, a = -Math.PI / 2 + i * Math.PI / 5; pts.push((32 + r * Math.cos(a)).toFixed(2) + ',' + (33 + r * Math.sin(a)).toFixed(2)); }
+    n('polygon', { points: pts.join(' '), fill: '#f5c518', stroke: '#0c2a5a', 'stroke-width': 1.6, 'stroke-linejoin': 'round' });
+    return s;
+  }
+  function irBtn(clave) { const x = IR[clave]; if (!x || !$(x[1])) return null; return btn(x[0], '#0369a1', () => { const t = $(x[1]); if (t) t.click(); }, 'Abre el módulo'); }
   async function api(a, extra) { const s = sesion(); if (!s) throw new Error('Sesión cerrada.'); return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json(); }
   const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:5px 10px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:2px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
   const TEMAS = [['Crear un teatro', '¿Cómo creo un teatro nuevo?'], ['Módulos', '¿Qué módulos hay y cuál habilito?'], ['Roles', '¿Qué roles hay y qué hace cada uno?'], ['Sectores', '¿Cómo cargo los sectores?'], ['Medios', '¿Cómo cargo medios y unidades?'], ['Planificar', '¿Cuál es el siguiente paso para planificar?']];
   function msg(quien, texto, estilo) {
-    const m = el('div', 'margin:6px 0;padding:7px 9px;border-radius:6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;' + (quien === 'yo' ? 'background:#1e3a8a;margin-left:28px' : 'background:#1e293b;margin-right:12px') + (estilo || ''), texto); m.className = 'ma-msg ma-' + quien; log.appendChild(m); log.scrollTop = log.scrollHeight; return m;
+    const m = el('div', 'margin:6px 0;padding:7px 9px;border-radius:6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;' + (quien === 'yo' ? 'background:#1e3a8a;margin-left:28px' : 'background:#1e293b;margin-right:12px') + (estilo || ''), texto); m.className = 'ma-msg ma-' + quien; if (quien !== 'yo') { const e = emblema(16); e.style.cssText += ';float:left;margin:1px 6px 0 0'; m.insertBefore(e, m.firstChild); } log.appendChild(m); log.scrollTop = log.scrollHeight; return m;
   }
   function tarjetaPropuesta(p) {
     const c = el('div', 'margin:6px 12px 6px 0;padding:8px;border-radius:6px;border:1px dashed #38bdf8;background:#0c4a6e;font-size:12.5px'); c.className = 'ma-prop';
@@ -9756,23 +9769,39 @@ window.addEventListener('DOMContentLoaded', () => {
       ia = !!r.ia; modo(); const R = r.resumen;
       msg('mariscal', 'Teatro ' + R.nombre + ' (' + R.tipo + ') · ' + R.modulos.length + ' módulo(s) · ' + R.sectores + ' sector(es).');
       (r.hallazgos || []).forEach(x => { const col = x.nivel === 'OK' ? '#166534' : x.nivel === 'FALTA' ? '#7f1d1d' : '#78350f'; const ic = x.nivel === 'OK' ? '✅ ' : x.nivel === 'FALTA' ? '⛔ ' : '⚠️ ';
-        const d = msg('mariscal', ic + x.texto + (x.paso ? '\n→ ' + x.paso : ''), ';background:' + col); d.className += ' ma-hall'; if (x.propuesta) tarjetaPropuesta(x.propuesta); });
+        const d = msg('mariscal', ic + x.texto + (x.paso ? '\n→ ' + x.paso : ''), ';background:' + col); d.className += ' ma-hall'; const ib = x.ir && irBtn(x.ir); if (ib) { ib.style.cssText += ';display:block;margin-top:5px'; d.appendChild(ib); } if (x.propuesta) tarjetaPropuesta(x.propuesta); });
     } catch (e) { m.remove(); msg('mariscal', 'No pude revisar el teatro: ' + e.message); } finally { ocupado = false; }
   }
   async function preguntar(t) {
     t = String(t || '').trim(); if (!t || ocupado) return; ocupado = true; msg('yo', t); const m = msg('mariscal', 'Pensando…');
-    try { const r = await api('MAR_CONSULTAR', { texto: t }); m.remove(); ia = !!r.ia; modo(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude responder.'); return; }
-      msg('mariscal', r.respuesta); (r.propuestas || []).forEach(tarjetaPropuesta); }
+    try { const r = await api('MAR_CONSULTAR', { texto: t, historial: hist.slice(-6) }); m.remove(); ia = !!r.ia; modo(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude responder.'); return; }
+      hist.push({ r: 'u', t: t.slice(0, 300) }, { r: 'm', t: String(r.respuesta || '').slice(0, 300) }); if (hist.length > 12) hist = hist.slice(-12);
+      const rm = msg('mariscal', r.respuesta); const vistos = {}; (r.temas || []).forEach(k => { const ib = IR[k] && !vistos[IR[k][1]] && irBtn(k); if (ib) { vistos[IR[k][1]] = 1; ib.style.cssText += ';display:block;margin-top:5px'; rm.appendChild(ib); } }); (r.propuestas || []).forEach(tarjetaPropuesta); }
     catch (e) { m.remove(); msg('mariscal', 'No pude responder: ' + e.message); } finally { ocupado = false; }
+  }
+  function mostrarGuia(g) {
+    msg('mariscal', '📋 ' + g.titulo + ' — ' + g.hechos + ' de ' + g.total + ' pasos'); const bar = el('div', 'height:8px;border-radius:4px;background:#334155;margin:2px 12px 6px 0;overflow:hidden'); const rel = el('div', 'height:100%;background:#22c55e;width:' + Math.round(100 * g.hechos / Math.max(1, g.total)) + '%'); bar.appendChild(rel); bar.className = 'ma-barra'; log.appendChild(bar);
+    g.pasos.forEach((s, i) => { const sig = i === g.siguiente, d = msg('mariscal', (s.ok ? '✅ ' : sig ? '👉 ' : '⬜ ') + s.texto, ';background:' + (s.ok ? '#14532d' : sig ? '#78350f' : '#1e293b')); d.className += ' ma-paso' + (s.ok ? ' ma-ok' : '') + (sig ? ' ma-sig' : '');
+      if (!s.ok) { const ib = s.ir && irBtn(s.ir); if (ib) { ib.style.cssText += ';display:block;margin-top:5px'; d.appendChild(ib); } if (s.propuesta) tarjetaPropuesta(s.propuesta); } });
+    if (g.siguiente < 0) msg('mariscal', '🎖 Guía completa. Sugiero ensayar en un teatro de EJERCICIO antes de operar.'); else hist.push({ r: 'm', t: 'Siguiente paso de la guía: ' + g.pasos[g.siguiente].texto.slice(0, 200) });
+  }
+  async function guia(id) {
+    if (ocupado) return; ocupado = true; const m = msg('mariscal', 'Armando la guía…');
+    try { const r = await api('MAR_GUIA', { guia: id }); m.remove(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude armar la guía.'); return; } ia = !!r.ia; modo(); mostrarGuia(r.guia); }
+    catch (e) { m.remove(); msg('mariscal', 'No pude armar la guía: ' + e.message); } finally { ocupado = false; }
+  }
+  async function elegirGuia() {
+    if (!guias) { try { const r = await api('MAR_ESTADO'); guias = r.status === 'success' ? r.guias : []; } catch (_) { guias = []; } }
+    const d = msg('mariscal', '¿Qué quiere armar? Elija una guía paso a paso:'); d.className += ' ma-guias'; (guias || []).forEach(g => { const b = btn(g.titulo, '#0369a1', () => guia(g.id)); b.style.cssText += ';display:block;margin-top:4px;text-align:left'; d.appendChild(b); });
   }
   function modo() { const e = panel && panel.querySelector('.ma-modo'); if (e) e.textContent = ia ? 'IA conectada' : 'Guía por reglas'; }
   function abrir() {
     if (panel) { cerrar(); return; }
     panel = el('div', 'position:fixed;top:60px;right:10px;bottom:70px;width:min(380px,calc(100vw - 20px));z-index:2147483000;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px #000a;display:flex;flex-direction:column;font-family:sans-serif'); panel.id = 'ma-panel';
     const cab = el('div', 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #334155;background:#1e293b;border-radius:8px 8px 0 0');
-    const tt = el('div', 'flex:1'); tt.appendChild(el('b', 'font-size:14px', '🎖 MARISCAL')); tt.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Guía del Administrador · ')).appendChild(el('span', '', ia ? 'IA conectada' : 'Guía por reglas')).className = 'ma-modo';
-    cab.append(tt, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
-    const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado'));
+    const tt = el('div', 'flex:1'); tt.appendChild(el('b', 'font-size:14px', 'MARISCAL')); tt.firstChild.style.display = 'inline-block'; tt.firstChild.style.verticalAlign = 'middle'; tt.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Guía del Administrador · ')).appendChild(el('span', '', ia ? 'IA conectada' : 'Guía por reglas')).className = 'ma-modo';
+    cab.append(emblema(34), tt, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
+    const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado')); barra.appendChild(btn('📋 Checklist', '#0e7490', () => guia('GENERAL'), 'Puesta en marcha: qué está hecho y cuál es el siguiente paso')); barra.appendChild(btn('🧭 Guías', '#0e7490', elegirGuia, 'Armar un teatro paso a paso'));
     TEMAS.forEach(t => barra.appendChild(btn(t[0], '#334155', () => preguntar(t[1])))); panel.appendChild(barra);
     log = el('div', 'flex:1;overflow:auto;padding:6px 8px'); panel.appendChild(log);
     const pie = el('div', 'display:flex;gap:6px;padding:8px;border-top:1px solid #334155'); const inp = el('input', 'flex:1;padding:7px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff;font-size:12.5px'); inp.type = 'text'; inp.maxLength = 500; inp.placeholder = 'Pregunte a Mariscal…'; inp.className = 'ma-entrada';
@@ -9785,9 +9814,9 @@ window.addEventListener('DOMContentLoaded', () => {
   function cerrar() { if (panel) { panel.remove(); panel = null; log = null; } }
   function boton() {
     if (!rolOk()) { const b = $('btn-mariscal'); if (b) b.remove(); return; } if ($('btn-mariscal')) return;
-    const b = el('button', 'position:fixed;left:12px;bottom:64px;z-index:2147482900;padding:8px 12px;border-radius:20px;border:1px solid #38bdf8;background:#0c4a6e;color:#fff;cursor:pointer;font-size:13px;box-shadow:0 2px 10px #0008', '🎖 Mariscal'); b.id = 'btn-mariscal'; b.type = 'button'; b.title = 'Guía del Administrador'; b.onclick = abrir; document.body.appendChild(b);
+    const b = el('button', 'position:fixed;left:12px;bottom:64px;z-index:2147482900;padding:8px 12px;border-radius:20px;border:1px solid #38bdf8;background:#0c4a6e;color:#fff;cursor:pointer;font-size:13px;box-shadow:0 2px 10px #0008', ''); b.id = 'btn-mariscal'; b.type = 'button'; b.title = 'Mariscal: guía del Administrador'; b.style.cssText += ';display:flex;align-items:center;gap:7px'; b.appendChild(emblema(24)); b.appendChild(document.createTextNode('Mariscal')); b.onclick = abrir; document.body.appendChild(b);
   }
-  function reiniciar() { cerrar(); saludado = false; const b = $('btn-mariscal'); if (b) b.remove(); }
+  function reiniciar() { cerrar(); saludado = false; hist = []; guias = null; const b = $('btn-mariscal'); if (b) b.remove(); }
   setInterval(() => { const s = sesion(), k = s && rolOk() ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : ''; if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton(); }, 1500);
   window.aresMariscal = { abrir: abrir, cerrar: cerrar, estado: () => ({ ia: ia, abierto: !!panel }) };
 })();
