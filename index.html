@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbz7J6UGgUg6-ULq-HxjqsPHsrPFCJX47py3C7wfzYs9qGF2tTcijN1D3X5n2xRPNEkZGw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzXSuHrphJ7s11gtJfd6yX8uKKeKyqCSxdAY_FvCEv2FPaG0dxOJFi7pfxripDGSRx4/exec";
 
 
 ;
@@ -3954,7 +3954,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -8138,7 +8138,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
   const esAdmin = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()) && !window.__super; };
   const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral'], ['SANITARIO', 'Sanidad: registro de hospitales'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
+    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral'], ['SANITARIO', 'Sanidad: registro de hospitales'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
   let datos = null, panel = null, esJefe = false, probado = '', ocupado = false;
 
   async function api(op, extra) {
@@ -9597,7 +9597,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const ORG = ['Policía Federal Argentina', 'Policía de la Provincia', 'Gendarmería Nacional', 'Prefectura Naval', 'Policía de Seguridad Aeroportuaria', 'Bomberos Voluntarios', 'Bomberos de la Policía', 'Defensa Civil', 'Ejército Argentino', 'Armada Argentina', 'Fuerza Aérea Argentina', 'Cruz Roja'];
   const VEH = ['Autobomba', 'Autobomba forestal', 'Camión cisterna', 'Ambulancia', 'Patrullero', 'Camioneta 4x4', 'Bote de rescate', 'Motobomba', 'Camión de rescate', 'Helicóptero sanitario'];
   const ARM = ['Pistola 9 mm', 'Escopeta', 'Fusil', 'Chaleco antibalas', 'Equipo antidisturbios'];
-  let panel = null, datos = null, f = null, ultimo = '', capa = null, confirmar = '';
+  let panel = null, datos = null, f = null, ultimo = '', capa = null, capaD = null, confirmar = '', desp = [], fd = null;
+  const EST_D = { DESPACHADO: ['Despachado', '#f59e0b'], EN_ESCENA: ['En escena', '#dc2626'], REGRESANDO: ['Regresando', '#0891b2'], REGRESADO: ['Regresó', '#64748b'], BAJA: ['Baja', '#7f1d1d'] };
+  const activoD = e => e === 'DESPACHADO' || e === 'EN_ESCENA' || e === 'REGRESANDO';
   async function api(a, extra) { const s = sesion(); if (!s) throw new Error('Sesión cerrada.'); return await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: a, email: s.email, pin: s.pin }, extra || {})) })).json(); }
   const btn = (txt, fondo, fn, title) => { const b = el('button', 'padding:4px 9px;border-radius:4px;border:none;background:' + (fondo || '#334155') + ';color:#fff;cursor:pointer;font-size:12px;margin:1px', txt); b.type = 'button'; if (title) b.title = title; b.onclick = fn; return b; };
   const ESTIL = 'display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:12.5px';
@@ -9609,7 +9611,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function aviso(t, ok) { const e = panel && panel.querySelector('.in-aviso'); if (e) { e.style.color = ok ? '#86efac' : '#fca5a5'; e.textContent = t || ''; } }
   const total = a => (a || []).reduce((s, x) => s + (Number(x.q) || 0), 0);
   const vacio = () => ({ id: '', nombre: '', tipo: 'COMISARIA', organismo: '', localidad: '', lat: '', lon: '', estado: 'OPERATIVA', personal: '', notas: '', vehiculos: [], armamento: [] });
-  function limpiarMapa() { const M = mapa(); if (M && capa && M.hasLayer(capa)) M.removeLayer(capa); capa = null; }
+  function limpiarMapa() { const M = mapa(); if (M && capa && M.hasLayer(capa)) M.removeLayer(capa); capa = null; if (M && capaD && M.hasLayer(capaD)) M.removeLayer(capaD); capaD = null; }
   function dibujar() {
     const M = mapa(); limpiarMapa(); if (!M || !panel || !datos) return; capa = L.layerGroup();
     datos.instalaciones.forEach(x => { if (!isFinite(x.lat) || !isFinite(x.lon)) return; const t = TIPOS[x.tipo] || TIPOS.OTRA;
@@ -9619,6 +9621,12 @@ window.addEventListener('DOMContentLoaded', () => {
         d.appendChild(el('div', '', 'Vehículos: ' + (x.vehiculos.length ? x.vehiculos.map(v => v.q + ' ' + v.n).join(', ') : 'sin datos')));
         if (x.armamentoReservado) d.appendChild(el('div', 'color:#94a3b8', 'Armamento: reservado.')); else d.appendChild(el('div', '', 'Armamento: ' + (x.armamento.length ? x.armamento.map(v => v.q + ' ' + v.n).join(', ') : 'sin datos'))); return d; });
       capa.addLayer(c); }); capa.addTo(M);
+    capaD = L.layerGroup();
+    desp.filter(d => activoD(d.estado) && isFinite(d.lat) && isFinite(d.lon)).forEach(d => { const e = EST_D[d.estado] || EST_D.DESPACHADO, ins = datos.instalaciones.filter(x => x.id === d.idInst)[0];
+      if (ins && isFinite(ins.lat)) capaD.addLayer(L.polyline([[ins.lat, ins.lon], [d.lat, d.lon]], { color: e[1], weight: 2, dashArray: '5 6', opacity: .8 }));
+      const m = L.circleMarker([d.lat, d.lon], { radius: 8, color: '#fff', weight: 2, fillColor: e[1], fillOpacity: .95 }); m.bindTooltip(el('span', '', d.q + ' ' + d.vehiculo + ' · ' + e[0]), { direction: 'top' });
+      m.bindPopup(() => { const p = el('div', 'font-size:12px;max-width:240px'); p.appendChild(el('b', '', d.q + ' ' + d.vehiculo)); p.appendChild(el('div', '', 'Desde: ' + d.instalacion)); p.appendChild(el('div', '', 'Estado: ' + e[0] + (d.personal ? ' · ' + d.personal + ' efectivos' : ''))); if (d.destino) p.appendChild(el('div', '', 'Destino: ' + d.destino)); if (d.notas) p.appendChild(el('div', 'color:#475569', d.notas)); return p; }); capaD.addLayer(m); });
+    capaD.addTo(M);
   }
   function filasItems(c, arr, lista, rot) {
     c.appendChild(el('div', 'margin-top:8px;font-size:12px;font-weight:bold', rot));
@@ -9628,13 +9636,40 @@ window.addEventListener('DOMContentLoaded', () => {
       r.appendChild(n); r.appendChild(q); r.appendChild(btn('✕', '#7f1d1d', () => { arr.splice(i, 1); pintar(); }, 'Quitar')); c.appendChild(r); });
     c.appendChild(btn('+ Agregar', '#334155', () => { arr.push({ n: '', q: 1 }); pintar(); }));
   }
-  function tomarPunto() { const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); aviso('Haga clic en el mapa para fijar la ubicación.', true); M.getContainer().style.cursor = 'crosshair'; M.once('click', e => { M.getContainer().style.cursor = ''; f.lat = e.latlng.lat.toFixed(5); f.lon = e.latlng.lng.toFixed(5); pintar(); aviso('Ubicación fijada.', true); }); }
+  function tomarPunto(obj) { obj = obj || f; const M = mapa(); if (!M) return aviso('⚠ El mapa no está disponible.', false); aviso('Haga clic en el mapa para fijar la ubicación.', true); M.getContainer().style.cursor = 'crosshair'; M.once('click', e => { M.getContainer().style.cursor = ''; obj.lat = e.latlng.lat.toFixed(5); obj.lon = e.latlng.lng.toFixed(5); pintar(); aviso('Ubicación fijada.', true); }); }
   async function guardar() {
     aviso('Guardando…', true); const m = { id: f.id, nombre: f.nombre, tipo: f.tipo, organismo: f.organismo, localidad: f.localidad, lat: f.lat, lon: f.lon, estado: f.estado, personal: f.personal, notas: f.notas, vehiculos: f.vehiculos.filter(x => String(x.n || '').trim()).map(x => ({ n: x.n, q: Number(x.q) || 0, c: x.c })), armamento: datos.puedeEditar ? f.armamento.filter(x => String(x.n || '').trim()).map(x => ({ n: x.n, q: Number(x.q) || 0, c: x.c })) : [] };
     try { const r = await api('INS_GUARDAR', m); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo guardar.'), false); datos.instalaciones = r.instalaciones; f = null; pintar(); dibujar(); aviso('Instalación guardada.', true); } catch (e) { aviso('⚠ ' + e.message, false); }
   }
   async function borrar(x) { try { const r = await api('INS_BORRAR', { id: x.id }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo borrar.'), false); datos.instalaciones = r.instalaciones; pintar(); dibujar(); aviso('Instalación borrada.', true); } catch (e) { aviso('⚠ ' + e.message, false); } }
-  async function cargar() { try { const r = await api('INS_LISTAR'); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); return; } datos = r; pintar(); dibujar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function cargar() { try { const r = await api('INS_LISTAR'); if (r.status !== 'success') { aviso('⚠ ' + (r.message || 'No se pudo cargar.'), false); return; } datos = r; try { const q = await api('INS_DESP_LISTAR'); desp = q.status === 'success' ? q.despliegues : []; } catch (_) { desp = []; } pintar(); dibujar(); } catch (e) { aviso('⚠ ' + e.message, false); } }
+  async function despachar() {
+    aviso('Despachando…', true); const m = { id: fd.id, vehiculo: fd.vehiculo, q: Number(fd.q), personal: fd.personal === '' ? 0 : Number(fd.personal), lat: fd.lat, lon: fd.lon, destino: fd.destino, notas: fd.notas };
+    try { const r = await api('INS_DESPACHAR', m); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo despachar.'), false); datos.instalaciones = r.instalaciones; desp = r.despliegues; fd = null; pintar(); dibujar(); aviso('Medios despachados.', true); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  async function cambiarEstado(d, estado) {
+    try { const r = await api('INS_DESP_ESTADO', { id: d.id, estado: estado }); if (r.status !== 'success') return aviso('⚠ ' + (r.message || 'No se pudo cambiar.'), false); datos.instalaciones = r.instalaciones; desp = r.despliegues; pintar(); dibujar(); aviso('Estado actualizado: ' + (EST_D[estado] || [estado])[0] + '.', true); } catch (e) { aviso('⚠ ' + e.message, false); }
+  }
+  function formDespacho(cu) {
+    const ins = datos.instalaciones.filter(x => x.id === fd.id)[0]; if (!ins) { fd = null; return tabla(cu); }
+    cu.className += ' in-fdesp'; cu.appendChild(el('div', 'font-weight:bold;margin:2px 0 4px', 'Despachar desde ' + ins.nombre)); cu.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Disponible: ' + (ins.vehiculos.filter(v => v.q > 0).map(v => v.q + ' ' + v.n).join(', ') || 'ningún vehículo') + ' · ' + ins.personal + ' efectivos. El armamento no se despacha desde aquí.'));
+    const g = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:0 8px'), op = ins.vehiculos.filter(v => v.q > 0).map(v => [v.n, v.n + ' (' + v.q + ')']);
+    if (!fd.vehiculo && op.length) fd.vehiculo = op[0][0];
+    g.appendChild(campo('Vehículo', 'select', fd.vehiculo, v => { fd.vehiculo = v; }, op)); g.appendChild(campo('Cantidad', 'number', fd.q, v => { fd.q = v; })); g.appendChild(campo('Personal que sale', 'number', fd.personal, v => { fd.personal = v; })); g.appendChild(campo('Destino (nombre)', 'text', fd.destino, v => { fd.destino = v; }));
+    g.appendChild(campo('Latitud del destino', 'number', fd.lat, v => { fd.lat = v; })); g.appendChild(campo('Longitud del destino', 'number', fd.lon, v => { fd.lon = v; })); cu.appendChild(g);
+    const pb = btn('📍 Fijar destino en el mapa', '#334155', () => tomarPunto(fd)); pb.style.marginTop = '6px'; cu.appendChild(pb); cu.appendChild(campo('Notas de la misión', 'area', fd.notas, v => { fd.notas = v; }));
+    const fb = el('div', 'margin-top:10px'); fb.appendChild(btn('🚒 Despachar', '#15803d', despachar)); fb.appendChild(btn('Cancelar', '#475569', () => { fd = null; pintar(); })); cu.appendChild(fb);
+  }
+  function seccionDespliegues(cu) {
+    const act = desp.filter(d => activoD(d.estado)), cer = desp.filter(d => !activoD(d.estado));
+    cu.appendChild(el('div', 'font-weight:bold;margin:12px 0 4px', '🚨 Medios desplegados (' + act.length + ')')); if (!act.length) cu.appendChild(el('div', 'color:#94a3b8;font-size:11.5px', 'No hay medios fuera de sus instalaciones.'));
+    act.forEach(d => { const e = EST_D[d.estado] || EST_D.DESPACHADO, r = el('div', 'margin-top:4px;padding:5px 7px;border-radius:5px;background:#16233f;border-left:4px solid ' + e[1]); r.className = 'in-desp';
+      r.appendChild(el('div', 'font-size:12px', d.q + ' ' + d.vehiculo + (d.personal ? ' · ' + d.personal + ' efectivos' : '') + ' — ' + e[0])); r.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Desde ' + d.instalacion + (d.destino ? ' → ' + d.destino : '')));
+      if (datos.puedeEditar) { const b = el('div', 'margin-top:3px'); if (d.estado === 'DESPACHADO') b.appendChild(btn('En escena', '#b91c1c', () => cambiarEstado(d, 'EN_ESCENA'))); if (d.estado !== 'REGRESANDO') b.appendChild(btn('Regresando', '#0e7490', () => cambiarEstado(d, 'REGRESANDO')));
+        b.appendChild(btn('Regresó a base', '#15803d', () => cambiarEstado(d, 'REGRESADO'), 'Los medios vuelven al inventario')); b.appendChild(btn('Baja', '#7f1d1d', () => { if (confirmar !== 'B' + d.id) { confirmar = 'B' + d.id; pintar(); setTimeout(() => { if (confirmar === 'B' + d.id) { confirmar = ''; pintar(); } }, 3500); return; } confirmar = ''; cambiarEstado(d, 'BAJA'); }, 'No vuelve: no se repone al inventario')); b.lastChild.textContent = confirmar === 'B' + d.id ? '¿Baja definitiva?' : 'Baja'; r.appendChild(b); }
+      cu.appendChild(r); });
+    if (cer.length) cu.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:6px', 'Cerrados: ' + cer.slice(0, 5).map(d => d.q + ' ' + d.vehiculo + ' (' + (EST_D[d.estado] || [d.estado])[0] + ')').join(' · ') + (cer.length > 5 ? ' · …' : '')));
+  }
   function tabla(cu) {
     if (!datos) { cu.appendChild(el('div', 'color:#94a3b8', 'Cargando…')); return; }
     if (datos.puedeEditar) { const b = btn('+ Nueva instalación', '#15803d', () => { f = vacio(); const M = mapa(); if (M) { const c = M.getCenter(); f.lat = c.lat.toFixed(5); f.lon = c.lng.toFixed(5); } pintar(); }); cu.appendChild(b); }
@@ -9643,12 +9678,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const w = el('div', 'overflow-x:auto'), t = el('table', 'border-collapse:collapse;width:100%;font-size:11.5px'), th = el('tr'); t.className = 'in-tabla';
     ['Instalación', 'Organismo', 'Estado', 'Pers.', 'Vehíc.', 'Armam.', ''].forEach(c => th.appendChild(el('th', 'text-align:left;padding:3px 5px;background:#1e3a5f;color:#fff;white-space:nowrap', c))); t.appendChild(th);
     datos.instalaciones.forEach(x => { const tr = el('tr'), tp = TIPOS[x.tipo] || TIPOS.OTRA; tr.className = 'in-fila';
-      const c1 = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b'); c1.appendChild(el('span', 'display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:' + tp[1])); c1.appendChild(document.createTextNode(x.nombre)); c1.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', tp[0] + (x.localidad ? ' · ' + x.localidad : '')));
+      const c1 = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b'); c1.appendChild(el('span', 'display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:' + tp[1])); c1.appendChild(document.createTextNode(x.nombre)); const fuera = desp.filter(d => d.idInst === x.id && activoD(d.estado)).reduce((s, d) => s + d.q, 0); c1.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', tp[0] + (x.localidad ? ' · ' + x.localidad : '') + (fuera ? ' · ' + fuera + ' vehículo(s) fuera' : '')));
       tr.appendChild(c1); [x.organismo, x.estado, String(x.personal), String(total(x.vehiculos)), x.armamentoReservado ? 'reservado' : String(total(x.armamento))].forEach(v => tr.appendChild(el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;vertical-align:top', v)));
       const ac = el('td', 'padding:3px 5px;border-bottom:1px solid #1e293b;white-space:nowrap');
       ac.appendChild(btn('📍', '#334155', () => { const M = mapa(); if (M && isFinite(x.lat)) M.setView([x.lat, x.lon], Math.max(M.getZoom(), 12)); }, 'Ver en el mapa'));
-      if (datos.puedeEditar) { ac.appendChild(btn('✏️', '#334155', () => { f = JSON.parse(JSON.stringify(x)); f.lat = String(x.lat); f.lon = String(x.lon); f.personal = String(x.personal); pintar(); }, 'Editar')); ac.appendChild(btn(confirmar === x.id ? '¿Seguro?' : '🗑', '#7f1d1d', () => { if (confirmar !== x.id) { confirmar = x.id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; borrar(x); }, 'Borrar')); }
-      tr.appendChild(ac); t.appendChild(tr); }); w.appendChild(t); cu.appendChild(w);
+      if (datos.puedeEditar) { ac.appendChild(btn('🚒➜', '#b45309', () => { fd = { id: x.id, vehiculo: '', q: 1, personal: '', lat: '', lon: '', destino: '', notas: '' }; const M = mapa(); if (M) { const c = M.getCenter(); fd.lat = c.lat.toFixed(5); fd.lon = c.lng.toFixed(5); } pintar(); }, 'Despachar medios al mapa')); ac.appendChild(btn('✏️', '#334155', () => { f = JSON.parse(JSON.stringify(x)); f.lat = String(x.lat); f.lon = String(x.lon); f.personal = String(x.personal); pintar(); }, 'Editar')); ac.appendChild(btn(confirmar === x.id ? '¿Seguro?' : '🗑', '#7f1d1d', () => { if (confirmar !== x.id) { confirmar = x.id; pintar(); setTimeout(() => { confirmar = ''; pintar(); }, 3500); return; } confirmar = ''; borrar(x); }, 'Borrar')); }
+      tr.appendChild(ac); t.appendChild(tr); }); w.appendChild(t); cu.appendChild(w); seccionDespliegues(cu);
   }
   function formulario(cu) {
     cu.appendChild(el('div', 'font-weight:bold;margin:2px 0 4px', f.id ? 'Editar instalación' : 'Nueva instalación')); cu.className += ' in-form';
@@ -9657,7 +9692,7 @@ window.addEventListener('DOMContentLoaded', () => {
     g.appendChild(campo('Organismo', 'text', f.organismo, v => { f.organismo = v; }, { lista: 'in-dl-org' })); g.appendChild(campo('Localidad', 'text', f.localidad, v => { f.localidad = v; }));
     g.appendChild(campo('Latitud', 'number', f.lat, v => { f.lat = v; })); g.appendChild(campo('Longitud', 'number', f.lon, v => { f.lon = v; }));
     g.appendChild(campo('Estado', 'select', f.estado, v => { f.estado = v; }, ESTADOS)); g.appendChild(campo('Personal (efectivos)', 'number', f.personal, v => { f.personal = v; })); cu.appendChild(g);
-    const pb = btn('📍 Fijar ubicación en el mapa', '#334155', tomarPunto); pb.style.marginTop = '6px'; cu.appendChild(pb); cu.appendChild(campo('Notas', 'area', f.notas, v => { f.notas = v; }));
+    const pb = btn('📍 Fijar ubicación en el mapa', '#334155', () => tomarPunto(f)); pb.style.marginTop = '6px'; cu.appendChild(pb); cu.appendChild(campo('Notas', 'area', f.notas, v => { f.notas = v; }));
     filasItems(cu, f.vehiculos, 'in-dl-veh', 'Vehículos'); if (datos.puedeEditar) filasItems(cu, f.armamento, 'in-dl-arm', 'Armamento (reservado al Administrador y al Planificador)');
     const fb = el('div', 'margin-top:10px'); fb.appendChild(btn('Guardar', '#15803d', guardar)); fb.appendChild(btn('Cancelar', '#475569', () => { f = null; pintar(); })); cu.appendChild(fb);
   }
@@ -9665,22 +9700,22 @@ window.addEventListener('DOMContentLoaded', () => {
     const mk = (id, a) => { const d = el('datalist'); d.id = id; a.forEach(x => { const o = el('option'); o.value = x; d.appendChild(o); }); w.appendChild(d); };
     const cn = (datos && datos.catalogo || []).map(c => c.nombre); mk('in-dl-org', ORG); mk('in-dl-veh', VEH.concat(cn.filter(n => VEH.indexOf(n) < 0))); mk('in-dl-arm', ARM.concat(cn.filter(n => ARM.indexOf(n) < 0)));
   }
-  function pintar() { if (!panel) return; const cu = panel.querySelector('.in-cuerpo'), y = cu.scrollTop; cu.textContent = ''; cu.className = 'in-cuerpo'; cu.style.cssText = 'overflow:auto;flex:1'; listas(cu); if (f && datos) formulario(cu); else tabla(cu); cu.scrollTop = y; }
+  function pintar() { if (!panel) return; const cu = panel.querySelector('.in-cuerpo'), y = cu.scrollTop; cu.textContent = ''; cu.className = 'in-cuerpo'; cu.style.cssText = 'overflow:auto;flex:1'; listas(cu); if (fd && datos) formDespacho(cu); else if (f && datos) formulario(cu); else tabla(cu); cu.scrollTop = y; }
   function abrir() {
     if (panel) return; if (!rolOk() || !mod('INSTALACIONES')) return;
     panel = el('div', 'position:fixed;top:70px;left:10px;width:min(620px,96vw);max-height:calc(100vh - 90px);display:flex;flex-direction:column;z-index:1300;background:#111c33;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-family:sans-serif;padding:10px'); panel.id = 'in-panel';
     const hd = el('div', 'display:flex;align-items:center;gap:6px;margin-bottom:6px'); hd.appendChild(el('b', 'flex:1;font-size:14px', '🚒 INSTALACIONES DE EMERGENCIA')); hd.appendChild(btn('↻', '#334155', () => { datos = null; pintar(); cargar(); }, 'Actualizar')); hd.appendChild(btn('✕', '#dc2626', cerrar, 'Cerrar')); panel.appendChild(hd);
     const av = el('div', 'min-height:16px;font-size:12px;margin-bottom:4px'); av.className = 'in-aviso'; panel.appendChild(av); const cu = el('div'); cu.className = 'in-cuerpo'; panel.appendChild(cu); document.body.appendChild(panel); pintar(); cargar();
   }
-  function cerrar() { if (panel) { panel.remove(); panel = null; } f = null; limpiarMapa(); }
+  function cerrar() { if (panel) { panel.remove(); panel = null; } f = null; fd = null; limpiarMapa(); }
   function boton() {
     const b = $('btn-instalaciones'); if (!(rolOk() && mod('INSTALACIONES'))) { if (b) b.remove(); return; } if (b) return;
     const ref = $('btn-sanidad') || $('btn-planificacion') || $('btn-simulacion') || $('btn-combate') || $('btn-electoral') || $('btn-fases') || $('btn-territorio') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
     const n = el('button', 'margin-right:6px', '🚒 Instalaciones'); n.id = 'btn-instalaciones'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Comisarías, bomberos y cuarteles con sus vehículos y armamento'; n.onclick = abrir; ref.parentNode.insertBefore(n, ref.nextSibling);
   }
-  function reiniciar() { cerrar(); datos = null; const b = $('btn-instalaciones'); if (b) b.remove(); }
+  function reiniciar() { cerrar(); datos = null; desp = []; const b = $('btn-instalaciones'); if (b) b.remove(); }
   setInterval(() => { const s = sesion(), k = s && rolOk() && mod('INSTALACIONES') ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : ''; if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton(); }, 1500);
-  window.aresInstalaciones = { abrir: abrir, cerrar: cerrar, estado: () => ({ datos: datos, form: f }), enMapa: () => capa ? capa.getLayers().length : 0 };
+  window.aresInstalaciones = { abrir: abrir, cerrar: cerrar, estado: () => ({ datos: datos, form: f }), enMapa: () => capa ? capa.getLayers().length : 0, desplegadosEnMapa: () => capaD ? capaD.getLayers().filter(l => l.getRadius).length : 0 };
 })();
 </script>
 
