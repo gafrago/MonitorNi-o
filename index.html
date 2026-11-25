@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbx5A1RKaf-2VbDjBZafd0sm6CElTbQFrmnoD5Bj2vZQJXrUJ1hH6mfjJjlz-BliBdCW_Q/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbytbrxY2hIYOsu0waq8dlayVOp6uYn9wM1khKOPPBtOXk1sIFpctOiqlbOZy-0vs5F1zA/exec";
 
 
 ;
@@ -8025,8 +8025,97 @@ window.addEventListener('DOMContentLoaded', () => {
     P.tabla('Entregas tardias (mayor demora primero)', ['Local', 'Localidad', 'Demora'], pf.tardias.map(x => [x.l, x.loc, fmtMin(x.min)]), 25);
     P.tabla('Tiempos entre fases (segun el historial)', ['Desde', 'Hasta', 'Locales', 'Promedio', 'Maximo', 'Local del maximo'], pf.tiempos.map(x => [FASE[x.de][0], FASE[x.a][0] + (x.total ? ' (total)' : ''), x.n, fmtMin(x.med), fmtMin(x.max), x.maxLocal]), 12);
     P.tabla('Incidentes de la jornada', ['Local', 'Incidente', 'Inicio', 'Duracion', 'Informo'], pf.incidentes.map(x => [x.l, x.texto, hhmm(x.t0), x.t1 ? fmtMin(x.min) : 'ABIERTO', x.autor]), 40);
+    if (r.actas) { const A = r.actas; P.tabla('Actas de entrega y repliegue', ['Total', 'Confirmadas', 'Con diferencias', 'Pendientes', 'Anuladas', 'Alteradas'], [[A.total, A.confirmadas, A.conDiferencias, A.pendientes, A.anuladas, A.alteradas || 0]], 5, true);
+      P.tabla('Actas con diferencias o sin confirmar', ['Local', 'Tipo', 'Estado'], (A.observadas || []).map(x => [x.l, x.tipo === 'REPLIEGUE' ? 'Repliegue' : 'Entrega', (ACTA_EST[x.estado] || [x.estado])[0]]), 40); if (A.alteradas) P.txt('ATENCION: ' + A.alteradas + ' acta(s) fueron modificadas fuera del sistema y no se cuentan arriba.'); }
     P.tabla('Locales sin cerrar (no finalizados)', ['Local', 'Localidad', 'Fase', 'Responsable'], pf.sinCerrar.map(l => [l.nombre, l.localidad, FASE[l.fase][0], l.responsable || '-']), 40);
     const nombre = 'Parte_final_electoral_' + P.nombre0() + '.pdf'; P.cerrar(nombre); if (!(opc && opc.sinGuardar)) P.doc.save(nombre); return { nombre: nombre, tablas: P.tablas, paginas: P.doc.getNumberOfPages(), parte: pf };
+  }
+
+
+  /* ---------- Actas de entrega y repliegue (cadena de custodia) ---------- */
+  let actas = null, actaMiembros = [], actaForm = null, actaConf = null, actaMsg = '', actaAnular = '';
+  const ACTA_EST = { PENDIENTE: ['Pendiente de confirmar', '#f59e0b'], CONFIRMADA: ['Confirmada', '#22c55e'], CON_DIFERENCIAS: ['Con diferencias', '#ef4444'], ANULADA: ['Anulada', '#64748b'] };
+  const LISTAS_A = [['equipo', 'Equipo'], ['vehiculos', 'Vehículos'], ['armamento', 'Armamento']];
+  async function cargarActas() { try { const r = await api('ELEC_ACTA_LISTAR'); if (r.status !== 'success') { actaMsg = r.message || 'No se pudieron cargar las actas.'; actas = []; } else { actas = r.actas || []; actaMiembros = r.miembros || []; } } catch (_) { actaMsg = 'Sin conexión.'; actas = actas || []; } if (panel && tab === 'actas') pintar(); }
+  const nuevaActa = () => ({ idLocal: '', tipo: 'ENTREGA', recibeEmail: '', urnas: '', personal: '', equipo: [], vehiculos: [], armamento: [], obs: '' });
+  const misLocales = () => locales.filter(l => puedeGestionar || l.responsableEmail === yo).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  function selectEl(opts, val, fn) { const s = estiloSel(el('select')); opts.forEach(o => { const x = el('option', '', o[1]); x.value = o[0]; s.appendChild(x); }); s.value = val; s.onchange = () => fn(s.value); return s; }
+  function numEl(val, fn, w) { const i = estiloSel(el('input')); i.type = 'number'; i.min = '0'; i.value = val; i.style.width = w || '70px'; i.oninput = () => fn(i.value); return i; }
+  function filaCampo(rot, nodo) { const f = el('div', 'display:flex;gap:6px;align-items:center;margin:4px 0'); f.appendChild(el('label', 'flex:0 0 120px;font-size:12px;color:#94a3b8', rot)); f.appendChild(nodo); return f; }
+  async function guardarActa() {
+    const f = actaForm; actaMsg = 'Guardando…'; pintar();
+    const lim = a => a.filter(x => String(x.n || '').trim()).map(x => ({ n: x.n, e: x.e === '' ? 0 : Number(x.e) }));
+    try { const r = await api('ELEC_ACTA_CREAR', { idLocal: f.idLocal, tipo: f.tipo, recibeEmail: f.recibeEmail, obs: f.obs, detalle: { urnas: f.urnas === '' ? 0 : Number(f.urnas), personal: f.personal === '' ? 0 : Number(f.personal), equipo: lim(f.equipo), vehiculos: lim(f.vehiculos), armamento: lim(f.armamento) } });
+      if (r.status !== 'success') { actaMsg = '⚠ ' + (r.message || 'No se pudo labrar el acta.'); pintar(); return; } actaForm = null; actaMsg = 'Acta ' + r.id + ' labrada. Queda pendiente de que el receptor la confirme.'; await cargarActas(); } catch (e) { actaMsg = '⚠ ' + e.message; pintar(); }
+  }
+  function formNuevaActa(w) {
+    const f = actaForm, ml = misLocales(); w.className += ' el-acta-form';
+    w.appendChild(el('div', 'font-weight:bold;margin:2px 0 4px', 'Nueva acta'));
+    if (!ml.length) { w.appendChild(el('div', 'color:#fbbf24', 'No tiene locales a su cargo para labrar actas.')); w.appendChild(btnE('Cerrar', () => { actaForm = null; pintar(); })); return; }
+    if (!f.idLocal) f.idLocal = ml[0].id; if (!f.recibeEmail && actaMiembros.length) f.recibeEmail = actaMiembros[0].email;
+    w.appendChild(filaCampo('Local', selectEl(ml.map(l => [l.id, l.nombre]), f.idLocal, v => { f.idLocal = v; })));
+    w.appendChild(filaCampo('Tipo', selectEl([['ENTREGA', 'Entrega de material'], ['REPLIEGUE', 'Repliegue']], f.tipo, v => { f.tipo = v; })));
+    w.appendChild(filaCampo('Quien recibe', selectEl(actaMiembros.map(m => [m.email, m.nombre + ' (' + m.rol + ')']), f.recibeEmail, v => { f.recibeEmail = v; })));
+    w.appendChild(filaCampo('Urnas', numEl(f.urnas, v => { f.urnas = v; }))); w.appendChild(filaCampo('Personal', numEl(f.personal, v => { f.personal = v; })));
+    LISTAS_A.forEach(([k, rot]) => { w.appendChild(el('div', 'margin-top:6px;font-size:12px;font-weight:bold', rot));
+      f[k].forEach((x, i) => { const r = el('div', 'display:flex;gap:4px;align-items:center;margin-top:3px'); r.className = 'el-acta-item'; const n = estiloSel(el('input')); n.type = 'text'; n.placeholder = 'Descripción'; n.value = x.n || ''; n.style.flex = '1'; n.oninput = () => { x.n = n.value; }; r.append(n, numEl(x.e, v => { x.e = v; }, '64px'), btnE('✕', () => { f[k].splice(i, 1); pintar(); })); w.appendChild(r); });
+      w.appendChild(btnE('+ Agregar', () => { f[k].push({ n: '', e: 1 }); pintar(); })); });
+    const ob = estiloSel(el('textarea')); ob.rows = 2; ob.style.cssText += ';width:100%;box-sizing:border-box;margin-top:6px'; ob.placeholder = 'Observaciones (opcional)'; ob.value = f.obs; ob.oninput = () => { f.obs = ob.value; }; w.appendChild(ob);
+    const fb = el('div', 'margin-top:8px;display:flex;gap:6px'); fb.append(btnE('📜 Labrar acta', guardarActa, '#15803d'), btnE('Cancelar', () => { actaForm = null; actaMsg = ''; pintar(); })); w.appendChild(fb);
+  }
+  function btnE(t, fn, bg) { const b = el('button', btnCss + (bg ? ';background:' + bg : ''), t); b.type = 'button'; b.onclick = fn; return b; }
+  async function confirmarActa(a, conforme) {
+    const c = actaConf, rec = conforme ? {} : { urnas: c.urnas, personal: c.personal, equipo: c.equipo.map(Number), vehiculos: c.vehiculos.map(Number), armamento: c.armamento.map(Number) };
+    actaMsg = 'Confirmando…'; pintar(); try { const r = await api('ELEC_ACTA_CONFIRMAR', { id: a.id, conforme: !!conforme, recibido: rec, obs: c.obs }); if (r.status !== 'success') { actaMsg = '⚠ ' + (r.message || 'No se pudo confirmar.'); pintar(); return; } actaConf = null; actaMsg = r.estado === 'CONFIRMADA' ? 'Recepción confirmada: sin diferencias.' : 'Recepción confirmada CON DIFERENCIAS. Quedó registrada.'; await cargarActas(); cargar(true); } catch (e) { actaMsg = '⚠ ' + e.message; pintar(); }
+  }
+  function formConfirmar(w, a) {
+    const c = actaConf; w.className += ' el-acta-conf'; w.appendChild(el('div', 'font-weight:bold;margin:2px 0 4px', 'Confirmar recepción · ' + a.local)); w.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-bottom:4px', 'Cuente lo que realmente recibe. Si algo no coincide con lo entregado, corríjalo y explique la diferencia.'));
+    const fila = (rot, e, val, fn) => { const r = el('div', 'display:flex;gap:6px;align-items:center;margin:3px 0'); r.appendChild(el('div', 'flex:1;font-size:12px', rot)); r.appendChild(el('div', 'width:90px;font-size:12px;color:#94a3b8', 'entregado ' + e)); r.appendChild(numEl(val, fn, '64px')); return r; };
+    w.appendChild(fila('Urnas', a.detalle.urnas.e, c.urnas, v => { c.urnas = v; })); w.appendChild(fila('Personal', a.detalle.personal.e, c.personal, v => { c.personal = v; }));
+    LISTAS_A.forEach(([k, rot]) => { (a.detalle[k] || []).forEach((x, i) => w.appendChild(fila(rot + ': ' + x.n, x.e, c[k][i], v => { c[k][i] = v; }))); });
+    const ob = estiloSel(el('textarea')); ob.rows = 2; ob.style.cssText += ';width:100%;box-sizing:border-box;margin-top:6px'; ob.placeholder = 'Observaciones (obligatorias si hay diferencias)'; ob.value = c.obs; ob.oninput = () => { c.obs = ob.value; }; w.appendChild(ob);
+    const fb = el('div', 'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap'); fb.append(btnE('✅ Conforme con todo', () => confirmarActa(a, true), '#15803d'), btnE('Confirmar con lo que cargué', () => confirmarActa(a, false), '#b45309'), btnE('Cancelar', () => { actaConf = null; actaMsg = ''; pintar(); })); w.appendChild(fb);
+  }
+  async function anularActa(a, motivo) { try { const r = await api('ELEC_ACTA_ANULAR', { id: a.id, motivo: motivo }); if (r.status !== 'success') { actaMsg = '⚠ ' + (r.message || 'No se pudo anular.'); pintar(); return; } actaAnular = ''; actaMsg = 'Acta anulada.'; await cargarActas(); } catch (e) { actaMsg = '⚠ ' + e.message; pintar(); } }
+  function lineasActa(a) {
+    const d = a.detalle, L = []; if (!d) return L; const lin = (n, x) => L.push([n, x.e, x.r === null || x.r === undefined ? '-' : x.r]);
+    lin('Urnas', d.urnas); lin('Personal', d.personal); [['equipo', 'Equipo'], ['vehiculos', 'Vehículo'], ['armamento', 'Armamento']].forEach(([k, rot]) => (d[k] || []).forEach(x => lin(rot + ': ' + x.n, x))); return L;
+  }
+  function tarjetaActa(a) {
+    const e = ACTA_EST[a.estado] || ACTA_EST.PENDIENTE, c = el('div', 'border:1px solid #334155;border-left:4px solid ' + e[1] + ';border-radius:6px;padding:6px 8px;margin:6px 0'); c.className = 'el-acta'; c.dataset.id = a.id;
+    c.appendChild(el('div', 'font-size:12.5px;font-weight:bold', (a.tipo === 'REPLIEGUE' ? 'Repliegue' : 'Entrega') + ' · ' + a.local + ' · ' + e[0]));
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'Entrega: ' + a.entrega + ' → Recibe: ' + a.recibe + ' · ' + hhmm(a.tsCrea) + (a.tsConf ? ' · confirmada ' + hhmm(a.tsConf) : '') + ' · N° ' + a.id));
+    if (!a.integro) c.appendChild(el('div', 'font-size:12px;color:#fca5a5;font-weight:bold;margin-top:3px', '⚠ Esta acta fue modificada fuera del sistema. No es confiable: avise al Administrador.'));
+    if (a.detalle) { const t = el('table', 'width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px'); const hr = el('tr'); ['Concepto', 'Entregado', 'Recibido'].forEach(x => hr.appendChild(el('th', 'text-align:left;border-bottom:1px solid #475569;padding:2px 4px', x))); t.appendChild(hr);
+      lineasActa(a).forEach(l => { const r = el('tr'); l.forEach((x, i) => r.appendChild(el('td', 'padding:2px 4px;border-bottom:1px solid #1e293b' + (i === 2 && l[2] !== '-' && l[2] !== l[1] ? ';color:#fca5a5;font-weight:bold' : ''), String(x)))); t.appendChild(r); }); c.appendChild(t); }
+    if (a.armamentoReservado) c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:3px', 'Armamento: reservado (solo lo ven el comando y quienes firman el acta).'));
+    if (a.obs) c.appendChild(el('div', 'font-size:11.5px;margin-top:3px', 'Observaciones: ' + a.obs));
+    const ac = el('div', 'margin-top:5px;display:flex;gap:6px;flex-wrap:wrap');
+    if (a.estado === 'PENDIENTE' && a.recibeEmail === yo && a.integro) ac.appendChild(btnE('✅ Confirmar recepción', () => { const d = a.detalle; actaConf = { id: a.id, urnas: d.urnas.e, personal: d.personal.e, equipo: (d.equipo || []).map(x => x.e), vehiculos: (d.vehiculos || []).map(x => x.e), armamento: (d.armamento || []).map(x => x.e), obs: '' }; actaMsg = ''; pintar(); }, '#15803d'));
+    if (a.estado === 'PENDIENTE' && (puedeGestionar || a.entregaEmail === yo)) ac.appendChild(btnE(actaAnular === a.id ? 'Cancelar anulación' : 'Anular', () => { actaAnular = actaAnular === a.id ? '' : a.id; pintar(); }, '#7f1d1d'));
+    ac.appendChild(btnE('📄 PDF', () => { try { pdfActa(a); } catch (er) { actaMsg = 'No se pudo generar el PDF: ' + er.message; pintar(); } })); c.appendChild(ac);
+    if (actaAnular === a.id) { const f = el('div', 'display:flex;gap:6px;margin-top:5px'), mo = estiloSel(el('input')); mo.type = 'text'; mo.placeholder = 'Motivo de la anulación'; mo.style.flex = '1'; f.append(mo, btnE('Anular acta', () => anularActa(a, mo.value), '#b91c1c')); c.appendChild(f); }
+    return c;
+  }
+  function pActas() {
+    const w = panel; if (actas === null) { w.appendChild(el('div', 'color:#94a3b8', 'Cargando actas…')); cargarActas(); return; }
+    const msgA = () => { if (actaMsg) { const m = el('div', 'font-size:12px;margin:3px 0;padding:4px 6px;border-radius:4px;background:#1e293b;color:' + (/^⚠|No se/.test(actaMsg) ? '#fca5a5' : '#86efac'), actaMsg); m.className = 'el-acta-msg'; w.appendChild(m); } };
+    if (actaConf) { const a = actas.find(x => x.id === actaConf.id); if (a) { msgA(); formConfirmar(w, a); return; } actaConf = null; }
+    if (actaForm) { msgA(); formNuevaActa(w); return; }
+    const barra = el('div', 'display:flex;gap:6px;align-items:center;margin:2px 0 6px'); if (misLocales().length) barra.appendChild(btnE('+ Nueva acta', () => { actaForm = nuevaActa(); actaMsg = ''; pintar(); }, '#15803d')); barra.appendChild(btnE('↻', () => { actas = null; pintar(); }));
+    const pend = actas.filter(a => a.estado === 'PENDIENTE' && a.recibeEmail === yo).length; barra.appendChild(el('div', 'font-size:11.5px;color:' + (pend ? '#fcd34d' : '#94a3b8'), pend ? '⏳ Tiene ' + pend + ' acta(s) para confirmar' : actas.length + ' acta(s)')); w.appendChild(barra);
+    msgA();
+    if (!actas.length) { w.appendChild(el('div', 'color:#94a3b8;margin-top:8px', 'Todavía no hay actas. Se labran al entregar el material en un local y al replegarlo; la persona que recibe las confirma con su usuario.')); return; }
+    actas.slice().sort((a, b) => (b.estado === 'PENDIENTE' && b.recibeEmail === yo ? 1 : 0) - (a.estado === 'PENDIENTE' && a.recibeEmail === yo ? 1 : 0) || b.tsCrea - a.tsCrea).forEach(a => w.appendChild(tarjetaActa(a)));
+  }
+  function pdfActa(a) {
+    const P = nuevoPdf('Acta de ' + (a.tipo === 'REPLIEGUE' ? 'repliegue' : 'entrega') + ' de material electoral'); if (!P) return null;
+    P.sub('Acta N° ' + a.id + ' - ' + (ACTA_EST[a.estado] || [a.estado])[0]); P.txt('Local: ' + a.local + '.  Entrega: ' + a.entrega + '.  Recibe: ' + a.recibe + '.  Labrada: ' + hhmm(a.tsCrea) + (a.tsConf ? '  |  Confirmada por el receptor: ' + hhmm(a.tsConf) : '  |  Aun sin confirmar.'));
+    const ls = lineasActa(a).map(l => [l[0], l[1], l[2], l[2] === '-' ? '-' : String(Number(l[2]) - Number(l[1]))]); P.tabla('Detalle', ['Concepto', 'Entregado', 'Recibido', 'Diferencia'], ls, 80, true);
+    if (a.armamentoReservado) P.txt('El armamento de esta acta es reservado y no figura en esta copia.'); if (a.obs) P.txt('Observaciones: ' + a.obs);
+    P.txt('Sello de integridad: ' + (a.sello || '-') + (a.integro ? '' : '  (ATENCION: el acta fue modificada fuera del sistema)') + '. Registro interno de trazabilidad de A.R.E.S.; no reemplaza el acta oficial firmada.');
+    P.txt('\n\nEntrego: ' + a.entrega + '   ______________________            Recibio: ' + a.recibe + '   ______________________');
+    const nombre = 'Acta_' + a.id + '_' + latinE(a.local).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 30) + '.pdf'; P.cerrar(nombre); P.doc.save(nombre); return nombre;
   }
 
   /* ---------- Panel ---------- */
@@ -8037,13 +8126,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!panel) { panel = el('div', 'position:fixed;right:10px;top:56px;width:min(470px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'el-panel'; document.body.appendChild(panel); }
     pintar();
   }
-  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } editando = null; pararDemo(); }
+  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } editando = null; actaForm = null; actaConf = null; pararDemo(); }
   function pintar() {
     if (!panel) return; const st = panel.scrollTop; panel.textContent = '';
     const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗳 Operativo Electoral' + (locales.some(l => l.simulacro) ? ' · 🧪 simulacro' : '')));
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
-    const tabs = el('div', 'display:flex;gap:4px;margin:6px 0'); [['tablero', '📊 Tablero'], ['locales', '📋 Locales']].concat(puedeGestionar ? [['gestion', '⚙ Gestión']] : []).forEach(t => { const b = el('button', btnCss + (tab === t[0] ? ';background:#0369a1;border-color:#38bdf8' : ''), t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.onclick = () => { tab = t[0]; pintar(); }; tabs.appendChild(b); }); panel.appendChild(tabs);
-    if (tab === 'tablero') pTablero(); else if (tab === 'locales') pLocales(); else if (puedeGestionar) pGestion(); else { tab = 'tablero'; pTablero(); }
+    const tabs = el('div', 'display:flex;gap:4px;margin:6px 0'); [['tablero', '📊 Tablero'], ['locales', '📋 Locales'], ['actas', '📜 Actas']].concat(puedeGestionar ? [['gestion', '⚙ Gestión']] : []).forEach(t => { const b = el('button', btnCss + (tab === t[0] ? ';background:#0369a1;border-color:#38bdf8' : ''), t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.onclick = () => { tab = t[0]; pintar(); }; tabs.appendChild(b); }); panel.appendChild(tabs);
+    if (tab === 'tablero') pTablero(); else if (tab === 'locales') pLocales(); else if (tab === 'actas') pActas(); else if (puedeGestionar) pGestion(); else { tab = 'tablero'; pTablero(); }
     panel.scrollTop = st;
   }
   function pTablero() {
@@ -8179,7 +8268,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (b) return; const ref = $('btn-territorio') || $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
     const n = el('button', 'margin-right:6px', '🗳 Operativo Electoral'); n.id = 'btn-electoral'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Locales de votación, fases del operativo y novedades'; n.onclick = () => abrir(false); ref.parentNode.insertBefore(n, ref);
   }
-  function reiniciar() { cerrarPanel(); capa = quitar(capa); pulsos = quitar(pulsos); rend = null; const b = $('btn-electoral'); if (b) b.remove(); locales = []; ver = ''; puedeGestionar = false; miembros = []; desfase = 0; filtro = { q: '', fase: '', acceso: '', novedades: false }; msgG = ''; }
+  function reiniciar() { cerrarPanel(); actas = null; actaMiembros = []; capa = quitar(capa); pulsos = quitar(pulsos); rend = null; const b = $('btn-electoral'); if (b) b.remove(); locales = []; ver = ''; puedeGestionar = false; miembros = []; desfase = 0; filtro = { q: '', fase: '', acceso: '', novedades: false }; msgG = ''; }
   setInterval(() => {
     if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
     const mp = mapa(); if (!mp || !teatro()) return;
@@ -8190,7 +8279,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (activa() && iniciado && tieneModulo() && !document.hidden) cargar(false); }, 20000);
   setInterval(() => { if (activa() && iniciado && locales.length) { dibujar(); if (panel && tab === 'tablero') pintar(); } }, 60000);       // retrasos y avisos meteorologicos se reevaluan solos
   document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado && tieneModulo()) cargar(false); });
-  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV, calcularParte: calcularParte, pdfSituacion: pdfSituacion, pdfParte: pdfParte };
+  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV, calcularParte: calcularParte, pdfSituacion: pdfSituacion, pdfParte: pdfParte, pdfActa: pdfActa, actas: () => (actas || []).slice() };
 })();
 </script>
 <!-- ===== FIN BLOQUE ELECTORAL ===== -->
