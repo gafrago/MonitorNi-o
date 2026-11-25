@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbx2gPuhBU1S3MAkx23zzhCNZgJ4TGf1odRhMyeZPMHU9azwECwfVniVuOsk52Ent0oMVg/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxt1TAHLTmNsvjCulhiFusu-omTpCMN9Z-UKUk4qmcZB97VVhVGQSpAnNymhtXVABmdTw/exec";
 
 
 ;
@@ -9731,7 +9731,11 @@ window.addEventListener('DOMContentLoaded', () => {
   const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
   const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
   const rolOk = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()); };
-  let panel = null, log = null, ia = false, ultimo = '', saludado = false, ocupado = false, hist = [], guias = null;
+  let panel = null, log = null, ia = false, ultimo = '', saludado = false, ocupado = false, hist = [], guias = null, vozOk = true, hablar = false, reco = null, escuchando = false, avisoVoz = false, deVoz = false;
+  const SR = () => window.SpeechRecognition || window.webkitSpeechRecognition, TTS = () => { try { return !!(window.speechSynthesis && window.SpeechSynthesisUtterance); } catch (_) { return false; } };
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  function decir(t) { if (!hablar || !TTS()) return; try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(String(t).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}→👉]/gu, ' ').replace(/\s+/g, ' ').slice(0, 700)); u.lang = 'es-AR'; u.rate = 1; speechSynthesis.speak(u); } catch (_) {} }
+  function callar() { try { if (TTS()) speechSynthesis.cancel(); } catch (_) {} }
   const IR = { sanidad: ['🩺 Abrir Sanidad', 'btn-sanidad'], instalaciones: ['🚒 Abrir Instalaciones', 'btn-instalaciones'], fuego: ['🔥 Abrir Fuego', 'btn-fuego'], combate: ['⚔️ Abrir Combate', 'btn-combate'], electoral: ['🗳 Abrir Electoral', 'btn-electoral'], mensajes: ['✉️ Abrir Mensajes', 'btn-mensajes'], planificar: ['🗺 Abrir Planificación', 'btn-planificacion'], medios: ['🚒 Abrir Instalaciones', 'btn-instalaciones'] };
   const SVGNS = 'http://www.w3.org/2000/svg';
   function emblema(px) {      // símbolo de Mariscal: estrella de mariscal sobre dos bastones cruzados, en azul y dorado (diseño propio)
@@ -9766,7 +9770,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (ocupado) return; ocupado = true; const m = msg('mariscal', 'Revisando el teatro…');
     try {
       const r = await api('MAR_DIAGNOSTICO'); m.remove(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude revisar el teatro.'); return; }
-      ia = !!r.ia; modo(); const R = r.resumen;
+      ia = !!r.ia; if (r.voz !== undefined) { vozOk = !!r.voz; botonesVoz(); } modo(); const R = r.resumen;
       msg('mariscal', 'Teatro ' + R.nombre + ' (' + R.tipo + ') · ' + R.modulos.length + ' módulo(s) · ' + R.sectores + ' sector(es).');
       (r.hallazgos || []).forEach(x => { const col = x.nivel === 'OK' ? '#166534' : x.nivel === 'FALTA' ? '#7f1d1d' : '#78350f'; const ic = x.nivel === 'OK' ? '✅ ' : x.nivel === 'FALTA' ? '⛔ ' : '⚠️ ';
         const d = msg('mariscal', ic + x.texto + (x.paso ? '\n→ ' + x.paso : ''), ';background:' + col); d.className += ' ma-hall'; const ib = x.ir && irBtn(x.ir); if (ib) { ib.style.cssText += ';display:block;margin-top:5px'; d.appendChild(ib); } if (x.propuesta) tarjetaPropuesta(x.propuesta); });
@@ -9776,14 +9780,14 @@ window.addEventListener('DOMContentLoaded', () => {
     t = String(t || '').trim(); if (!t || ocupado) return; ocupado = true; msg('yo', t); const m = msg('mariscal', 'Pensando…');
     try { const r = await api('MAR_CONSULTAR', { texto: t, historial: hist.slice(-6) }); m.remove(); ia = !!r.ia; modo(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude responder.'); return; }
       hist.push({ r: 'u', t: t.slice(0, 300) }, { r: 'm', t: String(r.respuesta || '').slice(0, 300) }); if (hist.length > 12) hist = hist.slice(-12);
-      const rm = msg('mariscal', r.respuesta); const vistos = {}; (r.temas || []).forEach(k => { const ib = IR[k] && !vistos[IR[k][1]] && irBtn(k); if (ib) { vistos[IR[k][1]] = 1; ib.style.cssText += ';display:block;margin-top:5px'; rm.appendChild(ib); } }); (r.propuestas || []).forEach(tarjetaPropuesta); }
+      const rm = msg('mariscal', r.respuesta); decir(r.respuesta); const vistos = {}; (r.temas || []).forEach(k => { const ib = IR[k] && !vistos[IR[k][1]] && irBtn(k); if (ib) { vistos[IR[k][1]] = 1; ib.style.cssText += ';display:block;margin-top:5px'; rm.appendChild(ib); } }); (r.propuestas || []).forEach(tarjetaPropuesta); }
     catch (e) { m.remove(); msg('mariscal', 'No pude responder: ' + e.message); } finally { ocupado = false; }
   }
   function mostrarGuia(g) {
     msg('mariscal', '📋 ' + g.titulo + ' — ' + g.hechos + ' de ' + g.total + ' pasos'); const bar = el('div', 'height:8px;border-radius:4px;background:#334155;margin:2px 12px 6px 0;overflow:hidden'); const rel = el('div', 'height:100%;background:#22c55e;width:' + Math.round(100 * g.hechos / Math.max(1, g.total)) + '%'); bar.appendChild(rel); bar.className = 'ma-barra'; log.appendChild(bar);
     g.pasos.forEach((s, i) => { const sig = i === g.siguiente, d = msg('mariscal', (s.ok ? '✅ ' : sig ? '👉 ' : '⬜ ') + s.texto, ';background:' + (s.ok ? '#14532d' : sig ? '#78350f' : '#1e293b')); d.className += ' ma-paso' + (s.ok ? ' ma-ok' : '') + (sig ? ' ma-sig' : '');
       if (!s.ok) { const ib = s.ir && irBtn(s.ir); if (ib) { ib.style.cssText += ';display:block;margin-top:5px'; d.appendChild(ib); } if (s.propuesta) tarjetaPropuesta(s.propuesta); } });
-    if (g.siguiente < 0) msg('mariscal', '🎖 Guía completa. Sugiero ensayar en un teatro de EJERCICIO antes de operar.'); else hist.push({ r: 'm', t: 'Siguiente paso de la guía: ' + g.pasos[g.siguiente].texto.slice(0, 200) });
+    if (g.siguiente < 0) msg('mariscal', '🎖 Guía completa. Sugiero ensayar en un teatro de EJERCICIO antes de operar.'); else { hist.push({ r: 'm', t: 'Siguiente paso de la guía: ' + g.pasos[g.siguiente].texto.slice(0, 200) }); decir(g.titulo + '. Van ' + g.hechos + ' de ' + g.total + ' pasos. Siguiente paso: ' + g.pasos[g.siguiente].texto); }
   }
   async function guia(id) {
     if (ocupado) return; ocupado = true; const m = msg('mariscal', 'Armando la guía…');
@@ -9794,31 +9798,51 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!guias) { try { const r = await api('MAR_ESTADO'); guias = r.status === 'success' ? r.guias : []; } catch (_) { guias = []; } }
     const d = msg('mariscal', '¿Qué quiere armar? Elija una guía paso a paso:'); d.className += ' ma-guias'; (guias || []).forEach(g => { const b = btn(g.titulo, '#0369a1', () => guia(g.id)); b.style.cssText += ';display:block;margin-top:4px;text-align:left'; d.appendChild(b); });
   }
+  function botonesVoz() { if (!panel) return; const m = panel.querySelector('.ma-mic'), s = panel.querySelector('.ma-sonido'); if (m) m.style.display = vozOk && SR() ? '' : 'none'; if (s) s.style.display = vozOk && TTS() ? '' : 'none'; }
+  function pintarSonido() { const s = panel && panel.querySelector('.ma-sonido'); if (s) { s.textContent = hablar ? '🔊' : '🔇'; s.title = hablar ? 'Mariscal responde hablando (pulse para silenciar)' : 'Mariscal en silencio (pulse para que hable)'; } }
+  function pintarMic() { const m = panel && panel.querySelector('.ma-mic'); if (m) { m.textContent = escuchando ? '🔴' : '🎤'; m.style.background = escuchando ? '#b91c1c' : '#334155'; m.title = escuchando ? 'Escuchando… pulse para detener' : 'Hablarle a Mariscal'; } }
+  function empezarEscucha() {
+    const C = SR(); if (!C) return; callar(); const r = new C(); reco = r; r.lang = 'es-AR'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1; let final = '';
+    const inp = panel && panel.querySelector('.ma-entrada');
+    r.onstart = () => { escuchando = true; pintarMic(); };
+    r.onresult = e => { let t = ''; for (let i = e.resultIndex; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) final = t; } if (inp) inp.value = t; };
+    r.onerror = e => { escuchando = false; pintarMic(); const c = e && e.error; if (c === 'not-allowed' || c === 'service-not-allowed') msg('mariscal', '🎤 No tengo permiso para usar el micrófono. Habilítelo en el candado de la barra de direcciones y vuelva a intentar.'); else if (c === 'no-speech') msg('mariscal', '🎤 No escuché nada. Pulse el micrófono y hable cerca.'); else if (c === 'network') msg('mariscal', '🎤 El reconocimiento de voz necesita conexión a internet y no pudo conectarse.'); else if (c !== 'aborted') msg('mariscal', '🎤 No pude entender el audio (' + c + ').'); };
+    r.onend = () => { escuchando = false; pintarMic(); reco = null; const t = (final || '').trim(); if (t && inp) { inp.value = ''; if (!hablar && TTS()) { hablar = true; lsSet('ares_mariscal_habla', '1'); pintarSonido(); } deVoz = true; preguntar(t); } };
+    try { r.start(); } catch (_) { escuchando = false; pintarMic(); }
+  }
+  function alternarMic() {
+    if (escuchando && reco) { try { reco.stop(); } catch (_) {} return; }
+    if (!avisoVoz && lsGet('ares_mariscal_voz_ok') !== '1') {      // aviso de privacidad, una sola vez
+      const d = msg('mariscal', '🎤 Aviso de privacidad: el dictado por voz lo hace su navegador (Chrome o Edge) y envía el audio al servicio de reconocimiento de Google o Microsoft para convertirlo en texto. No dicte datos sensibles de un teatro real. Si prefiere no usarlo, escriba.'); d.className += ' ma-avisovoz';
+      d.appendChild(btn('Entiendo, activar micrófono', '#15803d', () => { avisoVoz = true; lsSet('ares_mariscal_voz_ok', '1'); d.querySelectorAll('button').forEach(b => b.remove()); empezarEscucha(); })); d.appendChild(btn('No usar voz', '#475569', () => { d.querySelectorAll('button').forEach(b => b.remove()); })); return;
+    }
+    avisoVoz = true; empezarEscucha();
+  }
   function modo() { const e = panel && panel.querySelector('.ma-modo'); if (e) e.textContent = ia ? 'IA conectada' : 'Guía por reglas'; }
   function abrir() {
     if (panel) { cerrar(); return; }
     panel = el('div', 'position:fixed;top:60px;right:10px;bottom:70px;width:min(380px,calc(100vw - 20px));z-index:2147483000;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 6px 24px #000a;display:flex;flex-direction:column;font-family:sans-serif'); panel.id = 'ma-panel';
     const cab = el('div', 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #334155;background:#1e293b;border-radius:8px 8px 0 0');
     const tt = el('div', 'flex:1'); tt.appendChild(el('b', 'font-size:14px', 'MARISCAL')); tt.firstChild.style.display = 'inline-block'; tt.firstChild.style.verticalAlign = 'middle'; tt.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Guía del Administrador · ')).appendChild(el('span', '', ia ? 'IA conectada' : 'Guía por reglas')).className = 'ma-modo';
-    cab.append(emblema(34), tt, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
+    const so = btn('🔇', '#334155', () => { hablar = !hablar; lsSet('ares_mariscal_habla', hablar ? '1' : '0'); if (!hablar) callar(); pintarSonido(); }, 'Mariscal en silencio'); so.className = 'ma-sonido'; so.style.fontSize = '15px'; cab.append(emblema(34), tt, so, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
     const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado')); barra.appendChild(btn('📋 Checklist', '#0e7490', () => guia('GENERAL'), 'Puesta en marcha: qué está hecho y cuál es el siguiente paso')); barra.appendChild(btn('🧭 Guías', '#0e7490', elegirGuia, 'Armar un teatro paso a paso'));
     TEMAS.forEach(t => barra.appendChild(btn(t[0], '#334155', () => preguntar(t[1])))); panel.appendChild(barra);
     log = el('div', 'flex:1;overflow:auto;padding:6px 8px'); panel.appendChild(log);
     const pie = el('div', 'display:flex;gap:6px;padding:8px;border-top:1px solid #334155'); const inp = el('input', 'flex:1;padding:7px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff;font-size:12.5px'); inp.type = 'text'; inp.maxLength = 500; inp.placeholder = 'Pregunte a Mariscal…'; inp.className = 'ma-entrada';
-    const env = () => { const v = inp.value; inp.value = ''; preguntar(v); }; inp.onkeydown = e => { if (e.key === 'Enter') env(); }; pie.append(inp, btn('Enviar', '#2563eb', env)); panel.appendChild(pie);
-    document.body.appendChild(panel);
+    const env = () => { const v = inp.value; inp.value = ''; preguntar(v); }; inp.onkeydown = e => { if (e.key === 'Enter') env(); }; const mic = btn('🎤', '#334155', alternarMic, 'Hablarle a Mariscal'); mic.className = 'ma-mic'; mic.style.fontSize = '15px'; pie.append(mic, inp, btn('Enviar', '#2563eb', env)); panel.appendChild(pie);
+    document.body.appendChild(panel); hablar = lsGet('ares_mariscal_habla') === '1' && TTS(); pintarSonido(); pintarMic(); botonesVoz();
     if (!saludado) { saludado = true; msg('mariscal', 'A sus órdenes. Soy Mariscal. Puedo revisar su teatro, explicarle cómo crearlo, configurarlo y planificarlo, y proponerle cambios que usted confirma. Yo no modifico nada por mi cuenta.'); revisar(); }
     else { log.appendChild(el('div', 'font-size:11px;color:#94a3b8;padding:4px', 'Pulse «Revisar mi teatro» para actualizar el diagnóstico.')); }
     try { inp.focus(); } catch (_) {}
   }
-  function cerrar() { if (panel) { panel.remove(); panel = null; log = null; } }
+  function cerrar() { callar(); try { if (reco) reco.abort(); } catch (_) {} escuchando = false; if (panel) { panel.remove(); panel = null; log = null; } }
   function boton() {
     if (!rolOk()) { const b = $('btn-mariscal'); if (b) b.remove(); return; } if ($('btn-mariscal')) return;
     const b = el('button', 'position:fixed;left:12px;bottom:64px;z-index:2147482900;padding:8px 12px;border-radius:20px;border:1px solid #38bdf8;background:#0c4a6e;color:#fff;cursor:pointer;font-size:13px;box-shadow:0 2px 10px #0008', ''); b.id = 'btn-mariscal'; b.type = 'button'; b.title = 'Mariscal: guía del Administrador'; b.style.cssText += ';display:flex;align-items:center;gap:7px'; b.appendChild(emblema(24)); b.appendChild(document.createTextNode('Mariscal')); b.onclick = abrir; document.body.appendChild(b);
   }
-  function reiniciar() { cerrar(); saludado = false; hist = []; guias = null; const b = $('btn-mariscal'); if (b) b.remove(); }
+  function reiniciar() { cerrar(); saludado = false; hist = []; guias = null; vozOk = true; const b = $('btn-mariscal'); if (b) b.remove(); }
   setInterval(() => { const s = sesion(), k = s && rolOk() ? s.email + '|' + s.pin + '|' + ((window.ARES_TEATRO && ARES_TEATRO.nombre) || '') : ''; if (k !== ultimo) { if (ultimo) reiniciar(); ultimo = k; } if (k) boton(); }, 1500);
-  window.aresMariscal = { abrir: abrir, cerrar: cerrar, estado: () => ({ ia: ia, abierto: !!panel }) };
+  window.aresMariscal = { abrir: abrir, cerrar: cerrar, estado: () => ({ ia: ia, abierto: !!panel, hablar: hablar, escuchando: escuchando }) };
 })();
 </script>
 <!-- ===== FIN BLOQUE MARISCAL ===== -->
