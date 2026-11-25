@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxt1TAHLTmNsvjCulhiFusu-omTpCMN9Z-UKUk4qmcZB97VVhVGQSpAnNymhtXVABmdTw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbx5A1RKaf-2VbDjBZafd0sm6CElTbQFrmnoD5Bj2vZQJXrUJ1hH6mfjJjlz-BliBdCW_Q/exec";
 
 
 ;
@@ -7964,6 +7964,71 @@ window.addEventListener('DOMContentLoaded', () => {
     return L.join('\n');
   }
 
+
+  /* ---------- Informes en PDF: situación (instantánea) y parte final de la jornada (con los tiempos reales del historial) ---------- */
+  const latinE = s => String(s === null || s === undefined ? '' : s).replace(/[–—]/g, '-').replace(/…/g, '...').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\u0000-ÿ]/g, '?');
+  const fmtMin = m => { if (m === null || m === undefined || !isFinite(m)) return '-'; m = Math.round(m); if (m < 60) return m + ' min'; const hh = Math.floor(m / 60), mm = m % 60; return hh + ' h' + (mm ? ' ' + mm + ' min' : ''); };
+  function calcularParte(ls, hitos) {
+    const porLocal = {}; (hitos || []).forEach(x => { (porLocal[x.i] = porLocal[x.i] || []).push(x); });
+    const durs = {}, incs = [], tardias = []; let conPrevista = 0, aTiempo = 0, total = [];
+    ls.forEach(l => {
+      const hs = (porLocal[l.id] || []).slice().sort((a, b) => a.t - b.t), prim = {};
+      hs.forEach(x => { if (FASES.indexOf(x.f) >= 0 && prim[x.f] === undefined) prim[x.f] = x.t; });
+      for (let k = 2; k < FASES.length; k++) { const a = FASES[k - 1], b = FASES[k]; if (prim[a] !== undefined && prim[b] !== undefined && prim[b] >= prim[a]) (durs[a + '>' + b] = durs[a + '>' + b] || []).push({ m: (prim[b] - prim[a]) / 60000, l: l.nombre }); }
+      if (prim.ALISTADO !== undefined && prim.FINALIZADO !== undefined && prim.FINALIZADO >= prim.ALISTADO) total.push({ m: (prim.FINALIZADO - prim.ALISTADO) / 60000, l: l.nombre });
+      if (l.prevista && prim.ENTREGADO !== undefined) { conPrevista++; if (prim.ENTREGADO <= l.prevista) aTiempo++; else tardias.push({ l: l.nombre, loc: l.localidad, min: (prim.ENTREGADO - l.prevista) / 60000 }); }
+      let ab = null; hs.forEach(x => { if (x.f === 'INCIDENTE') { if (ab) ab = Object.assign({}, ab, { n: x.n }); else ab = x; } else if (x.f === 'INCIDENTE_RESUELTO' && ab) { incs.push({ l: l.nombre, loc: l.localidad, texto: ab.n, t0: ab.t, t1: x.t, min: (x.t - ab.t) / 60000, autor: ab.a }); ab = null; } });
+      if (ab) incs.push({ l: l.nombre, loc: l.localidad, texto: ab.n, t0: ab.t, t1: 0, min: null, autor: ab.a });
+    });
+    const resumenDur = arr => { if (!arr || !arr.length) return null; const s = arr.reduce((q, x) => q + x.m, 0); const mx = arr.reduce((q, x) => x.m > q.m ? x : q, arr[0]); return { n: arr.length, med: s / arr.length, max: mx.m, maxLocal: mx.l }; };
+    const tiempos = []; for (let k = 2; k < FASES.length; k++) { const key = FASES[k - 1] + '>' + FASES[k], r = resumenDur(durs[key]); if (r) tiempos.push(Object.assign({ de: FASES[k - 1], a: FASES[k] }, r)); }
+    const rt = resumenDur(total); if (rt) tiempos.push(Object.assign({ de: 'ALISTADO', a: 'FINALIZADO', total: true }, rt));
+    tardias.sort((a, b) => b.min - a.min); incs.sort((a, b) => a.t0 - b.t0);
+    return { tiempos: tiempos, incidentes: incs, tardias: tardias, conPrevista: conPrevista, aTiempo: aTiempo, sinCerrar: ls.filter(l => l.fase !== 'FINALIZADO') };
+  }
+  function nuevoPdf(titulo) {
+    if (!(window.jspdf && window.jspdf.jsPDF)) { alert('No se cargó el generador de PDF. Revise la conexión y recargue.'); return null; }
+    const doc = new window.jspdf.jsPDF(), t = teatro(), sim = locales.some(l => l.simulacro), tablas = []; let y = 16;
+    doc.setFontSize(15); doc.text(latinE('A.R.E.S. C4I - ' + titulo + (sim ? ' (SIMULACRO)' : '')), 14, y); y += 7; doc.setFontSize(10);
+    doc.text(latinE('Teatro: ' + (t && t.nombre ? t.nombre : '-') + '   Emitido: ' + hhmm(ahora()) + '   Por: ' + ((window.sesionActiva && (sesionActiva.nombre || sesionActiva.email)) || '-')), 14, y); y += 8;
+    const api2 = {
+      doc: doc, tablas: tablas,
+      sub: txt => { if (y > 262) { doc.addPage(); y = 16; } doc.setFontSize(11); doc.text(latinE(txt), 14, y); y += 4; },
+      txt: txt => { if (y > 270) { doc.addPage(); y = 16; } doc.setFontSize(9); const l = doc.splitTextToSize(latinE(txt), 180); doc.text(l, 14, y + 3); y += 6 + l.length * 4; },
+      tabla: (titulo2, cab, filas, tope, sinCuenta) => { const n = filas.length, f2 = filas.slice(0, tope || 60); tablas.push({ titulo: titulo2, head: cab, body: f2.map(r => r.map(String)), total: n }); if (y > 250) { doc.addPage(); y = 16; } doc.setFontSize(11); doc.text(latinE(titulo2 + (n && !sinCuenta ? ' (' + n + ')' : '')), 14, y); y += 2;
+        if (!n) { doc.setFontSize(9); doc.text('Sin registros.', 14, y + 5); y += 14; return; }
+        if (doc.autoTable) { doc.autoTable({ startY: y + 1, head: [cab.map(latinE)], body: f2.map(r => r.map(latinE)), styles: { fontSize: 8, cellPadding: 1.6 }, headStyles: { fillColor: [30, 58, 95] }, margin: { left: 14, right: 14 } }); y = doc.lastAutoTable.finalY + 3; if (n > f2.length) { doc.setFontSize(8); doc.text(latinE('... y ' + (n - f2.length) + ' mas.'), 14, y + 3); y += 6; } y += 4; } },
+      cerrar: nombre => { const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120); doc.text(latinE('A.R.E.S. C4I - ' + titulo + ' - pag. ' + i + ' de ' + n), 14, 289); } doc.setTextColor(0); return nombre; }
+    };
+    api2.nombre0 = () => latinE(((t && t.nombre) || 'teatro') + '_' + new Date(ahora()).toISOString().slice(0, 16).replace(/[-:T]/g, '')).replace(/[^A-Za-z0-9_-]+/g, '_');
+    return api2;
+  }
+  function tablasComunes(P, c) {
+    P.sub('Resumen'); P.txt('Locales: ' + c.total + ' (' + c.mesas + ' mesas). Entregados o mas avanzados: ' + c.entregados + (c.total ? ' (' + Math.round(c.entregados * 100 / c.total) + '%)' : '') + '. Incidentes abiertos: ' + c.inc.length + '. Con retraso: ' + c.ret.length + '. Bajo aviso meteorologico: ' + c.met.length + '.');
+    P.tabla('Locales por fase', ['Fase', 'Locales', '%'], FASES.map(f => [FASE[f][0], c.por[f], c.total ? Math.round(c.por[f] * 100 / c.total) + '%' : '-']), 20);
+    P.tabla('Por tipo de acceso', ['Acceso', 'Locales', 'Entregados o mas', 'Finalizados'], Object.keys(ACC).map(a => { const ls = locales.filter(l => l.acceso === a); return ls.length ? [ACC[a][1], ls.length, ls.filter(l => idx(l) >= 3).length, ls.filter(l => l.fase === 'FINALIZADO').length] : null; }).filter(Boolean), 10);
+  }
+  function pdfSituacion(opc) {
+    const c = conteos(); if (!c.total) { alert('Todavía no hay locales cargados.'); return null; }
+    const P = nuevoPdf('Informe de situacion del operativo electoral'); if (!P) return null; tablasComunes(P, c);
+    P.tabla('Incidentes abiertos', ['Local', 'Localidad', 'Incidente', 'Desde'], c.inc.map(l => [l.nombre, l.localidad, l.incidente, hhmm(l.incidenteTs)]), 30);
+    P.tabla('Locales con retraso', ['Local', 'Localidad', 'Fase', 'Previsto'], c.ret.map(l => [l.nombre, l.localidad, FASE[l.fase][0], hhmm(l.prevista)]), 30);
+    P.tabla('Locales bajo aviso meteorologico (Alerta o Critica)', ['Local', 'Localidad', 'Fase'], c.met.map(l => [l.nombre, l.localidad, FASE[l.fase][0]]), 30);
+    const nombre = 'Situacion_electoral_' + P.nombre0() + '.pdf'; P.cerrar(nombre); if (!(opc && opc.sinGuardar)) P.doc.save(nombre); return { nombre: nombre, tablas: P.tablas, paginas: P.doc.getNumberOfPages() };
+  }
+  async function pdfParte(opc) {
+    const c = conteos(); if (!c.total) { alert('Todavía no hay locales cargados.'); return null; }
+    const r = await api('ELEC_INFORME'); if (r.status !== 'success') { alert(r.message || 'No se pudo emitir el parte.'); return null; }
+    const pf = calcularParte(locales, r.hitos || []), P = nuevoPdf('Parte final del operativo electoral'); if (!P) return null; tablasComunes(P, c);
+    if (r.truncado) P.txt('Atencion: el historial es muy largo y solo se analizaron los ultimos 20000 movimientos.');
+    P.tabla('Puntualidad de las entregas', ['Con hora prevista y entregados', 'A tiempo', 'Tardias', 'Puntualidad'], [[pf.conPrevista, pf.aTiempo, pf.conPrevista - pf.aTiempo, pf.conPrevista ? Math.round(pf.aTiempo * 100 / pf.conPrevista) + '%' : '-']], 5, true);
+    P.tabla('Entregas tardias (mayor demora primero)', ['Local', 'Localidad', 'Demora'], pf.tardias.map(x => [x.l, x.loc, fmtMin(x.min)]), 25);
+    P.tabla('Tiempos entre fases (segun el historial)', ['Desde', 'Hasta', 'Locales', 'Promedio', 'Maximo', 'Local del maximo'], pf.tiempos.map(x => [FASE[x.de][0], FASE[x.a][0] + (x.total ? ' (total)' : ''), x.n, fmtMin(x.med), fmtMin(x.max), x.maxLocal]), 12);
+    P.tabla('Incidentes de la jornada', ['Local', 'Incidente', 'Inicio', 'Duracion', 'Informo'], pf.incidentes.map(x => [x.l, x.texto, hhmm(x.t0), x.t1 ? fmtMin(x.min) : 'ABIERTO', x.autor]), 40);
+    P.tabla('Locales sin cerrar (no finalizados)', ['Local', 'Localidad', 'Fase', 'Responsable'], pf.sinCerrar.map(l => [l.nombre, l.localidad, FASE[l.fase][0], l.responsable || '-']), 40);
+    const nombre = 'Parte_final_electoral_' + P.nombre0() + '.pdf'; P.cerrar(nombre); if (!(opc && opc.sinGuardar)) P.doc.save(nombre); return { nombre: nombre, tablas: P.tablas, paginas: P.doc.getNumberOfPages(), parte: pf };
+  }
+
   /* ---------- Panel ---------- */
   const estiloSel = s => { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; };
   const btnCss = 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px';
@@ -7996,6 +8061,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const cp = el('button', btnCss + ';margin-top:8px', '📋 Copiar resumen de situación'), ms = el('div', 'font-size:11px;color:#86efac;min-height:14px;margin-top:3px'); cp.type = 'button';
     cp.onclick = async () => { const t = resumen(); try { await navigator.clipboard.writeText(t); ms.textContent = 'Resumen copiado.'; } catch (_) { const ta2 = el('textarea', 'width:100%;height:140px;margin-top:4px;font-size:11px'); ta2.value = t; ta2.readOnly = true; w.appendChild(ta2); ta2.select(); ms.textContent = 'Copie el texto con Ctrl+C.'; } };
     w.append(cp, ms);
+    if (puedeGestionar) { const pr = el('div', 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'), pm = el('div', 'font-size:11px;color:#86efac;min-height:14px;margin-top:3px'); pm.id = 'el-pdf-msg';
+      const b1 = el('button', btnCss, '📄 Informe de situación (PDF)'), b2 = el('button', btnCss, '📑 Parte final de la jornada (PDF)'); b1.type = b2.type = 'button'; b1.id = 'el-pdf-sit'; b2.id = 'el-pdf-parte';
+      b1.onclick = () => { try { const r = pdfSituacion(); pm.textContent = r ? 'Descargado: ' + r.nombre : ''; } catch (e) { pm.style.color = '#fca5a5'; pm.textContent = 'No se pudo generar el PDF: ' + e.message; } };
+      b2.onclick = async () => { b2.disabled = true; pm.style.color = '#86efac'; pm.textContent = 'Armando el parte…'; try { const r = await pdfParte(); pm.textContent = r ? 'Descargado: ' + r.nombre : ''; } catch (e) { pm.style.color = '#fca5a5'; pm.textContent = 'No se pudo generar el parte: ' + e.message; } finally { b2.disabled = false; } };
+      pr.append(b1, b2); w.append(pr, pm); }
     const vc = el('label', 'display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:#94a3b8'), vk = el('input'); vk.type = 'checkbox'; vk.checked = visible; vk.onchange = () => { visible = vk.checked; lsSet('vis', visible ? 1 : 0); dibujar(); }; vc.append(vk, el('span', '', 'Mostrar los locales en el mapa')); w.appendChild(vc);
   }
   function pLocales() {
@@ -8120,7 +8190,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (activa() && iniciado && tieneModulo() && !document.hidden) cargar(false); }, 20000);
   setInterval(() => { if (activa() && iniciado && locales.length) { dibujar(); if (panel && tab === 'tablero') pintar(); } }, 60000);       // retrasos y avisos meteorologicos se reevaluan solos
   document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado && tieneModulo()) cargar(false); });
-  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV };
+  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV, calcularParte: calcularParte, pdfSituacion: pdfSituacion, pdfParte: pdfParte };
 })();
 </script>
 <!-- ===== FIN BLOQUE ELECTORAL ===== -->
