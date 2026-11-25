@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbytbrxY2hIYOsu0waq8dlayVOp6uYn9wM1khKOPPBtOXk1sIFpctOiqlbOZy-0vs5F1zA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbxwzCezl2UUHE9b2KrjjnxkL_oE18M8fttnMq1iSBd6uMuhpSxUZ9RVZjOPYhOpeY6F6Q/exec";
 
 
 ;
@@ -8118,6 +8118,93 @@ window.addEventListener('DOMContentLoaded', () => {
     const nombre = 'Acta_' + a.id + '_' + latinE(a.local).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 30) + '.pdf'; P.cerrar(nombre); P.doc.save(nombre); return nombre;
   }
 
+  /* ---------- Traslados (lotes) ---------- */
+  try { const st = document.createElement('style'); st.textContent = '.el-lot-num{background:none;border:0;box-shadow:none;color:#0f172a;font-weight:bold;padding:0}.el-lot-num:before{display:none}'; document.head.appendChild(st); } catch (_) { /* sin estilo */ }
+  let lotes = null, lotInfo = { tipos: [], miembros: [] }, lotMsg = '', lotForm = null, lotConf = '', capaT = null, insLista = null;
+  const LOT_EST = { PLANIFICADO: ['Planificado', '#94a3b8'], EN_RUTA: ['En ruta', '#f59e0b'], COMPLETADO: ['Completado', '#22c55e'], CANCELADO: ['Cancelado', '#ef4444'] };
+  const pad2 = n => String(n).padStart(2, '0');
+  const aLocalInput = ms => { const d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+  const nuevoLote = () => { const c = (function () { try { const m = mapa(); const q = m && m.getCenter(); return q ? q : null; } catch (_) { return null; } })(); const cl = locales.filter(l => isFinite(l.lat)); return { id: '', nombre: '', tipoMedio: 'CAMION', medio: '', vel: '', paradaMin: 20, baseLat: c ? c.lat.toFixed(4) : (cl[0] ? cl[0].lat : ''), baseLon: c ? c.lng.toFixed(4) : (cl[0] ? cl[0].lon : ''), baseNombre: '', salida: aLocalInput(ahora() + 3600000), responsableEmail: '', notas: '', paradas: [], vinculo: null, plan: null, aviso: '' }; };
+  async function cargarLotes() { try { const r = await api('ELEC_LOTE_LISTAR'); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudieron cargar los traslados.'); lotes = []; } else { lotes = r.lotes || []; lotInfo = { tipos: r.tipos || [], miembros: r.miembros || [] }; } } catch (_) { lotMsg = '⚠ Sin conexión.'; lotes = lotes || []; } if (panel && tab === 'traslados') pintar(); }
+  async function cargarIns() { insLista = []; try { const t = teatro(); if (!t || !Array.isArray(t.modulos) || t.modulos.map(m => String(m).toUpperCase()).indexOf('INSTALACIONES') < 0) return; const r = await api('INS_LISTAR'); if (r.status === 'success') insLista = r.instalaciones || []; } catch (_) { /* sin instalaciones */ } if (panel && tab === 'traslados' && lotForm) pintar(); }
+  const lotMsgEl = w => { if (lotMsg) { const m = el('div', 'font-size:12px;margin:3px 0;padding:4px 6px;border-radius:4px;background:#1e293b;color:' + (/^⚠/.test(lotMsg) ? '#fca5a5' : '#86efac'), lotMsg); m.className = 'el-lot-msg'; w.appendChild(m); } };
+  async function accionLote(accion, o, okTxt) { lotMsg = 'Procesando…'; pintar(); try { const r = await api(accion, o); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudo.'); pintar(); return r; } lotMsg = (okTxt || 'Listo.') + (r.aviso ? ' ' + r.aviso : ''); lotConf = ''; await cargar(true); await cargarLotes(); return r; } catch (e) { lotMsg = '⚠ ' + e.message; pintar(); } }
+  function quitarRuta() { capaT = quitar(capaT); }
+  function verRuta(L) {
+    const m = mapa(); if (!m) { lotMsg = '⚠ El mapa no está disponible.'; pintar(); return; } quitarRuta(); capaT = window.L.layerGroup();
+    const pts = [[L.base.lat, L.base.lon]].concat(L.paradas.filter(p => isFinite(p.lat)).map(p => [p.lat, p.lon]));
+    window.L.polyline(pts, { color: '#f59e0b', weight: 3, dashArray: '8 6' }).addTo(capaT);
+    window.L.circleMarker(pts[0], { radius: 7, color: '#fff', fillColor: '#0ea5e9', fillOpacity: 1 }).bindTooltip('Salida: ' + (L.base.nombre || 'base')).addTo(capaT);
+    L.paradas.forEach((p, i) => { if (!isFinite(p.lat)) return; const n = window.L.circleMarker([p.lat, p.lon], { radius: 11, color: '#0f172a', weight: 2, fillColor: p.real ? '#22c55e' : '#f59e0b', fillOpacity: 1 }); n.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'el-lot-num', opacity: 1 }); n.bindPopup(document.createTextNode ? (function () { const d = el('div', '', (i + 1) + '. ' + p.nombre + ' · ' + (p.real ? 'entregado ' + hhmm(p.real) : 'ETA ' + hhmm(p.eta))); return d; })() : ''); n.addTo(capaT); });
+    capaT.addTo(m); try { m.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch (_) { /* nada */ }
+    lotMsg = 'Ruta dibujada en el mapa (línea recta entre puntos; no es una ruta por camino).'; pintar();
+  }
+  function tarjetaLote(L) {
+    const e = LOT_EST[L.estado] || [L.estado, '#94a3b8'], c = el('div', 'border:1px solid #334155;border-left:4px solid ' + e[1] + ';border-radius:6px;padding:7px 9px;margin:6px 0;background:#111c33'); c.className = 'el-lote'; c.dataset.id = L.id;
+    const t = el('div', 'display:flex;gap:6px;align-items:center'); t.appendChild(el('b', 'flex:1;font-size:13px', '🚚 ' + L.nombre)); t.appendChild(el('span', 'font-size:11px;padding:1px 6px;border-radius:9px;background:' + e[1] + ';color:#0f172a;font-weight:bold', e[0])); c.appendChild(t);
+    const tm = (lotInfo.tipos.find(x => x.id === L.tipoMedio) || {}).nombre || L.tipoMedio;
+    c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:2px', tm + (L.medio ? ' · ' + L.medio : '') + ' · ' + L.vel + ' km/h · ' + L.paradas.length + ' local(es) · ' + L.mesas + ' mesas · ~' + L.totalKm + ' km'));
+    c.appendChild(el('div', 'font-size:11.5px;color:#94a3b8', 'Salida: ' + (L.base.nombre || 'base') + ' ' + hhmm(L.salidaReal || L.salidaPrev) + (L.salidaReal ? ' (real)' : ' (prevista)') + ' · Fin estimado ' + hhmm(L.fin) + (L.responsable ? ' · Responsable: ' + L.responsable : '')));
+    if (L.vinculo && L.vinculo.idInst) c.appendChild(el('div', 'font-size:11.5px;color:#7dd3fc', '🏛 Usa ' + L.vinculo.q + ' × ' + L.vinculo.vehiculo + ' de una instalación' + (L.vinculo.despliegue ? ' (despachado)' : '')));
+    if (L.notas) c.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-top:2px', 'Notas: ' + L.notas));
+    const puedeMarcar = L.estado === 'EN_RUTA' && (puedeGestionar || L.responsableEmail === yo);
+    L.paradas.forEach((p, i) => { const r = el('div', 'display:flex;gap:6px;align-items:center;font-size:12px;margin-top:3px;padding:2px 0;border-top:1px solid #1e293b'); r.className = 'el-lote-parada';
+      const tarde = L.estado === 'EN_RUTA' && !p.real && ahora() > p.eta + 15 * 60000;
+      r.appendChild(el('span', 'width:18px;color:#94a3b8', (i + 1) + '.')); r.appendChild(el('span', 'flex:1', p.nombre + ' (' + p.mesas + ' mesas)'));
+      r.appendChild(el('span', 'color:' + (p.real ? '#86efac' : tarde ? '#fca5a5' : '#cbd5e1'), p.real ? '✔ ' + hhmm(p.real) : (tarde ? '⏰ ' : '') + 'ETA ' + hhmm(p.eta)));
+      if (puedeMarcar && !p.real) r.appendChild(btnE('✔ Entregado aquí', () => accionLote('ELEC_LOTE_PARADA', { id: L.id, idLocal: p.id }, 'Entrega marcada.'), '#15803d')); c.appendChild(r); });
+    const b = el('div', 'display:flex;gap:5px;flex-wrap:wrap;margin-top:6px'); b.appendChild(btnE('🗺 Ver ruta', () => verRuta(L)));
+    const conf = (k, tx, fn, col) => { if (lotConf === L.id + k) { b.appendChild(el('span', 'font-size:12px;color:#fcd34d;align-self:center', '¿Seguro?')); b.appendChild(btnE('Sí', fn, col || '#b91c1c')); b.appendChild(btnE('No', () => { lotConf = ''; pintar(); })); } else b.appendChild(btnE(tx, () => { lotConf = L.id + k; pintar(); }, col)); };
+    if (puedeGestionar) {
+      if (L.estado === 'PLANIFICADO') { b.appendChild(btnE('✏ Editar', () => { lotForm = deLote(L); lotMsg = ''; if (insLista === null) cargarIns(); pintar(); })); conf('i', '▶ Iniciar traslado', () => accionLote('ELEC_LOTE_ESTADO', { id: L.id, estado: 'EN_RUTA' }, 'Traslado iniciado: los locales pasaron a «En traslado».'), '#15803d'); conf('c', 'Cancelar', () => accionLote('ELEC_LOTE_ESTADO', { id: L.id, estado: 'CANCELADO' }, 'Lote cancelado.')); }
+      if (L.estado === 'EN_RUTA') { conf('f', '⏹ Cerrar' + (L.vinculo && L.vinculo.despliegue ? ' y regresar medios' : ''), () => accionLote('ELEC_LOTE_ESTADO', { id: L.id, estado: 'COMPLETADO' }, 'Lote cerrado.'), '#15803d'); conf('c', 'Cancelar', () => accionLote('ELEC_LOTE_ESTADO', { id: L.id, estado: 'CANCELADO' }, 'Lote cancelado.')); }
+      if (L.estado !== 'EN_RUTA') conf('b', '🗑 Borrar', () => accionLote('ELEC_LOTE_BORRAR', { id: L.id }, 'Lote borrado.'));
+    }
+    c.appendChild(b); return c;
+  }
+  function deLote(L) { return { id: L.id, nombre: L.nombre, tipoMedio: L.tipoMedio, medio: L.medio, vel: L.vel, paradaMin: L.paradaMin, baseLat: L.base.lat, baseLon: L.base.lon, baseNombre: L.base.nombre, salida: aLocalInput(L.salidaPrev), responsableEmail: L.responsableEmail, notas: L.notas, paradas: L.paradas.map(p => p.id), vinculo: L.vinculo && L.vinculo.idInst ? { idInst: L.vinculo.idInst, vehiculo: L.vinculo.vehiculo, q: L.vinculo.q } : null, plan: null, aviso: '' }; }
+  const datosPlan = (f, opt) => ({ id: f.id, nombre: f.nombre, tipoMedio: f.tipoMedio, medio: f.medio, vel: f.vel === '' ? '' : Number(f.vel), paradaMin: f.paradaMin === '' ? '' : Number(f.paradaMin), baseLat: f.baseLat === '' ? '' : Number(f.baseLat), baseLon: f.baseLon === '' ? '' : Number(f.baseLon), baseNombre: f.baseNombre, salidaPrev: f.salida ? new Date(f.salida).getTime() : 0, responsableEmail: f.responsableEmail, notas: f.notas, paradas: f.paradas, optimizar: !!opt, vinculo: f.vinculo });
+  async function calcularLote(opt) { const f = lotForm; lotMsg = 'Calculando…'; pintar(); try { const r = await api('ELEC_LOTE_PLAN', datosPlan(f, opt)); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudo calcular.'); f.plan = null; pintar(); return; } f.plan = r.plan; f.aviso = r.aviso; f.vel = f.vel === '' ? r.vel : f.vel; if (opt) f.paradas = r.plan.paradas.map(p => p.id); lotMsg = ''; pintar(); } catch (e) { lotMsg = '⚠ ' + e.message; pintar(); } }
+  async function guardarLote() { const f = lotForm; lotMsg = 'Guardando…'; pintar(); try { const o = datosPlan(f, false); if (!(f.vinculo && f.vinculo.idInst)) o.vinculo = null; const r = await api('ELEC_LOTE_GUARDAR', o); if (r.status !== 'success') { lotMsg = '⚠ ' + (r.message || 'No se pudo guardar.'); pintar(); return; } lotForm = null; lotMsg = 'Lote guardado.'; await cargarLotes(); } catch (e) { lotMsg = '⚠ ' + e.message; pintar(); } }
+  function formLote(w) {
+    const f = lotForm; w.className += ' el-lote-form'; w.appendChild(el('div', 'font-weight:bold;margin:2px 0 4px', f.id ? 'Editar lote' : 'Nuevo lote de traslado')); lotMsgEl(w);
+    const tx = (v, fn, ph) => { const i = estiloSel(el('input')); i.type = 'text'; i.value = v; i.placeholder = ph || ''; i.style.flex = '1'; i.oninput = () => fn(i.value); return i; };
+    const sucia = () => { f.plan = null; };
+    const nom = tx(f.nombre, v => { f.nombre = v; }, 'Ej.: Convoy Norte'); nom.className = 'el-lote-nombre'; w.appendChild(filaCampo('Nombre', nom));
+    w.appendChild(filaCampo('Tipo de medio', selectEl(lotInfo.tipos.map(t => [t.id, t.nombre + ' (' + t.vel + ' km/h)']), f.tipoMedio, v => { f.tipoMedio = v; sucia(); })));
+    w.appendChild(filaCampo('Medio (matrícula)', tx(f.medio, v => { f.medio = v; }, 'Ej.: Camión 6x6 N° 3')));
+    const vel = numEl(f.vel, v => { f.vel = v; sucia(); }, '80px'); vel.placeholder = 'auto'; w.appendChild(filaCampo('Velocidad km/h', vel));
+    w.appendChild(filaCampo('Min. por parada', numEl(f.paradaMin, v => { f.paradaMin = v; sucia(); }, '80px')));
+    const ds = el('input'); estiloSel(ds); ds.type = 'datetime-local'; ds.value = f.salida; ds.className = 'el-lote-salida'; ds.oninput = () => { f.salida = ds.value; sucia(); }; w.appendChild(filaCampo('Salida prevista', ds));
+    const bx = el('div', 'display:flex;gap:4px;flex:1;flex-wrap:wrap'), la = estiloSel(el('input')), lo = estiloSel(el('input')); [la, lo].forEach(i => { i.type = 'number'; i.step = 'any'; i.style.width = '92px'; }); la.value = f.baseLat; lo.value = f.baseLon; la.oninput = () => { f.baseLat = la.value; sucia(); }; lo.oninput = () => { f.baseLon = lo.value; sucia(); }; la.className = 'el-lote-lat'; lo.className = 'el-lote-lon'; bx.append(la, lo);
+    bx.appendChild(btnE('📍 Centro del mapa', () => { try { const c = mapa().getCenter(); f.baseLat = c.lat.toFixed(4); f.baseLon = c.lng.toFixed(4); f.baseNombre = 'Centro del mapa'; sucia(); pintar(); } catch (_) { /* sin mapa */ } })); w.appendChild(filaCampo('Punto de salida', bx));
+    if (insLista && insLista.length) { const so = selectEl([['', '— o elegir una instalación —']].concat(insLista.map(i => [i.id, i.nombre])), '', v => { const i = insLista.find(x => x.id === v); if (i) { f.baseLat = i.lat; f.baseLon = i.lon; f.baseNombre = i.nombre; sucia(); pintar(); } }); so.className = 'el-lote-baseins'; w.appendChild(filaCampo('Salir desde', so)); }
+    w.appendChild(filaCampo('Nombre del punto', tx(f.baseNombre, v => { f.baseNombre = v; }, 'Ej.: Base Aérea')));
+    w.appendChild(filaCampo('Responsable', selectEl([['', '— sin asignar —']].concat(lotInfo.miembros.map(m => [m.email, m.nombre + ' (' + m.rol + ')'])), f.responsableEmail, v => { f.responsableEmail = v; })));
+    if (insLista && insLista.length) { const vi = f.vinculo || { idInst: '', vehiculo: '', q: 1 }; const ins = insLista.find(i => i.id === vi.idInst), vs = ins ? ins.vehiculos : [];
+      const si = selectEl([['', '— no usar vehículos de una instalación —']].concat(insLista.map(i => [i.id, i.nombre])), vi.idInst, v => { f.vinculo = v ? { idInst: v, vehiculo: ((insLista.find(i => i.id === v) || {}).vehiculos || [{ n: '' }])[0].n || '', q: 1 } : null; pintar(); }); si.className = 'el-lote-vinins'; w.appendChild(filaCampo('Vehículos de', si));
+      if (ins) { w.appendChild(filaCampo('Vehículo', selectEl(vs.map(v => [v.n, v.n + ' (hay ' + v.q + ')']), vi.vehiculo, v => { f.vinculo.vehiculo = v; }))); w.appendChild(filaCampo('Cantidad', numEl(vi.q, v => { f.vinculo.q = v === '' ? 1 : Number(v); }, '70px'))); w.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:0 0 4px', 'Al iniciar el traslado se despachan de la instalación y al cerrar el lote regresan.')); } }
+    w.appendChild(el('div', 'margin-top:6px;font-size:12px;font-weight:bold', 'Locales del lote (' + f.paradas.length + ' elegidos)'));
+    const lista = el('div', 'max-height:150px;overflow-y:auto;border:1px solid #334155;border-radius:4px;padding:3px 6px;margin-top:3px'); lista.className = 'el-lote-locales';
+    const orden = f.paradas.map(id => locales.find(l => l.id === id)).filter(Boolean).concat(locales.filter(l => f.paradas.indexOf(l.id) < 0 && FASES.indexOf(l.fase) < 3).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+    orden.forEach(l => { const r = el('label', 'display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;padding:1px 0'), ck = el('input'); ck.type = 'checkbox'; ck.checked = f.paradas.indexOf(l.id) >= 0; ck.dataset.id = l.id; ck.onchange = () => { if (ck.checked) f.paradas.push(l.id); else f.paradas = f.paradas.filter(x => x !== l.id); sucia(); pintar(); }; r.append(ck, document.createTextNode(l.nombre + ' · ' + l.mesas + ' mesas · ' + ((ACC[l.acceso] || ['', l.acceso])[1]))); lista.appendChild(r); }); w.appendChild(lista);
+    if (!orden.length) lista.appendChild(el('div', 'color:#94a3b8;font-size:12px', 'No hay locales pendientes de traslado.'));
+    const nt = estiloSel(el('textarea')); nt.rows = 2; nt.style.cssText += ';width:100%;box-sizing:border-box;margin-top:6px'; nt.placeholder = 'Notas (opcional)'; nt.value = f.notas; nt.oninput = () => { f.notas = nt.value; }; w.appendChild(nt);
+    const bc = el('div', 'margin-top:6px;display:flex;gap:6px;flex-wrap:wrap'); const bo = btnE('🧭 Ordenar por cercanía y calcular horas', () => calcularLote(true), '#1d4ed8'); bo.className += ' el-lote-ordenar'; const bk = btnE('🕒 Calcular horas (mi orden)', () => calcularLote(false)); bc.append(bo, bk); w.appendChild(bc);
+    if (f.plan) { const pl = el('div', 'margin-top:6px;border:1px solid #334155;border-radius:4px;padding:5px 7px;background:#111c33'); pl.className = 'el-lote-plan';
+      pl.appendChild(el('div', 'font-size:12px;font-weight:bold', 'Recorrido: ~' + f.plan.totalKm + ' km · llegada al último ' + hhmm(f.plan.paradas[f.plan.paradas.length - 1].eta) + ' · fin ' + hhmm(f.plan.fin)));
+      f.plan.paradas.forEach((p, i) => pl.appendChild(el('div', 'font-size:12px;margin-top:2px', (i + 1) + '. ' + p.nombre + ' — +' + p.km + ' km — ETA ' + hhmm(p.eta)))); if (f.aviso) pl.appendChild(el('div', 'font-size:11px;color:#fcd34d;margin-top:4px', '⚠ ' + f.aviso)); w.appendChild(pl); }
+    const fb = el('div', 'margin-top:8px;display:flex;gap:6px'); const bg = btnE('💾 Guardar lote', guardarLote, '#15803d'); bg.className += ' el-lote-guardar'; fb.append(bg, btnE('Cancelar', () => { lotForm = null; lotMsg = ''; pintar(); })); w.appendChild(fb);
+  }
+  function pTraslados() {
+    const w = panel; if (lotes === null) { w.appendChild(el('div', 'color:#94a3b8', 'Cargando traslados…')); cargarLotes(); return; }
+    if (lotForm) { formLote(w); return; }
+    const barra = el('div', 'display:flex;gap:6px;align-items:center;margin:2px 0 6px'); if (puedeGestionar) { const nb = btnE('+ Nuevo lote', () => { lotForm = nuevoLote(); lotMsg = ''; if (insLista === null) cargarIns(); pintar(); }, '#15803d'); nb.className += ' el-lote-nuevo'; barra.appendChild(nb); }
+    barra.appendChild(btnE('↻', () => { lotes = null; pintar(); })); if (capaT) barra.appendChild(btnE('Quitar ruta del mapa', () => { quitarRuta(); pintar(); }));
+    const act = lotes.filter(x => x.estado === 'EN_RUTA').length; barra.appendChild(el('div', 'font-size:11.5px;color:' + (act ? '#fcd34d' : '#94a3b8'), act ? '🚚 ' + act + ' en ruta' : lotes.length + ' lote(s)')); w.appendChild(barra); lotMsgEl(w);
+    if (!lotes.length) { w.appendChild(el('div', 'color:#94a3b8;margin-top:8px', puedeGestionar ? 'Todavía no hay traslados. Cree un lote: elija el medio, los locales y la salida; A.R.E.S. propone el orden y calcula las horas.' : 'No tiene traslados asignados.')); return; }
+    lotes.forEach(L => w.appendChild(tarjetaLote(L)));
+  }
   /* ---------- Panel ---------- */
   const estiloSel = s => { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; };
   const btnCss = 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px';
@@ -8126,13 +8213,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!panel) { panel = el('div', 'position:fixed;right:10px;top:56px;width:min(470px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow-y:auto;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:10px 12px;z-index:3000;font:13px sans-serif;box-shadow:0 8px 24px #000a'); panel.id = 'el-panel'; document.body.appendChild(panel); }
     pintar();
   }
-  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } editando = null; actaForm = null; actaConf = null; pararDemo(); }
+  function cerrarPanel() { if (panel) { panel.remove(); panel = null; } editando = null; actaForm = null; actaConf = null; lotForm = null; lotConf = ''; quitarRuta(); pararDemo(); }
   function pintar() {
     if (!panel) return; const st = panel.scrollTop; panel.textContent = '';
     const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🗳 Operativo Electoral' + (locales.some(l => l.simulacro) ? ' · 🧪 simulacro' : '')));
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = cerrarPanel; cab.appendChild(x); panel.appendChild(cab);
-    const tabs = el('div', 'display:flex;gap:4px;margin:6px 0'); [['tablero', '📊 Tablero'], ['locales', '📋 Locales'], ['actas', '📜 Actas']].concat(puedeGestionar ? [['gestion', '⚙ Gestión']] : []).forEach(t => { const b = el('button', btnCss + (tab === t[0] ? ';background:#0369a1;border-color:#38bdf8' : ''), t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.onclick = () => { tab = t[0]; pintar(); }; tabs.appendChild(b); }); panel.appendChild(tabs);
-    if (tab === 'tablero') pTablero(); else if (tab === 'locales') pLocales(); else if (tab === 'actas') pActas(); else if (puedeGestionar) pGestion(); else { tab = 'tablero'; pTablero(); }
+    const tabs = el('div', 'display:flex;gap:4px;margin:6px 0'); [['tablero', '📊 Tablero'], ['locales', '📋 Locales'], ['actas', '📜 Actas'], ['traslados', '🚚 Traslados']].concat(puedeGestionar ? [['gestion', '⚙ Gestión']] : []).forEach(t => { const b = el('button', btnCss + (tab === t[0] ? ';background:#0369a1;border-color:#38bdf8' : ''), t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.onclick = () => { tab = t[0]; pintar(); }; tabs.appendChild(b); }); panel.appendChild(tabs);
+    if (tab === 'tablero') pTablero(); else if (tab === 'locales') pLocales(); else if (tab === 'actas') pActas(); else if (tab === 'traslados') pTraslados(); else if (puedeGestionar) pGestion(); else { tab = 'tablero'; pTablero(); }
     panel.scrollTop = st;
   }
   function pTablero() {
@@ -8268,7 +8355,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (b) return; const ref = $('btn-territorio') || $('btn-meteo') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
     const n = el('button', 'margin-right:6px', '🗳 Operativo Electoral'); n.id = 'btn-electoral'; n.className = 'btn-pdf solo-autenticado'; n.type = 'button'; n.title = 'Locales de votación, fases del operativo y novedades'; n.onclick = () => abrir(false); ref.parentNode.insertBefore(n, ref);
   }
-  function reiniciar() { cerrarPanel(); actas = null; actaMiembros = []; capa = quitar(capa); pulsos = quitar(pulsos); rend = null; const b = $('btn-electoral'); if (b) b.remove(); locales = []; ver = ''; puedeGestionar = false; miembros = []; desfase = 0; filtro = { q: '', fase: '', acceso: '', novedades: false }; msgG = ''; }
+  function reiniciar() { cerrarPanel(); lotes = null; lotInfo = { tipos: [], miembros: [] }; insLista = null; lotMsg = ''; actas = null; actaMiembros = []; capa = quitar(capa); pulsos = quitar(pulsos); rend = null; const b = $('btn-electoral'); if (b) b.remove(); locales = []; ver = ''; puedeGestionar = false; miembros = []; desfase = 0; filtro = { q: '', fase: '', acceso: '', novedades: false }; msgG = ''; }
   setInterval(() => {
     if (!activa()) { if (iniciado) { iniciado = false; reiniciar(); } return; }
     const mp = mapa(); if (!mp || !teatro()) return;
@@ -8279,7 +8366,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (activa() && iniciado && tieneModulo() && !document.hidden) cargar(false); }, 20000);
   setInterval(() => { if (activa() && iniciado && locales.length) { dibujar(); if (panel && tab === 'tablero') pintar(); } }, 60000);       // retrasos y avisos meteorologicos se reevaluan solos
   document.addEventListener('visibilitychange', () => { if (!document.hidden && activa() && iniciado && tieneModulo()) cargar(false); });
-  window.aresElectoral = { abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV, calcularParte: calcularParte, pdfSituacion: pdfSituacion, pdfParte: pdfParte, pdfActa: pdfActa, actas: () => (actas || []).slice() };
+  window.aresElectoral = { lotes: () => (lotes || []).slice(), abrir: () => abrir(false), recargar: () => cargar(true), locales: () => locales.slice(), resumen: resumen, conteos: conteos, marcadores: () => (capa ? capa.getLayers().length : 0), pasoDemo: pasoDemo, parseCSV: parseCSV, calcularParte: calcularParte, pdfSituacion: pdfSituacion, pdfParte: pdfParte, pdfActa: pdfActa, actas: () => (actas || []).slice() };
 })();
 </script>
 <!-- ===== FIN BLOQUE ELECTORAL ===== -->
