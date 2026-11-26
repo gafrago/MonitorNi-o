@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbw_67MN-Ui0QihO0a0uxDHmzoZpvsKFUa92frLUdzZ1o9GAMDz4rnT61VE6bn8E_Qr4/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwOMwWwwKTn4Mx3HN_5LBJC_3gNXPIeL6M7Z4QAiGR1rA-ThNrykj_CeJVVcVgOc9IBSw/exec";
 
 
 ;
@@ -4271,7 +4271,8 @@ window.addEventListener('DOMContentLoaded', () => {
             fb.disabled = true; fr.textContent = ''; fr.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Consultando SMN, INA, NOAA y Open-Meteo… puede tardar unos segundos.'));
             try { const q = await llamar('SALUD_FUENTES'); fr.textContent = ''; if (q.status !== 'success') { fr.appendChild(el('div', 'color:#fca5a5;font-size:12px', '⚠ ' + (q.message || 'No se pudo probar.'))); }
               else { q.fuentes.forEach(x => fr.appendChild(el('div', 'font-size:12px;margin:2px 0;color:' + (x.ok ? '#86efac' : '#fca5a5'), (x.ok ? '✔ ' : '✖ ') + x.nombre + ' · ' + x.detalle + ' · ' + x.ms + ' ms')));
-                if (q.avisosZona) fr.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:4px', 'Avisos del SMN que tocan la zona del teatro: ' + q.avisosZona.avisos + ' (de ' + q.avisosZona.revisados + ' revisados)' + (q.avisosZona.desactualizado ? ' · datos desactualizados' : '')));
+                if (q.avisosZona) fr.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:4px', 'Avisos del SMN sobre la zona NEA por defecto: ' + q.avisosZona.avisos + ' (de ' + q.avisosZona.revisados + ' revisados)' + (q.avisosZona.desactualizado ? ' · datos desactualizados' : '')));
+                (q.avisosPorTeatro || []).forEach(t => fr.appendChild(el('div', 'font-size:12px;color:' + (t.error ? '#fca5a5' : '#cbd5e1'), '• ' + t.nombre + ' (' + t.id + '): ' + (t.error ? t.error : t.avisos + ' aviso(s), ' + t.graves + ' naranja/rojo') + ' · zona ' + t.bbox)));
                 fr.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', (q.ok ? 'Todas las fuentes responden. ' : '⚠ Hay fuentes con problemas. ') + 'Consultado ' + hh(q.generado) + ' desde el servidor.')); } }
             catch (e) { fr.textContent = ''; fr.appendChild(el('div', 'color:#fca5a5;font-size:12px', '⚠ No se pudo consultar el servidor.')); } fb.disabled = false; });
           fu.appendChild(fb); fu.appendChild(fr); fu.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:6px', 'Los mapas base y el satélite se cargan desde el navegador y no se miden aquí.'));
