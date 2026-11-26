@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwOMwWwwKTn4Mx3HN_5LBJC_3gNXPIeL6M7Z4QAiGR1rA-ThNrykj_CeJVVcVgOc9IBSw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyjar3iDGsiQCkJmsSD-Vh55TjsjmxLLzNvQuzfo5sJC2l1G5LrK17py_5kDH41CUhkEw/exec";
 
 
 ;
@@ -5170,6 +5170,55 @@ window.addEventListener('DOMContentLoaded', () => {
     const av = (avisos && avisos.avisos) || [], g2 = av.filter(a => a.nivel === 'ROJO' || a.nivel === 'NARANJA');
     if (g2.length) { b.textContent += ' ⚠' + g2.length; b.title += (l.length ? ' · ' : '') + g2.length + ' aviso(s) oficial(es) del SMN naranja o rojo en la zona'; if (m < 2) { b.style.background = g2.some(a => a.nivel === 'ROJO') ? '#dc2626' : '#f97316'; b.style.color = '#fff'; } }
   }
+  /* ---------- Parte del dia (PDF de una pagina): avisos del SMN + partes del teatro + rios + METAR, con lo que hay en este momento ---------- */
+  const latinP = s => String(s === null || s === undefined ? '' : s).replace(/[–—]/g, '-').replace(/…/g, '...').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[⚠️🌊]/g, '').replace(/[^\u0000-ÿ]/g, '?').trim();
+  const SEV_P = { INFO: 'Informativo', PRECAUCION: 'Precaucion', ALERTA: 'Alerta', CRITICA: 'Critica' };
+  async function parteDelDia(boton) {
+    if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.');
+    const txt0 = boton ? boton.textContent : ''; if (boton) { boton.disabled = true; boton.textContent = '⏳ Armando el parte…'; }
+    const faltan = [];
+    try {
+      const rs = await Promise.allSettled([cargarPartes(), cargarAvisos(true), cargarMetar(false)]);
+      if (rs[0].status === 'rejected') faltan.push('partes del teatro'); if (rs[1].status === 'rejected') faltan.push('avisos del SMN'); if (rs[2].status === 'rejected') faltan.push('METAR');
+      const t = teatro(), tn = t ? t.nombre : 'Teatro', ahora = new Date(), quien = (sesionActiva && sesionActiva.nombre) || 'N/A', mods = (t && t.modulos) || [];
+      const doc = new window.jspdf.jsPDF(); let y = 16;
+      doc.setFontSize(16); doc.setTextColor(30, 41, 59); doc.text('A.R.E.S. C4I - PARTE METEOROLOGICO DEL DIA', 14, y); y += 6;
+      doc.setFontSize(9); doc.setTextColor(71, 85, 105); doc.text(latinP('Teatro: ' + tn + '   |   Emision: ' + ahora.toLocaleString('es-AR') + '   |   Elaboro: ' + quien), 14, y, { maxWidth: 182 }); y += 5;
+      if (t && t.tipo === 'EJERCICIO') { doc.setTextColor(180, 83, 9); doc.text('EJERCICIO / SIMULACION - DATOS DE PRACTICA, NO ES UN OPERATIVO REAL', 14, y); y += 5; }
+      const av = (avisos && avisos.avisos) || [], pt = (partes && partes.partes) || [], graves = av.filter(a => a.nivel === 'ROJO' || a.nivel === 'NARANJA');
+      const hid = (mods.length === 0 || mods.indexOf('HIDRICO') >= 0) && typeof estacionesHidro !== 'undefined' ? (estacionesHidro || []).filter(h => isFinite(Number(h.actual))) : [];
+      const eh = hid.map(h => ({ h, e: estadoHidro(h) })), enAlerta = eh.filter(x => x.e.nivel >= 2);
+      doc.setFillColor(graves.length || enAlerta.length ? 254 : 236, graves.length || enAlerta.length ? 243 : 253, graves.length || enAlerta.length ? 199 : 245); doc.rect(14, y, 182, 15, 'F');
+      doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+      doc.text(latinP('Resumen: ' + av.length + ' aviso(s) del SMN sobre la zona (' + graves.length + ' naranja/rojo)  |  ' + pt.length + ' parte(s) vigente(s)' + (hid.length ? '  |  ' + enAlerta.length + ' estacion(es) en alerta o evacuacion' : '')), 16, y + 6.5, { maxWidth: 178 }); y += 21;
+      const tabla = (titulo, head, body, color, extra) => {
+        if (y > 255) { doc.addPage(); y = 16; }
+        doc.setFontSize(11.5); doc.setTextColor(color[0], color[1], color[2]); doc.text(latinP(titulo), 14, y); y += 2;
+        if (!body.length) { doc.setFontSize(9); doc.setTextColor(71, 85, 105); doc.text('Sin novedades en este momento.', 16, y + 5); y += 11; return; }
+        doc.autoTable(Object.assign({ startY: y, head: [head], body: body.map(f => f.map(latinP)), styles: { fontSize: 8 }, headStyles: { fillColor: color }, margin: { left: 14, right: 14 } }, extra || {})); y = doc.lastAutoTable.finalY + 8;
+      };
+      const colN = { ROJO: [185, 28, 28], NARANJA: [234, 88, 12], AMARILLO: [161, 98, 7], INFO: [29, 78, 216] };
+      tabla('1. Avisos oficiales vigentes del SMN sobre la zona', ['Nivel', 'Fenomeno', 'Vigente hasta', 'Aviso y recomendacion'],
+        av.map(a => [a.nivel, a.evento, a.hasta ? fechaHora(a.hasta) : '-', (a.titulo || '') + (a.instruccion ? '. Recomendacion: ' + a.instruccion : '')]), [37, 99, 235],
+        { columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 28 }, 2: { cellWidth: 28 } }, didParseCell: h => { if (h.section === 'body' && h.column.index === 0) { const c = colN[String(h.cell.raw)]; if (c) { h.cell.styles.textColor = c; h.cell.styles.fontStyle = 'bold'; } } } });
+      tabla('2. Partes del meteorologo del teatro', ['Gravedad', 'Sector / zona', 'Hasta', 'Parte'],
+        pt.slice().sort((a, b) => ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'].indexOf(b.sev) - ['INFO', 'PRECAUCION', 'ALERTA', 'CRITICA'].indexOf(a.sev)).map(p => [SEV_P[p.sev] || p.sev, (p.sector === 'TODOS' ? 'Todos' : p.sector === 'PERSONAS' ? 'Personas' : p.sector) + (p.zona ? ' / ' + p.zona : ''), fechaHora(p.vence), p.titulo + ': ' + String(p.texto || '').slice(0, 360)]), [192, 57, 43],
+        { columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 32 }, 2: { cellWidth: 26 } } });
+      if (hid.length) tabla('3. Rios: estaciones en alerta o evacuacion (' + hid.length + ' con dato)', ['Estacion', 'Rio', 'Altura (m)', 'Alerta (m)', 'Evacuacion (m)', 'Estado'],
+        enAlerta.sort((a, b) => b.e.nivel - a.e.nivel).slice(0, 25).map(x => [x.h.estacion, x.h.rio, String(x.h.actual), String(x.h.alerta), String(x.h.evacuacion), x.e.txt]), [14, 116, 144]);
+      const me = ((metar && metar.estaciones) || []).filter(e => e.pri).slice(0, 14);
+      tabla((hid.length ? '4' : '3') + '. METAR de aerodromos prioritarios', ['Estacion', 'Cat.', 'Viento', 'Vis.', 'Techo', 'Hora'],
+        me.map(e => [e.id + (e.n ? ' ' + e.n : ''), e.fc, (e.wd === 'VRB' ? 'VRB' : e.wd === null || e.wd === undefined ? '-' : String(e.wd).padStart(3, '0')) + ' ' + (e.ws !== null && e.ws !== undefined ? e.ws + (e.wg ? 'G' + e.wg : '') + ' kt' : ''), e.v !== null && e.v !== undefined ? e.v + ' km' : '-', e.h !== null && e.h !== undefined ? e.h + ' ft' : 'sin techo', e.ot ? hhmm(e.ot * 1000) : '-']), [100, 116, 139]);
+      if (faltan.length) { if (y > 270) { doc.addPage(); y = 16; } doc.setFontSize(9); doc.setTextColor(180, 83, 9); doc.text(latinP('Atencion: no se pudo consultar ' + faltan.join(', ') + ' al armar este parte. Verifique la conexion.'), 14, y, { maxWidth: 182 }); }
+      const n = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+        doc.text('Fuentes: Servicio Meteorologico Nacional (CC BY), partes del meteorologo del teatro, INA, NOAA. Producto de apoyo a la decision: no reemplaza los avisos oficiales del SMN. Para el pronostico por sector use "Informe meteorologico".', 14, 285, { maxWidth: 182 });
+        doc.text(latinP('A.R.E.S. C4I - ' + tn + ' - pagina ' + i + ' de ' + n), 14, 292); }
+      doc.save('Parte_del_dia_' + String((t && t.id) || 'teatro').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 30) + '_' + ahora.toISOString().slice(0, 10) + '.pdf');
+      try { if (typeof logEvento === 'function') logEvento('Generó el parte meteorológico del día'); } catch (_) { /* sin registro */ }
+    } catch (e) { alert('No se pudo armar el parte: ' + (e && e.message ? e.message : 'error')); }
+    finally { if (boton) { boton.disabled = false; boton.textContent = txt0; } }
+  }
   /* ---------- Avisos oficiales del SMN (CAP): poligonos vigentes que tocan la zona del teatro ---------- */
   const COL_AV = { ROJO: '#dc2626', NARANJA: '#f97316', AMARILLO: '#eab308', INFO: '#38bdf8' }, TXT_AV = { ROJO: 'ROJO · extremo', NARANJA: 'NARANJA · severo', AMARILLO: 'AMARILLO · moderado', INFO: 'Informativo' };
   async function cargarAvisos(forzar) {
@@ -5341,6 +5390,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const cab = el('div', 'display:flex;align-items:center;gap:8px'); cab.appendChild(el('b', 'flex:1;font-size:15px', '🌦 Meteorología · ' + ((teatro() && teatro().nombre) || 'Teatro')));
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = abrir; cab.appendChild(x); panel.appendChild(cab);
     panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:2px', 'Capas y datos de fuentes abiertas. No reemplazan los productos oficiales del SMN.'));
+    const bpd = el('button', 'margin:6px 0 2px;width:100%;background:#1d4ed8;border:1px solid #3b82f6;color:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;font-weight:bold', '📄 Parte del día (PDF)'); bpd.type = 'button'; bpd.id = 'met-parte-dia'; bpd.title = 'Una página con avisos del SMN, partes del teatro, ríos y METAR de este momento'; bpd.onclick = () => parteDelDia(bpd); panel.appendChild(bpd);
     zonaPartes = el('div'); panel.appendChild(zonaPartes);
     zonaAv = seccion('⚠️ Avisos oficiales del SMN', true); panel.appendChild(zonaAv); pintarAvisos();
 
@@ -5543,7 +5593,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); cargarAvisos(true).catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
+  window.aresMeteo = { parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
