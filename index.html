@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbxbLkMTd8Zx3VeNWQ_5OJk-y53CYkFFVhbCdGr5C6EuJeMSBIUdhDhAB05dGzz6TCNpoA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwF82hxp6f5wZpWIFpyCn6G1sN8mmIgoXWwuFWK4HAPHCdSqXqQzYTQIr39EY3n_1e5sw/exec";
 
 
 ;
@@ -3940,7 +3940,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const bUS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #7c3aed;background:#4c1d95;color:#fff;cursor:pointer', '👥 Usuarios'); bUS.type = 'button';
     const bAS = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #0891b2;background:#164e63;color:#fff;cursor:pointer', '🧭 Asistente de teatro'); bAS.type = 'button'; bAS.id = 'btn-asistente'; bAS.title = 'Describa el teatro que quiere y el sistema lo configura (con vista previa)';
     const bDM = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #d97706;background:#78350f;color:#fff;cursor:pointer', '🎟 Usuarios de prueba'); bDM.type = 'button'; bDM.id = 'btn-demos'; bDM.title = 'Cuentas de demostración con su propio teatro de práctica, para evaluadores y compradores';
-    cab.append(bDM, bAS, bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
+    const bSA = el('button', 'padding:5px 12px;border-radius:4px;border:1px solid #059669;background:#064e3b;color:#fff;cursor:pointer', '🩺 Salud y respaldos'); bSA.type = 'button'; bSA.id = 'btn-salud'; bSA.title = 'Estado del servidor, respaldos automáticos y uso del sistema';
+    cab.append(bSA, bDM, bAS, bNT, bNU, bUS, act, cer); fondo.appendChild(cab);
     const cuerpo = el('div', 'padding:14px 16px;max-width:1300px;margin:0 auto'); fondo.appendChild(cuerpo); document.body.appendChild(fondo);
     let mapa = null, usuariosTodos = [];
     cer.onclick = () => { try { if (mapa) mapa.remove(); } catch (_) {} fondo.remove(); };
@@ -4240,6 +4241,43 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       f.firstChild.style.width = 'min(640px,98vw)';
     }
+    /* ---- Salud del sistema y respaldos (solo superadministrador; el servidor lo vuelve a verificar) ---- */
+    function salud() {
+      const f = modal('🩺 Salud del sistema y respaldos', (c, msg, cerrar) => {
+        c.style.width = 'min(780px,96vw)'; const w = el('div'); c.appendChild(w);
+        const hh = ms => ms ? new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+        const hace = ms => { if (!ms) return 'nunca'; const m = Math.round((Date.now() - ms) / 60000); return m < 60 ? 'hace ' + m + ' min' : m < 2880 ? 'hace ' + Math.round(m / 60) + ' h' : 'hace ' + Math.round(m / 1440) + ' días'; };
+        const mini = (t, css, fn) => { const b = el('button', 'padding:5px 10px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#fff;cursor:pointer;font-size:12px;' + css, t); b.type = 'button'; b.onclick = fn; return b; };
+        const caja = (tit) => { const d = el('div', 'border:1px solid #334155;border-radius:6px;padding:8px 10px;margin-top:10px'); d.appendChild(el('div', 'font-weight:bold;color:#38bdf8;margin-bottom:4px', tit)); w.appendChild(d); return d; };
+        const tile = (n, t, col) => { const d = el('div', 'flex:1;min-width:92px;background:#0f172a;border-radius:6px;padding:6px 8px;text-align:center'); d.appendChild(el('div', 'font-size:20px;font-weight:bold;color:' + (col || '#e2e8f0'), String(n))); d.appendChild(el('div', 'font-size:11px;color:#94a3b8', t)); return d; };
+        async function llamar(accion, extra) { const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email, pin: token }, extra || {})) }); return r.json(); }
+        async function cargar(fresco) {
+          w.textContent = ''; w.appendChild(el('div', 'color:#94a3b8', '⏳ Revisando el sistema…'));
+          let j; try { j = await llamar('SALUD_ESTADO', { fresco: !!fresco }); } catch (e) { w.textContent = ''; w.appendChild(el('div', 'color:#fca5a5', '⚠ No se pudo consultar el servidor.')); return; }
+          w.textContent = ''; if (j.status !== 'success') { w.appendChild(el('div', 'color:#fca5a5', '⚠ ' + (j.message || 'Sin acceso'))); return; }
+          const cab = el('div', 'display:flex;gap:8px;align-items:center;flex-wrap:wrap'); cab.appendChild(el('div', 'flex:1;font-size:11.5px;color:#94a3b8', 'Versión del servidor: ' + j.version + ' · consultado ' + hh(j.generado)));
+          cab.appendChild(mini('↻ Actualizar', '', () => cargar(true)));
+          const br = mini('💾 Respaldar ahora', 'border-color:#16a34a;background:#14532d', async () => { br.disabled = true; msg.style.color = '#94a3b8'; msg.textContent = 'Respaldando todas las planillas… puede tardar un minuto.'; try { const r = await llamar('SALUD_RESPALDAR'); msg.style.color = r.status === 'success' ? '#4ade80' : '#fca5a5'; msg.textContent = (r.status === 'success' ? '✅ ' : '⚠ ') + (r.message || ''); } catch (e) { msg.style.color = '#fca5a5'; msg.textContent = '⚠ No se pudo respaldar.'; } br.disabled = false; cargar(true); });
+          cab.appendChild(br); w.appendChild(cab);
+          const av = caja(j.avisos.length ? '⚠ Atención (' + j.avisos.length + ')' : '✅ Sin alertas'); if (!j.avisos.length) av.appendChild(el('div', 'font-size:12px;color:#86efac', 'Todas las planillas responden y el respaldo está al día.'));
+          j.avisos.forEach(a => av.appendChild(el('div', 'font-size:12.5px;color:#fcd34d;margin:3px 0', '• ' + a)));
+          const rs = caja('💾 Último respaldo'), ur = j.respaldo;
+          if (!ur) rs.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Todavía no hay respaldos registrados. Para activar el respaldo diario automático ejecute la función instalarRespaldoMT una sola vez desde el editor de Apps Script (pide permiso de Drive).'));
+          else { rs.appendChild(el('div', 'font-size:12.5px;color:' + (ur.ok ? '#86efac' : '#fca5a5'), (ur.ok ? '✔ Correcto' : '✖ Con fallas') + ' · ' + hh(ur.ts) + ' (' + hace(ur.ts) + ') · ' + ur.copias + ' planilla(s) copiada(s)' + (ur.carpeta ? ' · carpeta ' + ur.carpeta : '')));
+            (ur.detalle || []).forEach(d => rs.appendChild(el('div', 'font-size:11.5px;color:' + (d.ok ? '#94a3b8' : '#fca5a5'), (d.ok ? '✔ ' : '✖ ') + d.nombre + (d.ok ? ' · ' + d.hojas + ' hojas, ' + d.filas + ' filas' : ' · ' + d.error))));
+            rs.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:4px', 'Se guardan en una carpeta privada de su Drive y se conservan 14 días. Los datos sensibles siguen cifrados igual que en la planilla.')); }
+          const pl = caja('🗂 Planillas'); j.libros.forEach(l => pl.appendChild(el('div', 'font-size:12px;color:' + (l.ok ? '#e2e8f0' : '#fca5a5') + ';margin:2px 0', (l.ok ? '✔ ' : '✖ ') + l.nombre + (l.ok ? ' · ' + l.hojas + ' hojas · ' + l.filas + ' filas · respondió en ' + l.ms + ' ms' : ' · ' + l.error))));
+          const u = j.uso, us = caja('📈 Uso del sistema'), fl = el('div', 'display:flex;gap:6px;flex-wrap:wrap'); fl.append(tile(u.activos24, 'usuarios activos 24 h'), tile(u.logins24, 'ingresos 24 h'), tile(u.h24, 'acciones 24 h'), tile(u.d7, 'acciones 7 días'), tile(u.fallidos24, 'ingresos fallidos 24 h', u.fallidos24 >= 15 ? '#fbbf24' : ''), tile(u.denegados24, 'denegados 24 h', u.denegados24 >= 20 ? '#fbbf24' : ''), tile(u.sinConexion7, 'sincronizados sin conexión 7 d')); us.appendChild(fl);
+          if (u.usuarios.length) { const t = el('div', 'margin-top:8px;max-height:200px;overflow:auto;border:1px solid #334155;border-radius:6px'); u.usuarios.forEach(x => { const r = el('div', 'display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #1e293b;font-size:12px'); r.appendChild(el('div', 'flex:1;word-break:break-all', x.email)); r.appendChild(el('div', 'color:#94a3b8;white-space:nowrap', hace(x.ultima))); r.appendChild(el('div', 'width:70px;text-align:right', x.n7 + ' acc.')); t.appendChild(r); }); us.appendChild(t); }
+          if (u.acciones.length) us.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:6px', 'Más frecuentes (7 días): ' + u.acciones.map(a => a.accion + ' ' + a.n).join(' · ')));
+          const dp = caja('⏱ Tareas programadas'); if (!j.disparadores.length) dp.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'No hay tareas programadas.')); j.disparadores.forEach(d => dp.appendChild(el('div', 'font-size:12px;color:#cbd5e1', '• ' + d.funcion + (d.n > 1 ? ' (×' + d.n + ')' : ''))));
+          w.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:8px', 'El uso se calcula con el registro de auditoría (últimos 7 días, hasta 4000 movimientos por planilla).'));
+        }
+        cargar(false);
+        const x = mini('Cerrar', 'margin-top:10px;width:100%', cerrar); c.appendChild(x);
+      });
+    }
+    bSA.onclick = salud;
     bDM.onclick = demos; bAS.onclick = asistente; bNT.onclick = () => formTeatro(null); bNU.onclick = () => formUsuario(); bUS.onclick = listaUsuarios;
     function kpi(t, v, c) { const d = el('div', 'background:#111c33;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;min-width:130px'); d.append(el('div', 'font-size:24px;font-weight:bold;color:' + (c || '#fff'), String(v)), el('div', 'font-size:11.5px;color:#94a3b8', t)); return d; }
     function pintar(ts, gen) {
@@ -5090,8 +5128,8 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   const ENLACES = [['SMN: radar, satélite y pronósticos', 'https://www.smn.gob.ar/'], ['SMN: servicios aeronáuticos (METAR / AEROMET)', 'https://www.smn.gob.ar/'], ['Meteored Argentina', 'https://www.meteored.com.ar/'], ['OGIMET (METAR y SYNOP)', 'https://www.ogimet.com/'], ['Windy', 'https://www.windy.com/']];
 
-  let partes = null, metar = null, panel = null, grid = null, gridT = 0, capaAlert = null, capaMetar = null, capaGfs = null, capaSat = {}, nTile = {}, capaZonas = null, borrador = null, esperandoClic = null;
-  let pref = { zonas: true, alertas: true, metar: false, todas: false, gfs: 'ninguna', hora: 0, sat: false, ir: false };
+  let partes = null, metar = null, panel = null, grid = null, gridT = 0, capaAlert = null, capaMetar = null, capaGfs = null, capaSat = {}, nTile = {}, capaZonas = null, borrador = null, esperandoClic = null, avisos = null, capaAv = null, zonaAv = null;
+  let pref = { smn: true, zonas: true, alertas: true, metar: false, todas: false, gfs: 'ninguna', hora: 0, sat: false, ir: false };
   const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
   const clavePref = () => 'ares_meteo_' + (function () { try { return sesionActiva.teatro || 'x'; } catch (_) { return 'x'; } })();
   function leerPref() { try { const j = JSON.parse(localStorage.getItem(clavePref()) || 'null'); if (j && typeof j === 'object') pref = Object.assign(pref, j); } catch (_) { /* sin almacenamiento */ } }
@@ -5120,6 +5158,37 @@ window.addEventListener('DOMContentLoaded', () => {
     b.textContent = '🌦 Meteo' + (l.length ? ' (' + l.length + ')' : '');
     b.style.background = m >= 2 ? SEV[SEV_ORDEN[m]][1] : ''; b.style.color = m >= 2 ? '#fff' : '';
     b.title = l.length ? l.length + ' parte(s) vigente(s) para su sector' : 'Meteorología';
+    const av = (avisos && avisos.avisos) || [], g2 = av.filter(a => a.nivel === 'ROJO' || a.nivel === 'NARANJA');
+    if (g2.length) { b.textContent += ' ⚠' + g2.length; b.title += (l.length ? ' · ' : '') + g2.length + ' aviso(s) oficial(es) del SMN naranja o rojo en la zona'; if (m < 2) { b.style.background = g2.some(a => a.nivel === 'ROJO') ? '#dc2626' : '#f97316'; b.style.color = '#fff'; } }
+  }
+  /* ---------- Avisos oficiales del SMN (CAP): poligonos vigentes que tocan la zona del teatro ---------- */
+  const COL_AV = { ROJO: '#dc2626', NARANJA: '#f97316', AMARILLO: '#eab308', INFO: '#38bdf8' }, TXT_AV = { ROJO: 'ROJO · extremo', NARANJA: 'NARANJA · severo', AMARILLO: 'AMARILLO · moderado', INFO: 'Informativo' };
+  async function cargarAvisos(forzar) {
+    if (avisos && !forzar && Date.now() - avisos.recibido < 120000) return avisos;
+    const r = await api('MET_AVISOS'); if (r.status !== 'success') throw new Error(r.message || 'Avisos no disponibles');
+    r.recibido = Date.now(); avisos = r; dibujarAvisos(); badge(); if (panel) pintarAvisos(); return r;
+  }
+  function detalleAviso(a) {
+    const d = el('div', 'font:12px sans-serif;max-width:280px'); d.appendChild(el('b', 'color:' + COL_AV[a.nivel], (TXT_AV[a.nivel] || a.nivel) + ' · ' + a.evento)); d.appendChild(el('div', 'margin-top:3px;font-weight:bold', a.titulo));
+    if (a.descripcion) d.appendChild(el('div', 'margin-top:3px;white-space:pre-wrap', a.descripcion)); if (a.instruccion) d.appendChild(el('div', 'margin-top:3px;color:#475569', 'Recomendación: ' + a.instruccion));
+    d.appendChild(el('div', 'color:#64748b;margin-top:3px;font-size:11px', 'Vigente ' + (a.desde ? 'desde ' + fechaHora(a.desde) + ' ' : '') + (a.hasta ? 'hasta ' + fechaHora(a.hasta) : '') + ' · Fuente: SMN (CC BY)')); return d;
+  }
+  function dibujarAvisos() {
+    capaAv = quitar(capaAv); const mp = mapa(); if (!mp || !pref.smn || !avisos) return; capaAv = L.layerGroup();
+    avisos.avisos.slice().reverse().forEach(a => { const col = COL_AV[a.nivel] || '#38bdf8'; (a.poligonos || []).forEach(pg => { L.polygon(pg, { color: col, weight: 2, fillColor: col, fillOpacity: a.nivel === 'ROJO' ? .28 : .18, dashArray: a.nivel === 'INFO' ? '4 4' : '' }).addTo(capaAv).bindPopup(detalleAviso(a)); }); });
+    capaAv.addTo(mp);
+  }
+  function pintarAvisos() {
+    if (!zonaAv) return; while (zonaAv.childNodes.length > 1) zonaAv.removeChild(zonaAv.lastChild);
+    zonaAv.appendChild(check('Mostrar polígonos en el mapa', pref.smn, v => { pref.smn = v; guardarPref(); if (v && !avisos) cargarAvisos().catch(() => null); else dibujarAvisos(); }));
+    const b = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;margin:4px 0', '↻ Actualizar'); b.type = 'button';
+    const m = el('div', 'font-size:11px;color:#fbbf24'); b.onclick = () => { m.textContent = ''; cargarAvisos(true).catch(e => { m.textContent = '⚠ ' + (e && e.message ? e.message : 'No se pudo consultar al SMN.'); }); }; zonaAv.appendChild(b); zonaAv.appendChild(m);
+    if (!avisos) { zonaAv.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Consultando al SMN…')); return; }
+    if (avisos.desactualizado) zonaAv.appendChild(el('div', 'font-size:12px;color:#fbbf24;margin:4px 0', '⚠ El SMN no respondió: se muestra la última consulta exitosa (' + hhmm(avisos.generado) + '). Verifique en smn.gob.ar.'));
+    if (!avisos.avisos.length) { zonaAv.appendChild(el('div', 'font-size:12px;color:#86efac', 'Sin avisos vigentes del SMN sobre la zona del teatro (' + hhmm(avisos.generado) + ').')); }
+    avisos.avisos.forEach(a => { const f = el('div', 'border-left:4px solid ' + (COL_AV[a.nivel] || '#38bdf8') + ';padding:3px 8px;margin:6px 0;background:#111c33;border-radius:0 4px 4px 0'); f.appendChild(el('b', 'color:' + (COL_AV[a.nivel] || '#38bdf8'), (TXT_AV[a.nivel] || a.nivel) + ' · ' + a.evento)); f.appendChild(el('div', 'font-size:12px', a.titulo));
+      f.appendChild(el('div', 'font-size:11px;color:#94a3b8', (a.hasta ? 'hasta ' + fechaHora(a.hasta) : '') + (a.urgencia ? ' · ' + a.urgencia : ''))); if (a.descripcion) f.appendChild(el('div', 'font-size:12px;white-space:pre-wrap;margin-top:2px', a.descripcion)); if (a.instruccion) f.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:2px', 'Recomendación: ' + a.instruccion)); zonaAv.appendChild(f); });
+    zonaAv.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', 'Fuente: Servicio Meteorológico Nacional (CC BY) · consulta automática cada pocos minutos. Es un apoyo: el producto oficial es el del SMN.'));
   }
   function dibujarAlertas() {
     capaAlert = quitar(capaAlert); const mp = mapa(); if (!mp || !pref.alertas || !partes) return;
@@ -5264,6 +5333,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = abrir; cab.appendChild(x); panel.appendChild(cab);
     panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:2px', 'Capas y datos de fuentes abiertas. No reemplazan los productos oficiales del SMN.'));
     zonaPartes = el('div'); panel.appendChild(zonaPartes);
+    zonaAv = seccion('⚠️ Avisos oficiales del SMN', true); panel.appendChild(zonaAv); pintarAvisos();
 
     const sc = seccion('🗺 Capas del mapa', true);
     sc.appendChild(check('🌦 Alertas por sector (partes vigentes)', pref.alertas, v => { pref.alertas = v; guardarPref(); dibujarAlertas(); }));
@@ -5286,7 +5356,7 @@ window.addEventListener('DOMContentLoaded', () => {
     se.appendChild(el('div', 'font-size:11px;color:#94a3b8', 'El radar y las imágenes del SMN y de Meteored no tienen una vía abierta para integrarse; se abren en su propio sitio.')); panel.appendChild(se);
     document.body.appendChild(panel);
     pintarPartes();
-    cargarPartes().catch(() => null);
+    cargarPartes().catch(() => null); cargarAvisos().catch(() => null);
     if (pref.metar) cargarMetar().catch(() => null);
   }
   function windy(marco, ov) {
@@ -5452,19 +5522,19 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   let iniciado = false, ultimoTeatro = '';
   setInterval(() => {
-    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
+    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; avisos = null; capaAv = quitar(capaAv); grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
     if (!boton()) return;
     const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
     if (!iniciado || tid !== ultimoTeatro) {
-      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
-      cargarPartes().catch(() => { iniciado = false; });
+      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; avisos = null; capaAv = quitar(capaAv); grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
+      cargarPartes().catch(() => { iniciado = false; }); cargarAvisos().catch(() => null);
       if (pref.metar) cargarMetar().catch(() => null);
       if (pref.gfs !== 'ninguna') aplicarGfs();
       ['color', 'ir'].forEach(k => { capaSat[k] = quitar(capaSat[k]); if (pref[k === 'color' ? 'sat' : 'ir']) aplicarSat(k, true); });
     }
   }, 2000);
-  setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
+  setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); cargarAvisos(true).catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
+  window.aresMeteo = { avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
