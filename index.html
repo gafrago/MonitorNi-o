@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwF82hxp6f5wZpWIFpyCn6G1sN8mmIgoXWwuFWK4HAPHCdSqXqQzYTQIr39EY3n_1e5sw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbw_67MN-Ui0QihO0a0uxDHmzoZpvsKFUa92frLUdzZ1o9GAMDz4rnT61VE6bn8E_Qr4/exec";
 
 
 ;
@@ -4267,6 +4267,14 @@ window.addEventListener('DOMContentLoaded', () => {
             (ur.detalle || []).forEach(d => rs.appendChild(el('div', 'font-size:11.5px;color:' + (d.ok ? '#94a3b8' : '#fca5a5'), (d.ok ? '✔ ' : '✖ ') + d.nombre + (d.ok ? ' · ' + d.hojas + ' hojas, ' + d.filas + ' filas' : ' · ' + d.error))));
             rs.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:4px', 'Se guardan en una carpeta privada de su Drive y se conservan 14 días. Los datos sensibles siguen cifrados igual que en la planilla.')); }
           const pl = caja('🗂 Planillas'); j.libros.forEach(l => pl.appendChild(el('div', 'font-size:12px;color:' + (l.ok ? '#e2e8f0' : '#fca5a5') + ';margin:2px 0', (l.ok ? '✔ ' : '✖ ') + l.nombre + (l.ok ? ' · ' + l.hojas + ' hojas · ' + l.filas + ' filas · respondió en ' + l.ms + ' ms' : ' · ' + l.error))));
+          const fu = caja('🔌 Fuentes de datos'), fr = el('div', 'margin-top:6px'), fb = mini('Probar fuentes ahora', 'border-color:#0284c7;background:#0c4a6e', async () => {
+            fb.disabled = true; fr.textContent = ''; fr.appendChild(el('div', 'font-size:12px;color:#94a3b8', 'Consultando SMN, INA, NOAA y Open-Meteo… puede tardar unos segundos.'));
+            try { const q = await llamar('SALUD_FUENTES'); fr.textContent = ''; if (q.status !== 'success') { fr.appendChild(el('div', 'color:#fca5a5;font-size:12px', '⚠ ' + (q.message || 'No se pudo probar.'))); }
+              else { q.fuentes.forEach(x => fr.appendChild(el('div', 'font-size:12px;margin:2px 0;color:' + (x.ok ? '#86efac' : '#fca5a5'), (x.ok ? '✔ ' : '✖ ') + x.nombre + ' · ' + x.detalle + ' · ' + x.ms + ' ms')));
+                if (q.avisosZona) fr.appendChild(el('div', 'font-size:12px;color:#cbd5e1;margin-top:4px', 'Avisos del SMN que tocan la zona del teatro: ' + q.avisosZona.avisos + ' (de ' + q.avisosZona.revisados + ' revisados)' + (q.avisosZona.desactualizado ? ' · datos desactualizados' : '')));
+                fr.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:4px', (q.ok ? 'Todas las fuentes responden. ' : '⚠ Hay fuentes con problemas. ') + 'Consultado ' + hh(q.generado) + ' desde el servidor.')); } }
+            catch (e) { fr.textContent = ''; fr.appendChild(el('div', 'color:#fca5a5;font-size:12px', '⚠ No se pudo consultar el servidor.')); } fb.disabled = false; });
+          fu.appendChild(fb); fu.appendChild(fr); fu.appendChild(el('div', 'font-size:11px;color:#64748b;margin-top:6px', 'Los mapas base y el satélite se cargan desde el navegador y no se miden aquí.'));
           const u = j.uso, us = caja('📈 Uso del sistema'), fl = el('div', 'display:flex;gap:6px;flex-wrap:wrap'); fl.append(tile(u.activos24, 'usuarios activos 24 h'), tile(u.logins24, 'ingresos 24 h'), tile(u.h24, 'acciones 24 h'), tile(u.d7, 'acciones 7 días'), tile(u.fallidos24, 'ingresos fallidos 24 h', u.fallidos24 >= 15 ? '#fbbf24' : ''), tile(u.denegados24, 'denegados 24 h', u.denegados24 >= 20 ? '#fbbf24' : ''), tile(u.sinConexion7, 'sincronizados sin conexión 7 d')); us.appendChild(fl);
           if (u.usuarios.length) { const t = el('div', 'margin-top:8px;max-height:200px;overflow:auto;border:1px solid #334155;border-radius:6px'); u.usuarios.forEach(x => { const r = el('div', 'display:flex;gap:8px;padding:3px 8px;border-bottom:1px solid #1e293b;font-size:12px'); r.appendChild(el('div', 'flex:1;word-break:break-all', x.email)); r.appendChild(el('div', 'color:#94a3b8;white-space:nowrap', hace(x.ultima))); r.appendChild(el('div', 'width:70px;text-align:right', x.n7 + ' acc.')); t.appendChild(r); }); us.appendChild(t); }
           if (u.acciones.length) us.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:6px', 'Más frecuentes (7 días): ' + u.acciones.map(a => a.accion + ' ' + a.n).join(' · ')));
