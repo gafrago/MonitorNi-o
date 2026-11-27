@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbwxZKxyC7ZHos8K6oj1DIeznlciOR92Knm3lRKy4xEk4WHNgEu0hdwgnT7UD3Y4ak4CZw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbz7cnGEIReagbh6xh-f2dptoXCY843tVSlURDHcUeH5rZHzSs0pXb2e1vQlwnbF6_4yjQ/exec";
 
 
 ;
@@ -5383,6 +5383,49 @@ window.addEventListener('DOMContentLoaded', () => {
   function estiloSel(s) { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; }
   function seccion(titulo, abierta) { const d = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:8px 0'); if (abierta) d.open = true; d.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', titulo)); return d; }
   function check(txt, on, cb) { const l = el('label', 'display:flex;gap:6px;align-items:center;margin:4px 0;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.checked = !!on; c.onchange = () => cb(c.checked); l.append(c, document.createTextNode(txt)); return l; }
+  /* ---- Lluvia aguas arriba: lluvia de los ultimos 7 dias y prevista a 3 dias en puntos de las cuencas que alimentan al NEA (Open-Meteo). Orientativo. ---- */
+  const CUENCAS = [['Paraná', 'Paraná alto (Itumbiara, GO)', -18.41, -49.22], ['Paraná', 'Paranapanema (Londrina, PR)', -23.31, -51.16], ['Paraná', 'Paraná medio (Presidente Epitácio, SP)', -21.76, -52.11], ['Paraná', 'Paraná – Itaipú (Foz do Iguaçu, PR)', -25.52, -54.58],
+    ['Iguazú', 'Iguazú (União da Vitória, PR)', -26.23, -51.09], ['Paraguay', 'Alto Paraguay / Pantanal (Cáceres, MT)', -16.07, -57.68], ['Paraguay', 'Paraguay medio (Concepción, PY)', -23.41, -57.43], ['Uruguay', 'Alto Uruguay (Passo Fundo, RS)', -28.26, -52.41]];
+  let zonaCuenca = null, datosCuenca = null, cuencaT = 0, cuencaCarga = false, cuencaErr = false;
+  const tieneHidrico = () => { try { return ((teatro() && teatro().modulos) || []).map(String).indexOf('HIDRICO') >= 0; } catch (_) { return false; } };
+  function nivelLluvia(p7, f3) { return (p7 >= 120 || f3 >= 80) ? 2 : (p7 >= 60 || f3 >= 40) ? 1 : 0; }
+  function resumenCuenca(j) {   // j = respuesta de Open-Meteo para un punto -> {p7, f3} (mm); null si faltan datos
+    const d = j && j.daily; if (!d || !Array.isArray(d.time) || !Array.isArray(d.precipitation_sum)) return null;
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); let ih = d.time.findIndex(t => String(t) >= hoy); if (ih < 0) ih = d.time.length;
+    let p7 = 0, f3 = 0, n7 = 0, n3 = 0; d.time.forEach((t, i) => { const v = Number(d.precipitation_sum[i]); if (!isFinite(v)) return; if (i < ih) { p7 += v; n7++; } else { f3 += v; n3++; } });
+    if (!n7 && !n3) return null; return { p7: Math.round(p7), f3: Math.round(f3), n7: n7, n3: n3 };
+  }
+  async function cargarCuencas(forzar) {
+    if (cuencaCarga || !zonaCuenca) return; if (!forzar && datosCuenca && Date.now() - cuencaT < 30 * 60e3) { pintarCuencas(); return; }
+    cuencaCarga = true; pintarCuencas();
+    try {
+      const la = CUENCAS.map(c => c[2]).join(','), lo = CUENCAS.map(c => c[3]).join(',');
+      const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + la + '&longitude=' + lo + '&daily=precipitation_sum&past_days=7&forecast_days=3&timezone=America%2FSao_Paulo');
+      const j = await r.json(), arr = Array.isArray(j) ? j : [j]; if (!r.ok || arr.length !== CUENCAS.length) throw new Error('respuesta inesperada');
+      datosCuenca = CUENCAS.map((c, i) => Object.assign({ cuenca: c[0], n: c[1] }, resumenCuenca(arr[i]))); cuencaT = Date.now(); cuencaErr = false;
+    } catch (e) { if (!datosCuenca) datosCuenca = 'error'; else cuencaErr = true; }
+    cuencaCarga = false; pintarCuencas();
+  }
+  function pintarCuencas() {
+    if (!zonaCuenca) return; [...zonaCuenca.children].forEach(n => { if (n.tagName !== 'SUMMARY') n.remove(); }); const c = zonaCuenca;
+    c.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin:2px 0 4px', 'Lluvia acumulada en los últimos 7 días y prevista para los próximos 3 en puntos de las cuencas que alimentan los ríos del NEA. La crecida llega días después.'));
+    if (cuencaCarga) { c.appendChild(el('div', 'color:#94a3b8', '⏳ Consultando…')); return; }
+    if (!datosCuenca) { c.appendChild(el('div', 'color:#94a3b8', 'Abra la sección para consultar.')); return; }
+    if (datosCuenca === 'error') { const b = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:4px;padding:3px 8px;cursor:pointer', 'No se pudo consultar. Reintentar'); b.type = 'button'; b.onclick = () => { datosCuenca = null; cargarCuencas(true); }; c.appendChild(b); return; }
+    if (cuencaErr) { const v = el('div', 'font-size:11.5px;color:#fcd34d;margin-bottom:4px', 'No se pudo actualizar. Se muestran los datos de la última consulta (hace ' + Math.max(1, Math.round((Date.now() - cuencaT) / 60e3)) + ' min).'); v.className = 'met-cuenca-viejo'; c.appendChild(v); }
+    const ok = datosCuenca.filter(x => x.p7 !== undefined), niv = ok.map(x => nivelLluvia(x.p7, x.f3)), altos = niv.filter(n => n === 2).length, mods = niv.filter(n => n === 1).length;
+    const res = el('div', 'padding:4px 6px;border-radius:4px;margin-bottom:4px;background:' + (altos ? '#7f1d1d' : mods ? '#78350f' : '#14532d'), altos ? '⚠ Lluvia abundante en ' + altos + ' punto(s) de las cuencas.' : mods ? 'Lluvia moderada en ' + mods + ' punto(s).' : 'Sin lluvias significativas en los puntos consultados.'); res.className = 'met-cuenca-res'; c.appendChild(res);
+    let grupo = ''; datosCuenca.forEach(x => {
+      if (x.cuenca !== grupo) { grupo = x.cuenca; c.appendChild(el('div', 'font-weight:bold;color:#7dd3fc;margin:6px 0 2px;font-size:12px', 'Cuenca del ' + (grupo === 'Iguazú' ? 'Iguazú' : grupo))); }
+      const f = el('div', 'margin:3px 0;padding:3px 6px;border:1px solid #334155;border-radius:4px'); f.className = 'met-cuenca-fila';
+      if (x.p7 === undefined) { f.appendChild(el('div', 'font-size:12px', x.n + ': sin datos')); c.appendChild(f); return; }
+      const n = nivelLluvia(x.p7, x.f3); f.appendChild(el('div', 'font-size:12px', x.n));
+      const b = el('div', 'display:flex;height:7px;background:#0b1220;border-radius:3px;overflow:hidden;margin:3px 0'), esc = v => Math.min(100, v / 200 * 100) + '%';
+      const b1 = el('div', 'background:#38bdf8;width:' + esc(x.p7)), b2 = el('div', 'background:' + (n === 2 ? '#ef4444' : n === 1 ? '#f59e0b' : '#a78bfa') + ';width:' + esc(x.f3)); b.append(b1, b2); f.appendChild(b);
+      f.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1', '7 días: ' + x.p7 + ' mm · próximos 3 días: ' + x.f3 + ' mm' + (n === 2 ? ' · ABUNDANTE' : n === 1 ? ' · moderada' : ''))); c.appendChild(f);
+    });
+    c.appendChild(el('div', 'font-size:10.5px;color:#94a3b8;margin-top:4px', 'Puntos de referencia (modelo Open-Meteo). Criterio orientativo propio del sistema: abundante si pasa 120 mm en 7 días u 80 mm previstos en 3; moderada desde 60 y 40 mm. No reemplaza los pronósticos y alertas oficiales del SMN, ANA e INA.'));
+  }
   let zonaRios = null, serieRios = null;
   const SVGNS = 'http://www.w3.org/2000/svg', sv = (t, at) => { const e = document.createElementNS(SVGNS, t); Object.keys(at || {}).forEach(k => e.setAttribute(k, at[k])); return e; };
   const f2 = n => (Math.round(n * 100) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5415,6 +5458,8 @@ window.addEventListener('DOMContentLoaded', () => {
         hay++; const sube = c.d > 0.02, baja = c.d < -0.02, col = e.txt && /EVAC/i.test(e.txt) ? '#ef4444' : e.txt && /ALERTA/i.test(e.txt) ? '#f59e0b' : '#38bdf8';
         const g = graficoRio(pts, { alerta: s.alerta, evacuacion: s.evacuacion, col: col }, hs); g.setAttribute('aria-label', 'Nivel de ' + s.estacion + ' en las últimas ' + hs + ' horas'); fila.appendChild(g);
         const p = el('div', 'font-size:11.5px;margin-top:3px;color:' + (sube ? '#fca5a5' : baja ? '#86efac' : '#cbd5e1'), (sube ? '▲ Sube ' : baja ? '▼ Baja ' : '═ Estable ') + (sube || baja ? f2(Math.abs(c.d)) + ' m ' : '') + 'en ' + c.h + ' h' + (c.h < 20 ? ' (historial corto)' : '') + (e.txt ? ' · ' + e.txt : '')); p.className = 'met-rio-tend'; fila.appendChild(p);
+        const py = serieRios && serieRios.proy && (serieRios.proy[s.id] || serieRios.proy[s.estacion]);
+        if (py && py.tasaDia >= 0.1 && (py.etaAlertaH !== null || py.etaEvacH !== null)) { const ev = py.etaEvacH !== null && py.etaEvacH <= 72, eta = ev ? py.etaEvacH : py.etaAlertaH, q = el('div', 'font-size:11.5px;margin-top:3px;padding:3px 6px;border-radius:4px;background:' + (eta <= 24 ? '#7f1d1d' : '#78350f'), '⏳ Estimación: sube ' + f2(py.tasaDia) + ' m/día; a ese ritmo llegaría a ' + (ev ? 'EVACUACIÓN' : 'ALERTA') + ' en unas ' + Math.max(1, Math.round(eta)) + ' h. No considera lluvia ni cambios de ritmo.'); q.className = 'met-rio-proy'; fila.appendChild(q); }
       } else fila.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:3px', 'Sin historial suficiente todavía: se arma solo con cada actualización de niveles.' + (e.txt ? ' · ' + e.txt : '')));
       cuerpo.appendChild(fila);
     });
@@ -5436,6 +5481,7 @@ window.addEventListener('DOMContentLoaded', () => {
     zonaPartes = el('div'); panel.appendChild(zonaPartes);
     zonaAv = seccion('⚠️ Avisos oficiales del SMN', true); panel.appendChild(zonaAv); pintarAvisos();
     zonaRios = seccion('🌊 Tendencia de ríos (72 h)', true); panel.appendChild(zonaRios); cargarSerieRios().catch(() => null);
+    if (tieneHidrico()) { zonaCuenca = seccion('🌧 Lluvia aguas arriba (cuencas)', false); panel.appendChild(zonaCuenca); zonaCuenca.addEventListener('toggle', () => { if (zonaCuenca.open) cargarCuencas().catch(() => null); }); pintarCuencas(); }
 
     const sc = seccion('🗺 Capas del mapa', true);
     sc.appendChild(check('🌦 Alertas por sector (partes vigentes)', pref.alertas, v => { pref.alertas = v; guardarPref(); dibujarAlertas(); }));
@@ -5624,11 +5670,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   let iniciado = false, ultimoTeatro = '';
   setInterval(() => {
-    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; avisos = null; serieRios = null; capaAv = quitar(capaAv); grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
+    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; avisos = null; serieRios = null; datosCuenca = null; cuencaErr = false; capaAv = quitar(capaAv); grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
     if (!boton()) return;
     const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
     if (!iniciado || tid !== ultimoTeatro) {
-      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; avisos = null; serieRios = null; capaAv = quitar(capaAv); grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
+      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; avisos = null; serieRios = null; datosCuenca = null; cuencaErr = false; capaAv = quitar(capaAv); grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
       cargarPartes().catch(() => { iniciado = false; }); cargarAvisos().catch(() => null);
       if (pref.metar) cargarMetar().catch(() => null);
       if (pref.gfs !== 'ninguna') aplicarGfs();
@@ -5636,7 +5682,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); cargarAvisos(true).catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { serieRios: () => serieRios, parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
+  window.aresMeteo = { cuencas: f => cargarCuencas(f), serieRios: () => serieRios, parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
