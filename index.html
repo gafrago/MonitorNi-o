@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzyXWiw7C-Xf4wcmtul7Cfwqlst4OclKzUZijjSq66kv8ssJkXYG3BAS-ZYpHXIzAEz/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyATSa-73P1MZuVLJGx6yg6XJjQokfbkgVVadN3D5y3oNdjltRdHF8Cj6Q2_6RN450JAg/exec";
 
 
 ;
@@ -9285,6 +9285,168 @@ window.aresSala = { abrir: abrir, cerrar: cerrar, estado: () => ({ abierta: !!f,
 })();
 </script>
 <!-- ===== FIN BLOQUE SALA ===== -->
+<!-- ===== INICIO BLOQUE EJERCICIO ===== -->
+<script>
+/* A.R.E.S.: Ejercicios con escenario (solo teatros de tipo EJERCICIO). Los participantes ven el reloj del ejercicio y registran decisiones;
+   el Administrador controla (iniciar, pausar, velocidad, inyectar, evaluar), arma escenarios (plantillas o CSV de niveles reales) y emite el informe posterior.
+   Las plantillas son ejemplos FICTICIOS para adaptar. Todo lo valida el servidor. */
+(function () {
+'use strict';
+const $ = id => document.getElementById(id);
+const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+const hab = () => { try { return activa() && !!window.ARES_TEATRO && window.ARES_TEATRO.tipo === 'EJERCICIO'; } catch (_) { return false; } };
+const esAdmin = () => { try { return /^administrador$/i.test(String(sesionActiva.rol).trim()) || !!(window.ARES_TEATRO && window.ARES_TEATRO.esSuper); } catch (_) { return false; } };
+async function api(accion, extra) {
+  const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+  if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+  return r;
+}
+const hm = m => { m = Math.max(0, Math.round(Number(m) || 0)); return 'T+' + String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+const fh = ms => { try { return new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+const VELS = [1, 5, 10, 30, 60, 120], TEMAS = ['OPERATIVO', 'ALERTA', 'LOGISTICA', 'INFORMACION', 'EMERGENCIA'];
+/* ---- Plantillas (ficticias) ---- */
+const A = (t, titulo, texto, esperado, limite, tema, prio) => ({ t: t, tipo: 'AVISO', titulo: titulo, texto: texto, esperado: esperado || '', limite: limite || 0, tema: tema || 'OPERATIVO', prio: prio || 'NORMAL' });
+const C = (t, texto) => ({ t: t, tipo: 'CONTROL', titulo: 'Nota al controlador', texto: texto });
+const PLANT = {
+  'Crecida del río (completar estación)': () => [A(0, 'Inicio', 'Ejercicio de crecida. Situación normal, río bajo alerta.', '', 0), { t: 30, tipo: 'NIVEL', est: estHidro()[0] || 'ESTACION', nivel: 3.2, titulo: 'Sube el río', texto: '', esperado: 'Verificar tendencia y avisar a sectores ribereños', limite: 30 }, A(60, 'Aviso SMN simulado', 'Lluvias persistentes en la cuenca alta. Se espera continuidad.', 'Informar al comando y evaluar pre-alistamiento', 30, 'ALERTA'), { t: 120, tipo: 'NIVEL', est: estHidro()[0] || 'ESTACION', nivel: 4.6, titulo: 'Supera alerta', texto: '', esperado: 'Activar plan de evacuación preventiva', limite: 20 }, C(150, 'Verifique que se hayan registrado decisiones de evacuación.')],
+  'Tormenta severa (aviso naranja)': () => [A(0, 'Pronóstico', 'El SMN pronostica tormentas fuertes para la tarde.', 'Confirmar recepción', 15), A(60, 'Aviso naranja', 'Aviso NARANJA por tormentas con ráfagas y caída de granizo.', 'Resguardar medios y personal en tierra', 20, 'ALERTA', 'URGENTE'), A(120, 'Daños', 'Reportan árboles caídos y cortes de energía en el sector norte.', 'Reasignar medios de apoyo', 30, 'EMERGENCIA', 'URGENTE'), C(180, 'Cierre: pida resumen de decisiones.')],
+  'Incendio con cambio de viento': () => [A(0, 'Foco inicial', 'Foco de incendio rural detectado, viento del norte.', 'Despachar brigada y medio aéreo', 20, 'EMERGENCIA', 'URGENTE'), A(60, 'Cambio de viento', 'El viento rota al sur y aumenta. El frente se dirige a un barrio.', 'Replantear ataque y evaluar evacuación', 20, 'ALERTA', 'URGENTE'), A(120, 'Falta de agua', 'El punto de abastecimiento queda inutilizable.', 'Buscar fuente alternativa', 30, 'LOGISTICA'), C(180, 'Evalúe coordinación entre bomberos y apoyo aéreo.')],
+  'Brote sanitario (saturación hospitalaria)': () => [A(0, 'Primeros casos', 'Se reportan 12 casos de cuadro respiratorio agudo en un barrio.', 'Activar vigilancia y comunicar a Salud', 30, 'INFORMACION'), A(120, 'Aumento', 'Los casos se duplican. Hospital local al 70% de ocupación.', 'Evaluar refuerzo de camas y personal', 30, 'ALERTA'), A(240, 'Saturación', 'Hospital al 100%. Se pide derivación y apoyo logístico.', 'Coordinar traslados', 30, 'EMERGENCIA', 'URGENTE'), C(300, 'Cierre: revise la cadena de comunicación con Salud.')],
+  'Puente aéreo con contingencias': () => [A(0, 'Orden', 'Se ordena puente aéreo de ayuda humanitaria. Primer vuelo en 3 h.', 'Confirmar medios y carga', 30, 'LOGISTICA'), A(60, 'Meteo en destino', 'Pista de destino con niebla. Visibilidad bajo mínimos.', 'Decidir demora o alternativa', 20, 'ALERTA', 'URGENTE'), A(120, 'Falla técnica', 'Una aeronave queda fuera de servicio.', 'Reasignar carga', 30, 'OPERATIVO'), C(180, 'Revise tiempos de decisión.')],
+  'Jornada electoral (novedades)': () => [A(0, 'Apertura', 'Apertura de comicios. Sin novedades.', '', 0, 'INFORMACION'), A(120, 'Novedad en escuela', 'Demora en la apertura de una mesa por falta de material.', 'Coordinar reposición', 30, 'LOGISTICA'), A(240, 'Disturbio menor', 'Altercado aislado fuera de un establecimiento.', 'Informar y reforzar seguridad', 20, 'ALERTA'), C(300, 'Cierre: verifique partes de novedades.')],
+  'Decisión táctica genérica': () => [A(0, 'Situación inicial', 'Se presenta la situación y el objetivo del ejercicio.', 'Confirmar recepción', 15), A(45, 'Cambio de situación', 'Aparece un hecho imprevisto que afecta el plan.', 'Replantear y comunicar', 20, 'ALERTA'), A(90, 'Recurso limitado', 'Se pierde un recurso clave.', 'Decidir prioridades', 25, 'LOGISTICA'), C(120, 'Pida justificar cada decisión.')]
+};
+function estHidro() { try { return ((typeof estacionesHidro !== 'undefined' && estacionesHidro) || []).map(h => String(h.estacion || h.id)); } catch (_) { return []; } }
+/* ---- CSV de niveles reales -> inyecciones NIVEL ---- */
+function csvANiveles(txt, est) {
+  const lin = String(txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean), pts = [];
+  lin.forEach(l => { const p = (/[;\t]/.test(l) ? l.split(/[;\t]/) : l.split(',')).map(s => s.trim()); if (p.length < 2) return; const v = parseFloat(String(p[p.length - 1]).replace(',', '.')); let f = p[0]; let ms = NaN;
+    const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/.exec(f); if (m) ms = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime(); else ms = Date.parse(f.replace(' ', 'T'));
+    if (isFinite(ms) && isFinite(v)) pts.push([ms, v]); });
+  pts.sort((a, b) => a[0] - b[0]); if (pts.length < 2) return [];
+  let sel = pts; if (pts.length > 150) { const paso = pts.length / 150; sel = []; for (let i = 0; i < 150; i++) sel.push(pts[Math.floor(i * paso)]); sel[sel.length - 1] = pts[pts.length - 1]; }
+  const t0 = sel[0][0]; return sel.map(p => ({ t: Math.round((p[0] - t0) / 60000 * 10) / 10, tipo: 'NIVEL', est: est, nivel: p[1], titulo: 'Nivel ' + est, texto: '', esperado: '', limite: 0 }));
+}
+/* ---- Estado y pill ---- */
+let st = null, tSt = 0, pill = null, panel = null, tPoll = null, tLocal = null, ultimo = '', esc = null, vista = 'ctl', cache = {};
+const tAhora = () => { if (!st || !st.activa) return 0; const c = st.corrida; return c.estado === 'CORRIENDO' ? c.t + (Date.now() - tSt) / 60000 * c.velocidad : c.t; };
+async function leer() { try { const r = await api('EX_ESTADO'); if (r.status === 'success') { st = r; tSt = Date.now(); } } catch (_) {} pintarPill(); if (panel) pintarPanel(); }
+function pintarPill() {
+  if (!hab() || !st || !st.activa) { if (pill) { pill.remove(); pill = null; } return; }
+  if (!pill) { pill = el('div', 'position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:9000;background:#7c2d12;color:#fff;border:2px solid #fb923c;border-radius:20px;padding:3px 14px;font-size:13px;font-weight:bold;cursor:pointer'); pill.id = 'ej-pill'; pill.onclick = abrir; document.body.appendChild(pill); }
+  const c = st.corrida; pill.textContent = '🎯 EJERCICIO · ' + hm(tAhora()) + ' · x' + c.velocidad + (c.estado === 'PAUSADO' ? ' · PAUSADO' : '');
+}
+function boton() {
+  if (!hab()) { const x = $('btn-ejercicio'); if (x) x.remove(); if (pill) { pill.remove(); pill = null; } return; }
+  if ($('btn-ejercicio')) return;
+  const ref = $('btn-meteo') || $('btn-medios') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+  const b = el('button', 'margin-right:6px', '🎯 Ejercicio'); b.id = 'btn-ejercicio'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.title = 'Ejercicio con escenario'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref);
+}
+/* ---- Panel ---- */
+function cerrar() { if (panel) { panel.remove(); panel = null; } }
+function abrir() { if (panel) { cerrar(); return; } if (!hab()) return; panel = el('div', 'position:fixed;top:50px;right:12px;width:min(560px,96vw);max-height:84vh;overflow:auto;z-index:9100;background:#0f172a;color:#e2e8f0;border:2px solid #fb923c;border-radius:10px;padding:12px;font-size:13px'); panel.id = 'ej-panel'; document.body.appendChild(panel); leer(); }
+function btn(txt, fn, css) { const b = el('button', 'margin:2px;padding:5px 9px;border-radius:6px;border:1px solid #64748b;background:#1e293b;color:#fff;cursor:pointer;' + (css || ''), txt); b.type = 'button'; b.onclick = fn; return b; }
+function msg(t, ok) { const m = panel && panel.querySelector('.ej-msg'); if (m) { m.textContent = t; m.style.color = ok ? '#86efac' : '#fca5a5'; } }
+async function accion(a, extra, okTxt) { try { const r = await api(a, extra); if (r.status !== 'success') { msg(r.message || 'Error', false); return null; } await leer(); msg(okTxt || 'Listo.', true); return r; } catch (e) { msg('No se pudo conectar.', false); return null; } }
+function pintarPanel() {
+  if (!panel) return; const sv = panel.scrollTop; panel.textContent = '';
+  const cab = el('div', 'display:flex;justify-content:space-between;align-items:center'); cab.appendChild(el('b', 'font-size:15px', '🎯 Ejercicio con escenario')); cab.appendChild(btn('✕', cerrar)); panel.appendChild(cab);
+  panel.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin:2px 0 6px', 'Solo teatros de EJERCICIO. Los avisos llegan como mensajes marcados «EJERCICIO».'));
+  const m = el('div', 'min-height:16px;margin:4px 0'); m.className = 'ej-msg'; panel.appendChild(m);
+  const adm = esAdmin();
+  if (adm) { const tb = el('div', 'margin-bottom:8px'); [['ctl', 'Control'], ['esc', 'Escenarios'], ['inf', 'Informe']].forEach(p => { const b = btn(p[1], () => { vista = p[0]; pintarPanel(); }, vista === p[0] ? 'background:#c2410c' : ''); b.className = 'ej-tab'; tb.appendChild(b); }); panel.appendChild(tb); }
+  if (!adm || vista === 'ctl') vCtl(adm); else if (vista === 'esc') vEsc(); else vInf();
+  panel.scrollTop = sv;
+}
+function vCtl(adm) {
+  const b = el('div'); panel.appendChild(b);
+  if (!st || !st.activa) { b.appendChild(el('div', 'color:#fcd34d;margin:6px 0', 'No hay un ejercicio en curso.')); if (adm) iniciarUI(b); return; }
+  const c = st.corrida; b.appendChild(el('div', 'font-size:22px;font-weight:bold;color:#fb923c', hm(tAhora()) + ' · x' + c.velocidad + (c.estado === 'PAUSADO' ? ' · PAUSADO' : ''))); b.lastChild.id = 'ej-reloj'; b.appendChild(el('div', 'color:#94a3b8', c.nombre + (c.duracion ? ' · duración prevista ' + hm(c.duracion) : '')));
+  if (st.hechas.length) { b.appendChild(el('div', 'margin-top:6px;font-weight:bold', 'Novedades recibidas')); st.hechas.slice().reverse().slice(0, 8).forEach(h => b.appendChild(el('div', 'font-size:12px', hm(h.t) + ' · ' + h.titulo))); }
+  const d = el('div', 'margin-top:8px'); d.appendChild(el('div', 'font-weight:bold', 'Registrar decisión tomada')); const sel = el('select', 'width:100%;margin:3px 0;background:#1e293b;color:#fff'); sel.id = 'ej-dec-ref'; const o0 = el('option', '', 'General (sin novedad puntual)'); o0.value = ''; sel.appendChild(o0); st.hechas.forEach(h => { const o = el('option', '', hm(h.t) + ' · ' + h.titulo); o.value = h.id; sel.appendChild(o); }); d.appendChild(sel);
+  const ta = el('textarea', 'width:100%;height:56px;background:#1e293b;color:#fff;border:1px solid #475569'); ta.id = 'ej-dec-txt'; ta.maxLength = 450; ta.placeholder = '¿Qué decidió y por qué?'; d.appendChild(ta);
+  d.appendChild(btn('Registrar decisión', async () => { const tx = ta.value.trim(); if (!tx) return msg('Escriba la decisión.', false); const r = await accion('EX_DECISION', { texto: tx, ref: sel.value }, 'Decisión registrada.'); if (r) ta.value = ''; })); b.appendChild(d);
+  if (!adm) return;
+  const k = el('div', 'margin-top:10px;border-top:1px solid #334155;padding-top:8px'); k.appendChild(el('b', '', 'Control (Administrador)')); k.appendChild(el('br'));
+  k.appendChild(btn(c.estado === 'CORRIENDO' ? '⏸ Pausar' : '▶ Reanudar', () => accion(c.estado === 'CORRIENDO' ? 'EX_PAUSAR' : 'EX_REANUDAR', {}))).id = 'ej-pausa';
+  const vs = el('select', 'background:#1e293b;color:#fff;margin:2px'); vs.id = 'ej-vel'; VELS.forEach(v => { const o = el('option', '', 'x' + v); o.value = v; if (v === c.velocidad) o.selected = true; vs.appendChild(o); }); vs.onchange = () => accion('EX_VELOCIDAD', { velocidad: Number(vs.value) }); k.appendChild(vs);
+  k.appendChild(btn('⏹ Finalizar', async () => { if (!confirm('¿Finalizar el ejercicio? Ya no se podrán inyectar novedades.')) return; const r = await accion('EX_FINALIZAR', {}, 'Ejercicio finalizado. Vea el Informe.'); if (r) { vista = 'inf'; pintarPanel(); } }, 'background:#7f1d1d')).id = 'ej-fin';
+  const lst = el('div', 'margin-top:6px'); lst.id = 'ej-lista'; k.appendChild(lst); panel.appendChild(k); cargarDetalle(lst);
+}
+async function cargarDetalle(lst) {
+  try { const r = await api('EX_DETALLE'); if (r.status !== 'success' || !panel) return; cache.det = r; lst.textContent = '';
+    const ctl = {}; (r.control || []).forEach(x => { ctl[x] = 1; });
+    r.informe.inyecciones.forEach(x => { const f = el('div', 'border-bottom:1px solid #1e293b;padding:3px 0'); f.className = 'ej-iny';
+      f.appendChild(el('div', 'font-size:12px', (x.hecha ? '✅ ' : '⏳ ') + hm(x.t) + ' · ' + x.tipo + ' · ' + (x.titulo || x.texto.slice(0, 40)) + (x.esperado ? ' → Esperado: ' + x.esperado : '')));
+      if (x.tipo === 'CONTROL' && x.hecha) f.appendChild(el('div', 'font-size:12px;color:#fcd34d', '📝 ' + x.texto));
+      if (!x.hecha) f.appendChild(btn('Inyectar ahora', () => accion('EX_INYECTAR', { ref: x.id }, 'Inyección ejecutada.'), 'font-size:11px')).className = 'ej-iny-btn';
+      else { ['CUMPLIDO', 'PARCIAL', 'NO_CUMPLIDO'].forEach(e => f.appendChild(btn(e === 'CUMPLIDO' ? '✔' : e === 'PARCIAL' ? '≈' : '✖', () => accion('EX_EVALUAR', { ref: x.id, estado: e, nota: '' }, 'Evaluación guardada.'), 'font-size:11px;padding:2px 7px' + (x.evaluacion && x.evaluacion.estado === e ? ';background:#c2410c' : ''))).title = e); }
+      lst.appendChild(f); });
+  } catch (_) {}
+}
+function iniciarUI(b) {
+  const s = el('div', 'margin-top:6px'); s.appendChild(el('div', 'font-weight:bold', 'Iniciar un ejercicio')); const se = el('select', 'width:100%;background:#1e293b;color:#fff;margin:3px 0'); se.id = 'ej-ini-esc'; s.appendChild(se);
+  const vs = el('select', 'background:#1e293b;color:#fff;margin:2px'); vs.id = 'ej-ini-vel'; VELS.forEach(v => { const o = el('option', '', 'Velocidad x' + v); o.value = v; vs.appendChild(o); }); s.appendChild(vs);
+  s.appendChild(btn('▶ Iniciar', () => { if (!se.value) return msg('Primero cree un escenario en la pestaña Escenarios.', false); accion('EX_INICIAR', { escenario: se.value, velocidad: Number(vs.value) }, 'Ejercicio iniciado.'); })).id = 'ej-iniciar'; b.appendChild(s);
+  api('EX_ESCENARIOS').then(r => { if (r.status !== 'success') return; cache.escs = r.escenarios; r.escenarios.forEach(e => { const o = el('option', '', e.nombre + ' (' + e.n + ' iny., ' + hm(e.duracion) + ')'); o.value = e.id; se.appendChild(o); }); if (!r.escenarios.length) se.appendChild(el('option', '', '— no hay escenarios guardados —')); }).catch(() => {});
+}
+/* ---- Escenarios ---- */
+function vEsc() {
+  const b = el('div'); panel.appendChild(b);
+  const pl = el('select', 'width:100%;background:#1e293b;color:#fff;margin:3px 0'); pl.id = 'ej-plant'; const o0 = el('option', '', '— Empezar desde una plantilla (ejemplos ficticios) —'); o0.value = ''; pl.appendChild(o0); Object.keys(PLANT).forEach(k => { const o = el('option', '', k); o.value = k; pl.appendChild(o); }); b.appendChild(pl);
+  const nom = el('input', 'width:100%;background:#1e293b;color:#fff;border:1px solid #475569;margin:3px 0;padding:4px'); nom.id = 'ej-esc-nom'; nom.placeholder = 'Nombre del escenario'; nom.maxLength = 80; b.appendChild(nom);
+  const ta = el('textarea', 'width:100%;height:180px;background:#020617;color:#a7f3d0;border:1px solid #475569;font-family:monospace;font-size:11px'); ta.id = 'ej-esc-json'; ta.placeholder = 'Inyecciones en JSON: [{"t":30,"tipo":"AVISO","titulo":"...","texto":"...","esperado":"...","limite":20,"tema":"ALERTA","prio":"URGENTE"}, {"t":60,"tipo":"NIVEL","est":"Estación","nivel":4.2}, {"t":90,"tipo":"CONTROL","texto":"..."}]  (t = minutos de ejercicio)'; b.appendChild(ta);
+  let idEdit = '';
+  pl.onchange = () => { if (pl.value) { ta.value = JSON.stringify(PLANT[pl.value](), null, 1); nom.value = pl.value.replace(/ \(.*\)/, ''); idEdit = ''; } };
+  const csv = el('details', 'margin:4px 0'); csv.appendChild(el('summary', 'cursor:pointer', '📥 Importar niveles reales (CSV: fecha;nivel)'));
+  const ce = el('select', 'background:#1e293b;color:#fff;margin:3px 0'); ce.id = 'ej-csv-est'; estHidro().forEach(e => { const o = el('option', '', e); o.value = e; ce.appendChild(o); }); csv.appendChild(ce);
+  const ct = el('textarea', 'width:100%;height:80px;background:#020617;color:#e2e8f0;border:1px solid #475569;font-size:11px'); ct.id = 'ej-csv-txt'; ct.placeholder = 'Pegue filas "dd/mm/aaaa hh:mm;nivel" (por ejemplo bajadas del INA). La primera fecha será T+00:00.'; csv.appendChild(ct);
+  csv.appendChild(btn('Convertir a inyecciones', () => { const est = ce.value || prompt('Nombre de la estación'); const r = csvANiveles(ct.value, est); if (!r.length) return msg('No se pudieron leer al menos 2 filas válidas (fecha y nivel).', false); let prev = []; try { prev = JSON.parse(ta.value || '[]'); } catch (_) {} ta.value = JSON.stringify(prev.concat(r), null, 1); msg('Se agregaron ' + r.length + ' puntos de nivel (máx. 150).', true); })).id = 'ej-csv-ok'; b.appendChild(csv);
+  b.appendChild(btn('💾 Guardar escenario', async () => { let iny; try { iny = JSON.parse(ta.value); } catch (_) { return msg('El JSON no es válido.', false); } const r = await accion('EX_ESC_GUARDAR', { id: idEdit, nombre: nom.value, inyecciones: iny }, 'Escenario guardado.'); if (r) { idEdit = r.id; cargarLista(); } })).id = 'ej-esc-guardar';
+  const ls = el('div', 'margin-top:8px'); ls.id = 'ej-esc-lista'; b.appendChild(ls);
+  function cargarLista() { api('EX_ESCENARIOS').then(r => { if (r.status !== 'success' || !panel) return; ls.textContent = ''; ls.appendChild(el('b', '', 'Escenarios guardados')); r.escenarios.forEach(e => { const f = el('div', 'border-bottom:1px solid #1e293b;padding:3px 0'); f.className = 'ej-esc-fila'; f.appendChild(el('span', '', e.nombre + ' · ' + e.n + ' iny. · ' + hm(e.duracion) + ' '));
+    f.appendChild(btn('Editar', async () => { const x = await api('EX_ESC_VER', { id: e.id }); if (x.status === 'success') { ta.value = JSON.stringify(x.escenario.inyecciones, null, 1); nom.value = x.escenario.nombre; idEdit = e.id; } }, 'font-size:11px'));
+    f.appendChild(btn('Borrar', async () => { if (confirm('¿Borrar el escenario «' + e.nombre + '»?')) { await accion('EX_ESC_BORRAR', { id: e.id }, 'Escenario borrado.'); cargarLista(); } }, 'font-size:11px')); ls.appendChild(f); }); if (!r.escenarios.length) ls.appendChild(el('div', 'color:#94a3b8', 'Aún no hay escenarios.')); }).catch(() => {}); }
+  cargarLista();
+}
+/* ---- Informe ---- */
+let corridaSel = '';
+function vInf() {
+  const b = el('div'); panel.appendChild(b); const se = el('select', 'width:100%;background:#1e293b;color:#fff;margin:3px 0'); se.id = 'ej-inf-sel'; b.appendChild(se); const cu = el('div'); cu.id = 'ej-inf-cuerpo'; b.appendChild(cu);
+  api('EX_CORRIDAS').then(r => { if (r.status !== 'success' || !panel) return; if (!r.corridas.length) { cu.appendChild(el('div', 'color:#94a3b8', 'Todavía no hay ejercicios realizados.')); return; } r.corridas.forEach(c => { const o = el('option', '', c.nombre + ' · ' + fh(c.inicio) + ' · ' + c.estado); o.value = c.id; se.appendChild(o); }); if (corridaSel) se.value = corridaSel; se.onchange = () => { corridaSel = se.value; informe(cu, se.value); }; corridaSel = se.value; informe(cu, se.value); }).catch(() => {});
+}
+async function informe(cu, id) {
+  cu.textContent = 'Cargando…'; let r; try { r = await api('EX_INFORME', { id: id }); } catch (_) { return; } if (r.status !== 'success') { cu.textContent = r.message || 'Error'; return; } cache.inf = r; cu.textContent = '';
+  const ins = r.inyecciones, ev = ins.filter(x => x.evaluacion), ok = ev.filter(x => x.evaluacion.estado === 'CUMPLIDO').length;
+  cu.appendChild(el('div', 'font-weight:bold;margin:4px 0', r.corrida.nombre + ' · ' + r.corrida.estado)); cu.appendChild(el('div', 'color:#94a3b8', 'Inyecciones ejecutadas: ' + ins.filter(x => x.hecha).length + '/' + ins.length + ' · Decisiones registradas: ' + r.decisiones.length + ' · Evaluadas: ' + ev.length + (ev.length ? ' (cumplidas ' + ok + ')' : '')));
+  ins.forEach(x => { const f = el('div', 'border-bottom:1px solid #1e293b;padding:3px 0;font-size:12px'); f.className = 'ej-inf-fila'; f.appendChild(el('div', '', hm(x.t) + ' · ' + x.tipo + ' · ' + (x.titulo || '') + ' · ' + (x.hecha ? 'ejecutada' : 'no ejecutada')));
+    const d = []; if (x.lecturas) d.push('Lectura: ' + x.lecturas.leidos + '/' + x.lecturas.total + (x.lecturas.primeraSeg !== null ? ' (primera a los ' + x.lecturas.primeraSeg + ' s)' : '')); if (x.decisiones) d.push('Decisiones: ' + x.decisiones + (x.primeraDecisionMin !== null ? ' (la primera a los ' + x.primeraDecisionMin + ' min)' : '')); if (x.enPlazo !== null) d.push(x.enPlazo ? 'En plazo' : 'Fuera de plazo (' + x.limite + ' min)'); if (x.evaluacion) d.push('Evaluación: ' + x.evaluacion.estado);
+    if (d.length) f.appendChild(el('div', 'color:#cbd5e1', d.join(' · '))); cu.appendChild(f); });
+  const ob = el('textarea', 'width:100%;height:56px;background:#1e293b;color:#fff;border:1px solid #475569;margin-top:6px'); ob.id = 'ej-obs'; ob.maxLength = 450; ob.placeholder = 'Observaciones y lecciones aprendidas'; ob.value = r.observaciones || ''; cu.appendChild(ob);
+  cu.appendChild(btn('Guardar observaciones', () => accion('EX_OBS', { id: id, texto: ob.value }, 'Observaciones guardadas.')));
+  cu.appendChild(btn('📄 Informe PDF', () => pdf(r), 'background:#1d4ed8')).id = 'ej-pdf';
+}
+const latin = s => String(s === null || s === undefined ? '' : s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/→/g, '->').replace(/[^\u0000-ÿ]/g, '?');
+function pdf(r) {
+  if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.');
+  const doc = new window.jspdf.jsPDF(), tn = (window.ARES_TEATRO && window.ARES_TEATRO.nombre) || 'Teatro', c = r.corrida; let y = 16;
+  doc.setFontSize(15); doc.text(latin('Informe posterior al ejercicio'), 14, y); y += 7; doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+  doc.text(latin('Teatro: ' + tn + '  |  Ejercicio: ' + c.nombre + '  |  Escenario: ' + ((r.escenario && r.escenario.nombre) || '') + '  |  Inicio: ' + fh(c.inicio) + (c.fin ? '  |  Fin: ' + fh(c.fin) : '') + '  |  Controlador: ' + c.controlador), 14, y, { maxWidth: 182 }); y += 10;
+  doc.setFontSize(9); doc.text(latin('EJERCICIO: datos simulados. No representa una situacion real.'), 14, y); y += 4;
+  doc.autoTable({ startY: y, head: [['T', 'Tipo', 'Novedad', 'Esperado', 'Lectura', 'Decisiones', 'Evaluacion']].map(h => h.map(latin)), body: r.inyecciones.map(x => [hm(x.t), x.tipo, x.titulo || x.texto, x.esperado, x.lecturas ? x.lecturas.leidos + '/' + x.lecturas.total + (x.lecturas.primeraSeg !== null ? ' (' + x.lecturas.primeraSeg + ' s)' : '') : '-', x.decisiones ? x.decisiones + (x.primeraDecisionMin !== null ? ' (1ra: ' + x.primeraDecisionMin + ' min' + (x.enPlazo === false ? ', fuera de plazo' : '') + ')' : '') : '0', x.evaluacion ? x.evaluacion.estado : '-']).map(f => f.map(latin)), styles: { fontSize: 7.5 }, headStyles: { fillColor: [194, 65, 12] }, margin: { left: 14, right: 14 } }); y = doc.lastAutoTable.finalY + 6;
+  if (r.decisiones.length) { doc.autoTable({ startY: y, head: [['T', 'Actor', 'Ref.', 'Decision']].map(h => h.map(latin)), body: r.decisiones.map(d => [hm(d.t), d.actor, d.ref || 'General', d.texto]).map(f => f.map(latin)), styles: { fontSize: 7.5 }, headStyles: { fillColor: [41, 128, 185] }, margin: { left: 14, right: 14 } }); y = doc.lastAutoTable.finalY + 6; }
+  if (r.observaciones) { if (y > 260) { doc.addPage(); y = 16; } doc.setFontSize(10); doc.setTextColor(0); doc.text(latin('Observaciones'), 14, y); y += 5; doc.setFontSize(9); doc.text(doc.splitTextToSize(latin(r.observaciones), 182), 14, y); }
+  doc.save('Informe_ejercicio_' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+/* ---- Ciclo ---- */
+setInterval(() => { try { const k = hab() ? sesionActiva.email + '|' + ((window.ARES_TEATRO && window.ARES_TEATRO.id) || '') : ''; if (k !== ultimo) { ultimo = k; st = null; cerrar(); if (pill) { pill.remove(); pill = null; } if (k) leer(); } boton(); } catch (_) {} }, 1500);
+setInterval(() => { if (hab() && document.visibilityState !== 'hidden') leer(); }, 20000);
+setInterval(() => { if (pill) pintarPill(); const r = $('ej-reloj'); if (r && st && st.activa) r.textContent = hm(tAhora()) + ' · x' + st.corrida.velocidad + (st.corrida.estado === 'PAUSADO' ? ' · PAUSADO' : ''); }, 5000);
+window.aresEjercicio = { abrir: abrir, cerrar: cerrar, leer: leer, csvANiveles: csvANiveles, plantillas: () => Object.keys(PLANT), plantilla: k => PLANT[k] ? PLANT[k]() : null, estado: () => ({ abierto: !!panel, st: st, pill: !!pill }) };
+})();
+</script>
+<!-- ===== FIN BLOQUE EJERCICIO ===== -->
 
 <!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
