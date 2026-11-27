@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbzLsMONxhQX-_ri-4w6BYz7qOOwwoNWHYoBU-qQvsIE_LsSNza0CuPGSH8Tgw9ntWv7kA/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbwxZKxyC7ZHos8K6oj1DIeznlciOR92Knm3lRKy4xEk4WHNgEu0hdwgnT7UD3Y4ak4CZw/exec";
 
 
 ;
@@ -3956,7 +3956,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Altas y cambios (todo lo valida el servidor; solo el superadministrador puede) ---- */
     const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
+      ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral (locales de votación, fases y novedades)'], ['COMBATE', 'Combate: fuerzas propias y enemigas (solo teatros de EJERCICIO)'], ['SANITARIO', 'Sanidad: hospitales, camas y capacidad'], ['NOTICIAS', 'Noticias en vivo (transmisión de YouTube en ventana flotante)'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['EPIDEMIA', 'Epidemia: simulación por zonas (solo teatros de EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
     async function admin(op, datos) {
       const r = await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: 'ADMIN', op, email, pin: token }, datos)) });
       return r.json();
@@ -9041,6 +9041,97 @@ window.aresPlaneamiento = { abrir: abrir, calcular: calcular, armar: armar, esPe
 })();
 </script>
 <!-- ===== FIN BLOQUE PLANEAMIENTO ===== -->
+<!-- ===== INICIO BLOQUE NOTICIAS ===== -->
+<script>
+/* A.R.E.S.: Noticias en vivo. Modulo NOTICIAS (se habilita por teatro en el Panel de mando).
+   Muestra una transmision en vivo de YouTube en una ventana flotante. No carga nada hasta que se pulsa «Ver».
+   Los canales los carga el Administrador (se guardan en el servidor, por teatro). Se usa youtube-nocookie.com. */
+(function () {
+'use strict';
+const $ = id => document.getElementById(id);
+const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+const habilitado = () => { try { return activa() && ((window.ARES_TEATRO && window.ARES_TEATRO.modulos) || []).map(String).indexOf('NOTICIAS') >= 0; } catch (_) { return false; } };
+const esAdmin = () => { try { return /^administrador$/i.test(String(sesionActiva.rol).trim()); } catch (_) { return false; } };
+async function api(accion, extra) {
+  const r = await (await fetch(COP_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: accion, email: sesionActiva.email, pin: sesionActiva.pin }, extra || {})) })).json();
+  if (r.status !== 'success' && /SESIÓN/.test(r.message || '')) { if (typeof window.cerrarSesionCOP === 'function') window.cerrarSesionCOP(); throw new Error('sesion'); }
+  return r;
+}
+/* Interpreta lo que pega el Administrador: enlace de un video en vivo, enlace de canal (/channel/UC...) o un ID suelto. */
+function interpretar(txt) {
+  let s = String(txt || '').trim(); if (!s) return null;
+  let m = /(?:^|[\/=])(UC[\w-]{22})(?:$|[\/?&#])/.exec(s); if (m) return { t: 'c', id: m[1] };
+  m = /(?:youtu\.be\/|[?&]v=|\/live\/|\/embed\/|\/shorts\/)([\w-]{11})(?:$|[\/?&#])/.exec(s); if (m) return { t: 'v', id: m[1] };
+  if (/^UC[\w-]{22}$/.test(s)) return { t: 'c', id: s };
+  if (/^[\w-]{11}$/.test(s)) return { t: 'v', id: s };
+  return null;
+}
+function urlEmbed(c) {
+  if (!c || !/^[\w-]+$/.test(c.id || '')) return '';
+  const base = 'https://www.youtube-nocookie.com/embed/';
+  return c.t === 'c' ? base + 'live_stream?channel=' + c.id + '&autoplay=1&mute=1&rel=0' : base + c.id + '?autoplay=1&mute=1&rel=0';
+}
+let canales = null, ventana = null, ultimo = '';
+async function cargar() { try { const r = await api('NOT_CANALES'); canales = r.status === 'success' ? r.canales || [] : []; if (r.status !== 'success') canales.error = r.message; } catch (_) { canales = canales || []; } }
+function cerrar() { if (ventana) { ventana.remove(); ventana = null; } }
+function abrir() {
+  if (!habilitado()) return; if (ventana) { cerrar(); return; }
+  const f = el('div', 'position:fixed;right:12px;bottom:70px;width:min(460px,calc(100vw - 24px));height:340px;min-width:260px;min-height:200px;max-width:96vw;max-height:90vh;resize:both;overflow:hidden;z-index:2147483100;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;box-shadow:0 8px 28px #000b;display:flex;flex-direction:column;font:13px sans-serif'); f.id = 'noti-ventana'; ventana = f;
+  const cab = el('div', 'display:flex;gap:6px;align-items:center;padding:5px 8px;background:#1e293b;cursor:move;touch-action:none'); cab.appendChild(el('b', 'flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis', '📺 Noticias en vivo'));
+  const bt = (t, tit, fn, id) => { const b = el('button', 'background:#334155;border:1px solid #475569;color:#fff;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:13px', t); b.type = 'button'; b.title = tit; b.onclick = e => { e.stopPropagation(); fn(); }; if (id) b.id = id; return b; };
+  const cuerpo = el('div', 'flex:1;min-height:0;display:flex;flex-direction:column'); let editor = false, actual = 0;
+  function pintar() {
+    cuerpo.textContent = ''; const lista = canales || [];
+    const barra = el('div', 'display:flex;gap:6px;padding:6px 8px;align-items:center'); cuerpo.appendChild(barra);
+    if (!editor) {
+      if (!lista.length) { cuerpo.appendChild(el('div', 'padding:10px;color:#cbd5e1', canales && canales.error ? canales.error : 'Todavía no hay canales cargados.' + (esAdmin() ? ' Pulse ⚙ para agregar el primero.' : ' Pida al Administrador del teatro que cargue alguno.'))); return; }
+      const s = el('select', 'flex:1;min-width:0;padding:4px;border-radius:4px;background:#0b1220;color:#fff;border:1px solid #475569'); s.id = 'noti-sel'; lista.forEach((c, i) => { const o = el('option', '', c.n); o.value = i; s.appendChild(o); }); s.value = Math.min(actual, lista.length - 1); s.onchange = () => { actual = +s.value; cuerpo.querySelector('.noti-marco').textContent = ''; ponerPrevia(); };
+      const ver = bt('▶ Ver', 'Cargar la transmisión', () => ver_(), 'noti-ver'); ver.style.background = '#15803d'; barra.append(s, ver);
+      cuerpo.appendChild(el('div', 'padding:0 8px 4px;font-size:10.5px;color:#94a3b8', 'La transmisión es de un tercero y no se carga hasta que usted pulsa «Ver». Consume datos. Si no se ve, ese canal no permite incrustarse o no está en vivo.'));
+      const m = el('div', 'flex:1;min-height:0;background:#000;position:relative'); m.className = 'noti-marco'; cuerpo.appendChild(m); ponerPrevia();
+    } else pintarEditor();
+  }
+  function ponerPrevia() { const m = cuerpo.querySelector('.noti-marco'); if (m) { m.textContent = ''; m.appendChild(el('div', 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#64748b;text-align:center;padding:10px', 'Pulse «▶ Ver» para cargar la transmisión.')); } }
+  function ver_() {
+    const c = (canales || [])[actual], m = cuerpo.querySelector('.noti-marco'); if (!c || !m) return; m.textContent = ''; const u = urlEmbed(c); if (!u) return;
+    const i = document.createElement('iframe'); i.src = u; i.title = 'Transmisión: ' + c.n; i.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0'; i.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen'); i.setAttribute('allowfullscreen', ''); i.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); i.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups'); m.appendChild(i);
+  }
+  function pintarEditor() {
+    let borr = (canales || []).map(c => Object.assign({}, c)); const msg = el('div', 'font-size:11.5px;color:#fcd34d;min-height:14px;padding:0 8px');
+    const wrap = el('div', 'flex:1;overflow:auto;padding:4px 8px'); cuerpo.appendChild(wrap);
+    wrap.appendChild(el('div', 'font-size:11.5px;color:#cbd5e1;margin-bottom:6px', 'Canales de este teatro (hasta 10). Pegue el enlace de la transmisión en vivo (…/watch?v=…, …/live/…, youtu.be/…) o el enlace de canal que contiene /channel/UC… Con el enlace de canal se muestra siempre su transmisión actual.'));
+    const lst = el('div'); wrap.appendChild(lst);
+    const dib = () => { lst.textContent = ''; borr.forEach((c, i) => { const r = el('div', 'display:flex;gap:6px;align-items:center;margin:3px 0;padding:3px 6px;background:#1e293b;border-radius:4px'); r.appendChild(el('span', 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', c.n + ' · ' + (c.t === 'c' ? 'canal' : 'video'))); r.appendChild(bt('🗑', 'Quitar', () => { borr.splice(i, 1); dib(); })); lst.appendChild(r); }); if (!borr.length) lst.appendChild(el('div', 'color:#94a3b8', 'Sin canales.')); };
+    dib();
+    const nom = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff'); nom.placeholder = 'Nombre (ej.: canal de noticias)'; nom.maxLength = 40; nom.id = 'noti-nom';
+    const enl = el('input', 'width:100%;box-sizing:border-box;margin-top:4px;padding:5px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff'); enl.placeholder = 'Enlace o ID'; enl.maxLength = 200; enl.id = 'noti-enl';
+    wrap.append(nom, enl);
+    const pie = el('div', 'display:flex;gap:6px;margin-top:6px;flex-wrap:wrap');
+    pie.appendChild(bt('➕ Agregar', 'Agregar a la lista', () => { const n = nom.value.trim().replace(/[<>]/g, '').slice(0, 40), x = interpretar(enl.value); if (!n) { msg.textContent = 'Escriba un nombre.'; return; } if (!x) { msg.textContent = 'No reconozco ese enlace. Use el enlace de un video en vivo o uno de canal con /channel/UC…'; return; } if (borr.length >= 10) { msg.textContent = 'Máximo 10 canales.'; return; } borr.push({ n: n, t: x.t, id: x.id }); nom.value = ''; enl.value = ''; msg.textContent = ''; dib(); }, 'noti-add'));
+    const g = bt('💾 Guardar', 'Guardar la lista en el servidor', async () => { msg.textContent = 'Guardando…'; try { const r = await api('NOT_GUARDAR', { canales: borr }); if (r.status === 'success') { canales = r.canales; editor = false; pintar(); } else msg.textContent = r.message || 'No se pudo guardar.'; } catch (e) { msg.textContent = 'No se pudo guardar: ' + e.message; } }, 'noti-guardar'); g.style.background = '#15803d'; pie.appendChild(g);
+    pie.appendChild(bt('Cancelar', 'Volver sin guardar', () => { editor = false; pintar(); })); wrap.append(pie); cuerpo.appendChild(msg);
+  }
+  const x = bt('✕', 'Cerrar', cerrar); cab.appendChild(bt('⚙', 'Administrar canales (Administrador)', () => { if (!esAdmin()) return; editor = !editor; pintar(); }, 'noti-engr')); if (!esAdmin()) cab.lastChild.style.display = 'none'; cab.appendChild(x);
+  f.append(cab, cuerpo); document.body.appendChild(f);
+  // mover arrastrando la barra superior
+  let dx = 0, dy = 0, mov = false;
+  cab.addEventListener('pointerdown', e => { if (e.target.tagName === 'BUTTON') return; const r = f.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; mov = true; try { cab.setPointerCapture(e.pointerId); } catch (_) {} });
+  cab.addEventListener('pointermove', e => { if (!mov) return; f.style.left = Math.max(0, Math.min(innerWidth - 80, e.clientX - dx)) + 'px'; f.style.top = Math.max(0, Math.min(innerHeight - 40, e.clientY - dy)) + 'px'; f.style.right = 'auto'; f.style.bottom = 'auto'; });
+  cab.addEventListener('pointerup', () => { mov = false; });
+  cuerpo.textContent = 'Cargando…'; cargar().then(() => { if (ventana === f) pintar(); });
+}
+function boton() {
+  if (!habilitado()) { const x = $('btn-noticias'); if (x) x.remove(); cerrar(); return; }
+  if ($('btn-noticias')) return;
+  const ref = $('btn-meteo') || $('btn-medios') || $('btn-mensajes') || document.querySelector('#top-banner .btn-pdf'); if (!ref || !ref.parentNode) return;
+  const b = el('button', 'margin-right:6px', '📺 Noticias'); b.id = 'btn-noticias'; b.className = 'btn-pdf solo-autenticado'; b.type = 'button'; b.title = 'Noticias en vivo'; b.onclick = abrir; ref.parentNode.insertBefore(b, ref);
+}
+setInterval(() => { try { const k = habilitado() ? (sesionActiva.email + '|' + ((window.ARES_TEATRO && window.ARES_TEATRO.id) || '')) : ''; if (k !== ultimo) { ultimo = k; canales = null; cerrar(); const x = $('btn-noticias'); if (x) x.remove(); } boton(); } catch (_) {} }, 1500);
+window.aresNoticias = { abrir: abrir, cerrar: cerrar, interpretar: interpretar, urlEmbed: urlEmbed, estado: () => ({ abierta: !!ventana, canales: (canales || []).slice() }) };
+})();
+</script>
+<!-- ===== FIN BLOQUE NOTICIAS ===== -->
 
 <!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
@@ -9056,7 +9147,7 @@ window.aresPlaneamiento = { abrir: abrir, calcular: calcular, armar: armar, esPe
   const sesion = () => { try { return sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado ? sesionActiva : null; } catch (_) { return null; } };
   const esAdmin = () => { const s = sesion(); return !!s && /^administrador$/i.test(String(s.rol).trim()) && !window.__super; };
   const MODS = [['HIDRICO', 'Ríos y niveles (PDF de Prefectura, INA)'], ['METEO', 'Pronóstico y radar de lluvia'], ['INCENDIOS', 'Focos de calor (NASA)'], ['SISMOS', 'Sismos en vivo (USGS)'],
-    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral'], ['SANITARIO', 'Sanidad: registro de hospitales'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
+    ['TORMENTAS', 'Potencial de tormentas eléctricas'], ['ZONAS', 'Zonas y eventos cargados a mano'], ['JURIS_NEA', 'Departamentos de Chaco y Corrientes'], ['ELECTORAL', 'Operativo electoral'], ['SANITARIO', 'Sanidad: registro de hospitales'], ['NOTICIAS', 'Noticias en vivo (transmisión de YouTube en ventana flotante)'], ['INSTALACIONES', 'Instalaciones de emergencia: comisarías, bomberos y cuarteles con personal, vehículos y armamento; despacho de medios al mapa (teatros REAL y EJERCICIO)'], ['FUEGO', 'Incendios forestales: pronóstico de propagación, brigadas, aeronaves y bitácora']];
   let datos = null, panel = null, esJefe = false, probado = '', ocupado = false;
 
   async function api(op, extra) {
