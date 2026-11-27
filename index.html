@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyX1gbHC0RwmjI1fwd1fef_-W6LR8ZvIWPDrHpjwJWs15ClySzGJ7bHdc71nLXU1bBWfw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzLsMONxhQX-_ri-4w6BYz7qOOwwoNWHYoBU-qQvsIE_LsSNza0CuPGSH8Tgw9ntWv7kA/exec";
 
 
 ;
@@ -5383,6 +5383,48 @@ window.addEventListener('DOMContentLoaded', () => {
   function estiloSel(s) { s.style.cssText = 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:4px;font-size:12px;max-width:100%'; return s; }
   function seccion(titulo, abierta) { const d = el('details', 'border:1px solid #334155;border-radius:6px;padding:6px 8px;margin:8px 0'); if (abierta) d.open = true; d.appendChild(el('summary', 'cursor:pointer;font-weight:bold;color:#38bdf8', titulo)); return d; }
   function check(txt, on, cb) { const l = el('label', 'display:flex;gap:6px;align-items:center;margin:4px 0;cursor:pointer'), c = el('input'); c.type = 'checkbox'; c.checked = !!on; c.onchange = () => cb(c.checked); l.append(c, document.createTextNode(txt)); return l; }
+  let zonaRios = null, serieRios = null;
+  const SVGNS = 'http://www.w3.org/2000/svg', sv = (t, at) => { const e = document.createElementNS(SVGNS, t); Object.keys(at || {}).forEach(k => e.setAttribute(k, at[k])); return e; };
+  const f2 = n => (Math.round(n * 100) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function cambioRio(pts, horas) {   // variacion respecto del punto mas cercano a "hace N horas" (o el mas viejo disponible)
+    if (!pts || pts.length < 2) return null; const fin = pts[pts.length - 1], t0 = fin[0] - horas * 3600e3; let ref = pts[0]; for (let i = 0; i < pts.length; i++) { if (pts[i][0] <= t0) ref = pts[i]; else break; }
+    return { d: fin[1] - ref[1], h: Math.round((fin[0] - ref[0]) / 3600e3) };
+  }
+  function graficoRio(pts, est, horas) {
+    const W = 300, H = 56, x0 = 4, x1 = W - 4, ahora = serieRios && serieRios.hasta || Date.now(), t0 = ahora - horas * 3600e3, svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: H, role: 'img' }); svg.style.cssText = 'display:block;background:#0b1220;border-radius:4px';
+    const vals = pts.map(p => p[1]); let mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    const umb = []; [['alerta', '#f59e0b'], ['evacuacion', '#ef4444']].forEach(([k, c]) => { const u = Number(est[k]); if (isFinite(u) && u > mn - 0.6 && u < mx + 1.2) { umb.push([u, c]); mn = Math.min(mn, u); mx = Math.max(mx, u); } });
+    if (mx - mn < 0.3) { const m = (mx + mn) / 2; mn = m - 0.15; mx = m + 0.15; }
+    const X = t => x0 + (x1 - x0) * Math.min(1, Math.max(0, (t - t0) / (horas * 3600e3))), Y = v => 4 + (H - 8) * (1 - (v - mn) / (mx - mn));
+    umb.forEach(([u, c]) => svg.appendChild(sv('line', { x1: x0, x2: x1, y1: Y(u), y2: Y(u), stroke: c, 'stroke-width': 1, 'stroke-dasharray': '4 3', opacity: .8 })));
+    for (let d = 1; d < horas / 24; d++) { const xx = X(ahora - d * 86400e3); svg.appendChild(sv('line', { x1: xx, x2: xx, y1: 2, y2: H - 2, stroke: '#1e293b', 'stroke-width': 1 })); }
+    const dp = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '), col = est.col || '#38bdf8';
+    svg.appendChild(sv('path', { d: dp, fill: 'none', stroke: col, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    const u = pts[pts.length - 1]; svg.appendChild(sv('circle', { cx: X(u[0]), cy: Y(u[1]), r: 3, fill: col }));
+    return svg;
+  }
+  function pintarRios() {
+    if (!zonaRios) return; [...zonaRios.children].forEach(n => { if (n.tagName !== 'SUMMARY') n.remove(); }); const cuerpo = zonaRios, series = (serieRios && serieRios.series) || {}, hs = (serieRios && serieRios.horas) || 72, est = (typeof estacionesHidro !== 'undefined' && estacionesHidro) || [];
+    if (!est.length) { cuerpo.appendChild(el('div', 'font-size:12px;color:#94a3b8;margin:4px 0', 'Este teatro no tiene estaciones hidrométricas cargadas.')); return; }
+    let hay = 0;
+    est.forEach(s => {
+      const pts = series[s.id] || series[s.estacion] || [], fila = el('div', 'margin:6px 0;padding:6px;border:1px solid #334155;border-radius:6px'), e = (typeof estadoHidro === 'function') ? estadoHidro(s) : {};
+      const nivel = isFinite(Number(s.actual)) ? f2(Number(s.actual)) + ' m' : 's/d'; const c = cambioRio(pts, 24);
+      const cab = el('div', 'display:flex;gap:6px;align-items:baseline'); cab.appendChild(el('b', 'flex:1;font-size:12.5px', s.estacion + ' · ' + s.rio)); cab.appendChild(el('span', 'font-size:12.5px', nivel)); fila.appendChild(cab);
+      if (pts.length >= 2) {
+        hay++; const sube = c.d > 0.02, baja = c.d < -0.02, col = e.txt && /EVAC/i.test(e.txt) ? '#ef4444' : e.txt && /ALERTA/i.test(e.txt) ? '#f59e0b' : '#38bdf8';
+        const g = graficoRio(pts, { alerta: s.alerta, evacuacion: s.evacuacion, col: col }, hs); g.setAttribute('aria-label', 'Nivel de ' + s.estacion + ' en las últimas ' + hs + ' horas'); fila.appendChild(g);
+        const p = el('div', 'font-size:11.5px;margin-top:3px;color:' + (sube ? '#fca5a5' : baja ? '#86efac' : '#cbd5e1'), (sube ? '▲ Sube ' : baja ? '▼ Baja ' : '═ Estable ') + (sube || baja ? f2(Math.abs(c.d)) + ' m ' : '') + 'en ' + c.h + ' h' + (c.h < 20 ? ' (historial corto)' : '') + (e.txt ? ' · ' + e.txt : '')); p.className = 'met-rio-tend'; fila.appendChild(p);
+      } else fila.appendChild(el('div', 'font-size:11.5px;color:#94a3b8;margin-top:3px', 'Sin historial suficiente todavía: se arma solo con cada actualización de niveles.' + (e.txt ? ' · ' + e.txt : '')));
+      cuerpo.appendChild(fila);
+    });
+    cuerpo.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Línea punteada amarilla = nivel de alerta; roja = evacuación. El historial se guarda en cada actualización de niveles (PDF de Prefectura, INA o carga manual): refleja esos datos, no mediciones continuas.'));
+    if (!hay && est.length) cuerpo.appendChild(el('div', 'font-size:11px;color:#fbbf24;margin-top:4px', 'Todavía no hay suficientes registros. Aparecen con las próximas actualizaciones.'));
+  }
+  async function cargarSerieRios() {
+    try { const r = await api('MET_HIDRO_SERIE', { horas: 72 }); if (r.status === 'success') { r.hasta = Date.now(); serieRios = r; } } catch (_) { /* sin red: se muestra lo que haya */ }
+    pintarRios();
+  }
   let zonaPartes = null, zonaMetar = null;
   function abrir() {
     if (panel) { panel.remove(); panel = null; return; }
@@ -5393,6 +5435,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const bpd = el('button', 'margin:6px 0 2px;width:100%;background:#1d4ed8;border:1px solid #3b82f6;color:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;font-weight:bold', '📄 Parte del día (PDF)'); bpd.type = 'button'; bpd.id = 'met-parte-dia'; bpd.title = 'Una página con avisos del SMN, partes del teatro, ríos y METAR de este momento'; bpd.onclick = () => parteDelDia(bpd); panel.appendChild(bpd);
     zonaPartes = el('div'); panel.appendChild(zonaPartes);
     zonaAv = seccion('⚠️ Avisos oficiales del SMN', true); panel.appendChild(zonaAv); pintarAvisos();
+    zonaRios = seccion('🌊 Tendencia de ríos (72 h)', true); panel.appendChild(zonaRios); cargarSerieRios().catch(() => null);
 
     const sc = seccion('🗺 Capas del mapa', true);
     sc.appendChild(check('🌦 Alertas por sector (partes vigentes)', pref.alertas, v => { pref.alertas = v; guardarPref(); dibujarAlertas(); }));
@@ -5581,11 +5624,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   let iniciado = false, ultimoTeatro = '';
   setInterval(() => {
-    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; avisos = null; capaAv = quitar(capaAv); grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
+    if (!activa()) { if ($('btn-meteo')) boton(); if (panel) { panel.remove(); panel = null; } iniciado = false; partes = null; metar = null; avisos = null; serieRios = null; capaAv = quitar(capaAv); grid = null; capaZonas = quitar(capaZonas); borrador = null; if (esperandoClic) esperandoClic(); return; }
     if (!boton()) return;
     const tid = (function () { try { return sesionActiva.teatro || ''; } catch (_) { return ''; } })();
     if (!iniciado || tid !== ultimoTeatro) {
-      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; avisos = null; capaAv = quitar(capaAv); grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
+      iniciado = true; ultimoTeatro = tid; partes = null; metar = null; avisos = null; serieRios = null; capaAv = quitar(capaAv); grid = null; capaMetar = quitar(capaMetar); capaGfs = quitar(capaGfs); capaAlert = quitar(capaAlert); capaZonas = quitar(capaZonas); borrador = null; leerPref();
       cargarPartes().catch(() => { iniciado = false; }); cargarAvisos().catch(() => null);
       if (pref.metar) cargarMetar().catch(() => null);
       if (pref.gfs !== 'ninguna') aplicarGfs();
@@ -5593,7 +5636,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); cargarAvisos(true).catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
+  window.aresMeteo = { serieRios: () => serieRios, parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
