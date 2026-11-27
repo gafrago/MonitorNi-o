@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbz7cnGEIReagbh6xh-f2dptoXCY843tVSlURDHcUeH5rZHzSs0pXb2e1vQlwnbF6_4yjQ/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbzyXWiw7C-Xf4wcmtul7Cfwqlst4OclKzUZijjSq66kv8ssJkXYG3BAS-ZYpHXIzAEz/exec";
 
 
 ;
@@ -4631,6 +4631,20 @@ window.addEventListener('DOMContentLoaded', () => {
         ab.onclick = () => { cerrar(); if (typeof window.abrirInformeMeteo === 'function') window.abrirInformeMeteo({ sectores: m.adjunto.sectores, general: m.adjunto.general }); }; tarj.appendChild(ab);
       }
       if (!m.propio && m.de !== 'sistema@ares') { const rb = el('button', 'margin-left:auto;background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 9px;cursor:pointer', '↩ Responder'); rb.type = 'button'; rb.onclick = () => { respondiendo = m; dibujar(caja, filtro); const t = $('msg-texto'); if (t) t.focus(); }; pie.appendChild(rb); }
+      if (m.acuse && m.total !== 0) {
+        const ab = el('button', 'background:none;border:1px solid #475569;color:#cbd5e1;border-radius:4px;padding:2px 9px;cursor:pointer', '👁 Quién lo vio'); ab.type = 'button'; ab.className = 'msg-acuse-btn'; pie.appendChild(ab);
+        const caja2 = el('div', 'margin-top:6px;padding:6px 8px;background:#0b1220;border:1px solid #334155;border-radius:6px;font-size:12px;display:none'); caja2.className = 'msg-acuse-caja';
+        const pintarAcuse = r => {
+          caja2.textContent = ''; caja2.appendChild(el('div', 'font-weight:bold;margin-bottom:3px', 'Leído por ' + r.leidos + ' de ' + r.total));
+          r.lista.forEach(x => { const f = el('div', 'display:flex;gap:6px;color:' + (x.leido ? '#86efac' : '#fcd34d'), (x.leido ? '✔ ' : '⏳ ') + x.nombre + ' (' + x.rol + ')' + (x.leido && x.ts > 1 ? ' · ' + fecha(x.ts) : ' · sin leer')); f.className = 'msg-acuse-fila'; caja2.appendChild(f); });
+          const falta = r.total - r.leidos;
+          if (falta > 0) { const rb = el('button', 'margin-top:6px;background:#78350f;border:1px solid #f59e0b;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer', '🔔 Recordar a los que faltan (' + falta + ')'); rb.type = 'button'; rb.className = 'msg-recordar'; const nota = el('div', 'margin-top:4px;color:#fcd34d'); nota.className = 'msg-acuse-nota';
+            rb.onclick = async () => { rb.disabled = true; try { const q = await api('MSG_RECORDAR', { id: m.id }); nota.textContent = q.status === 'success' ? 'Recordatorio enviado a ' + q.enviados + '.' : (q.message || 'No se pudo enviar.'); } catch (e) { nota.textContent = 'No se pudo enviar: ' + e.message; } };
+            caja2.append(rb, nota); }
+        };
+        ab.onclick = async () => { if (caja2.style.display === 'block') { caja2.style.display = 'none'; return; } caja2.style.display = 'block'; caja2.textContent = 'Consultando…'; try { const r = await api('MSG_ACUSE', { id: m.id }); if (r.status === 'success') pintarAcuse(r); else caja2.textContent = r.message || 'No se pudo consultar.'; } catch (e) { caja2.textContent = 'No se pudo consultar: ' + e.message; } };
+        tarj.appendChild(pie); tarj.appendChild(caja2); lista.appendChild(tarj); return;
+      }
       tarj.appendChild(pie); lista.appendChild(tarj);
     });
     compositor(caja);
@@ -5478,6 +5492,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:18px;cursor:pointer', '✕'); x.onclick = abrir; cab.appendChild(x); panel.appendChild(cab);
     panel.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-top:2px', 'Capas y datos de fuentes abiertas. No reemplazan los productos oficiales del SMN.'));
     const bpd = el('button', 'margin:6px 0 2px;width:100%;background:#1d4ed8;border:1px solid #3b82f6;color:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;font-weight:bold', '📄 Parte del día (PDF)'); bpd.type = 'button'; bpd.id = 'met-parte-dia'; bpd.title = 'Una página con avisos del SMN, partes del teatro, ríos y METAR de este momento'; bpd.onclick = () => parteDelDia(bpd); panel.appendChild(bpd);
+    const bsa = el('button', 'margin:2px 0 6px;width:100%;background:#334155;border:1px solid #64748b;color:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px', '🖥 Sala de situación (pantalla completa)'); bsa.type = 'button'; bsa.id = 'met-sala'; bsa.title = 'Rota sola entre resumen, avisos, ríos, partes y mapa. Para proyector o televisor.'; bsa.onclick = () => { if (window.aresSala) window.aresSala.abrir(); }; panel.appendChild(bsa);
     zonaPartes = el('div'); panel.appendChild(zonaPartes);
     zonaAv = seccion('⚠️ Avisos oficiales del SMN', true); panel.appendChild(zonaAv); pintarAvisos();
     zonaRios = seccion('🌊 Tendencia de ríos (72 h)', true); panel.appendChild(zonaRios); cargarSerieRios().catch(() => null);
@@ -5682,7 +5697,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, 2000);
   setInterval(() => { if (activa() && iniciado) { cargarPartes().catch(() => null); cargarAvisos(true).catch(() => null); if (pref.metar) cargarMetar(true).catch(() => null); } }, 180000);
-  window.aresMeteo = { cuencas: f => cargarCuencas(f), serieRios: () => serieRios, parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
+  window.aresMeteo = { refrescar: () => Promise.all([cargarPartes().catch(() => null), cargarAvisos(true).catch(() => null), cargarSerieRios().catch(() => null)]), cuencas: f => cargarCuencas(f), serieRios: () => serieRios, parteDelDia: parteDelDia, avisos: () => ((avisos && avisos.avisos) || []).slice(), abrir: abrir, recargar: cargarPartes, zonas: zonas, partes: () => ((partes && partes.partes) || []).slice(), selectorDestino: selectorDestino, estiloSel: estiloSel };
 })();
 </script>
 <!-- ===== FIN BLOQUE METEOROLOGIA ===== -->
@@ -9178,6 +9193,98 @@ window.aresNoticias = { abrir: abrir, cerrar: cerrar, interpretar: interpretar, 
 })();
 </script>
 <!-- ===== FIN BLOQUE NOTICIAS ===== -->
+<!-- ===== INICIO BLOQUE SALA ===== -->
+<script>
+/* A.R.E.S.: Sala de situacion. Pantalla completa para proyector o televisor que rota sola entre: resumen, avisos del SMN, rios, partes del meteorologo y mapa.
+   Solo muestra lo que ya tiene la aplicacion (no consulta nada propio). Se abre desde Meteo («Sala de situacion») o con aresSala.abrir(). Esc la cierra. */
+(function () {
+'use strict';
+const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+const activa = () => { try { return !!(sesionActiva && sesionActiva.autenticado && !sesionActiva.invitado); } catch (_) { return false; } };
+const M = () => window.aresMeteo || {};
+const COL_AV = { ROJO: '#dc2626', NARANJA: '#f97316', AMARILLO: '#eab308', INFO: '#38bdf8' }, TXT_AV = { ROJO: 'ROJO · extremo', NARANJA: 'NARANJA · severo', AMARILLO: 'AMARILLO · moderado', INFO: 'Informativo' };
+const SEV = { INFO: ['Informativo', '#2563eb'], PRECAUCION: ['Precaución', '#d97706'], ALERTA: ['Alerta', '#ea580c'], CRITICA: ['Crítica', '#b91c1c'] };
+const hhmm = ms => { try { return new Date(ms).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+const fh = ms => { try { return new Date(ms).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+const f2 = n => (Math.round(n * 100) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rec = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+let f = null, cab = null, cuerpo = null, pie = null, idx = 0, pausa = false, seg = 20, tSlide = null, tReloj = null, tRef = null, ultAct = 0, wl = null, onKey = null, diapo = [];
+function datos() {
+  const m = M(), avisos = (m.avisos && m.avisos()) || [], partes = (m.partes && m.partes()) || [], sr = m.serieRios && m.serieRios(), proy = (sr && sr.proy) || {};
+  const est = (typeof estacionesHidro !== 'undefined' && estacionesHidro) || [], rios = est.map(h => { const e = (typeof estadoHidro === 'function') ? estadoHidro(h) : { txt: '', color: '#64748b', nivel: 0 }; const p = proy[h.id] || proy[h.estacion]; const crece = !!(p && p.tasaDia >= 0.1 && ((p.etaEvacH !== null && p.etaEvacH <= 48) || (p.etaAlertaH !== null && p.etaAlertaH <= 48))); return { h: h, e: e, p: p, crece: crece }; })
+    .sort((a, b) => (b.e.nivel || 0) - (a.e.nivel || 0) || String(a.h.estacion).localeCompare(String(b.h.estacion)));
+  return { avisos: avisos, partes: partes, rios: rios };
+}
+function tile(c, n, txt, col) { const t = el('div', 'flex:1;min-width:200px;background:#0f172a;border:2px solid ' + col + ';border-radius:12px;padding:18px 20px;text-align:center'); t.appendChild(el('div', 'font-size:clamp(40px,7vw,96px);font-weight:bold;color:' + col, String(n))); t.appendChild(el('div', 'font-size:clamp(14px,2vw,26px);color:#cbd5e1', txt)); c.appendChild(t); }
+const D = {
+  resumen: c => { const d = datos(), graves = d.avisos.filter(a => a.nivel === 'ROJO' || a.nivel === 'NARANJA').length, pg = d.partes.filter(p => p.sev === 'ALERTA' || p.sev === 'CRITICA').length, rA = d.rios.filter(r => r.e.nivel >= 2).length, cr = d.rios.filter(r => r.crece).length;
+    const g = el('div', 'display:flex;flex-wrap:wrap;gap:16px;align-items:stretch'); g.id = 'sala-tiles';
+    tile(g, d.avisos.length, 'Avisos del SMN en la zona' + (graves ? ' (' + graves + ' naranja/roja)' : ''), graves ? '#f97316' : '#38bdf8');
+    tile(g, d.partes.length, 'Partes del meteorólogo vigentes' + (pg ? ' (' + pg + ' alerta/crítica)' : ''), pg ? '#ea580c' : '#38bdf8');
+    tile(g, rA, 'Ríos en alerta o evacuación', rA ? '#dc2626' : '#16a34a');
+    tile(g, cr, 'Ríos con crecida estimada en 48 h', cr ? '#f59e0b' : '#16a34a'); c.appendChild(g); },
+  avisos: c => { const d = datos(); if (!d.avisos.length) { c.appendChild(el('div', 'font-size:clamp(20px,3vw,40px);color:#86efac', 'Sin avisos vigentes del SMN sobre la zona del teatro.')); return; }
+    d.avisos.slice(0, 5).forEach(a => { const b = el('div', 'border-left:10px solid ' + (COL_AV[a.nivel] || '#38bdf8') + ';background:#0f172a;border-radius:0 10px 10px 0;padding:12px 18px;margin-bottom:14px'); b.className = 'sala-aviso';
+      b.appendChild(el('div', 'font-size:clamp(18px,2.6vw,34px);font-weight:bold;color:' + (COL_AV[a.nivel] || '#38bdf8'), (TXT_AV[a.nivel] || a.nivel) + ' · ' + (a.evento || ''))); b.appendChild(el('div', 'font-size:clamp(16px,2.2vw,28px)', rec(a.titulo, 160)));
+      if (a.hasta) b.appendChild(el('div', 'font-size:clamp(13px,1.6vw,20px);color:#94a3b8', 'Vigente hasta ' + fh(a.hasta))); c.appendChild(b); });
+    if (d.avisos.length > 5) c.appendChild(el('div', 'font-size:clamp(14px,1.8vw,22px);color:#94a3b8', '… y ' + (d.avisos.length - 5) + ' más'));
+  },
+  rios: c => { const d = datos(); if (!d.rios.length) { c.appendChild(el('div', 'font-size:clamp(20px,3vw,40px);color:#94a3b8', 'Este teatro no tiene estaciones hidrométricas cargadas.')); return; }
+    const t = el('table', 'width:100%;border-collapse:collapse;font-size:clamp(16px,2.3vw,30px)'); const th = el('tr'); ['Estación', 'Nivel', 'Estado', '', 'Estimación'].forEach(x => th.appendChild(el('th', 'text-align:left;color:#94a3b8;padding:6px 10px;border-bottom:2px solid #334155', x))); t.appendChild(th);
+    d.rios.slice(0, 10).forEach(r => { const tr = el('tr', 'border-bottom:1px solid #1e293b'); tr.className = 'sala-rio'; tr.appendChild(el('td', 'padding:8px 10px', r.h.estacion + (r.h.rio ? ' · ' + r.h.rio : ''))); tr.appendChild(el('td', 'padding:8px 10px;font-weight:bold', isFinite(Number(r.h.actual)) ? f2(Number(r.h.actual)) + ' m' : 's/d'));
+      const e = el('td', 'padding:8px 10px'); e.appendChild(el('span', 'background:' + r.e.color + ';color:#fff;border-radius:6px;padding:2px 10px', r.e.txt)); tr.appendChild(e); tr.appendChild(el('td', 'padding:8px 10px', r.h.tendencia || ''));
+      tr.appendChild(el('td', 'padding:8px 10px;color:#fcd34d;font-size:.8em', r.crece ? '⏳ ' + (r.p.etaEvacH !== null && r.p.etaEvacH <= 48 ? 'evacuación' : 'alerta') + ' en ~' + Math.round(r.p.etaEvacH !== null && r.p.etaEvacH <= 48 ? r.p.etaEvacH : r.p.etaAlertaH) + ' h' : '')); t.appendChild(tr); });
+    c.appendChild(t); if (d.rios.length > 10) c.appendChild(el('div', 'color:#94a3b8;margin-top:8px', '… y ' + (d.rios.length - 10) + ' estaciones más')); },
+  partes: c => { const d = datos(); if (!d.partes.length) { c.appendChild(el('div', 'font-size:clamp(20px,3vw,40px);color:#86efac', 'No hay partes del meteorólogo vigentes.')); return; }
+    d.partes.slice(0, 5).forEach(p => { const col = (SEV[p.sev] || SEV.INFO)[1], b = el('div', 'border-left:10px solid ' + col + ';background:#0f172a;border-radius:0 10px 10px 0;padding:12px 18px;margin-bottom:14px'); b.className = 'sala-parte';
+      b.appendChild(el('div', 'font-size:clamp(18px,2.6vw,34px);font-weight:bold', (p.titulo || '') + ' · ' + (SEV[p.sev] || SEV.INFO)[0])); b.appendChild(el('div', 'font-size:clamp(13px,1.6vw,20px);color:#94a3b8', (p.sector === 'TODOS' ? 'Todos los sectores' : p.sector === 'PERSONAS' ? 'Personas elegidas' : 'Sector ' + p.sector) + ' · hasta ' + fh(p.vence)));
+      b.appendChild(el('div', 'font-size:clamp(15px,2vw,26px);white-space:pre-wrap;margin-top:4px', rec(p.texto, 280))); c.appendChild(b); }); },
+  mapa: () => {}
+};
+function armar() {
+  const d = [['Resumen', 'resumen'], ['Avisos del SMN', 'avisos'], ['Ríos', 'rios'], ['Partes del meteorólogo', 'partes']];
+  let hayMapa = false; try { hayMapa = !!(typeof mapTactico !== 'undefined' && mapTactico); } catch (_) {} if (hayMapa) d.push(['Mapa', 'mapa']);
+  return d;
+}
+function pintar() {
+  if (!f) return; if (idx >= diapo.length) idx = 0; if (idx < 0) idx = diapo.length - 1; const [tit, k] = diapo[idx], mapa = k === 'mapa';
+  f.style.background = mapa ? 'transparent' : '#020617'; f.style.pointerEvents = mapa ? 'none' : 'auto'; cab.style.background = mapa ? 'rgba(2,6,23,.88)' : 'transparent'; pie.style.background = mapa ? 'rgba(2,6,23,.88)' : 'transparent'; cab.style.pointerEvents = 'auto'; pie.style.pointerEvents = 'auto';
+  cuerpo.textContent = ''; cuerpo.style.display = mapa ? 'none' : 'block'; if (!mapa) { cuerpo.appendChild(el('div', 'font-size:clamp(20px,3.4vw,46px);font-weight:bold;color:#38bdf8;margin-bottom:18px', tit)); D[k](cuerpo); }
+  else { try { if (typeof cambiarPestana === 'function') cambiarPestana('tactica'); if (typeof mapTactico !== 'undefined' && mapTactico && mapTactico.invalidateSize) setTimeout(() => mapTactico.invalidateSize(), 150); } catch (_) {} }
+  pie.querySelectorAll('.sala-punto').forEach((p, i) => { p.style.background = i === idx ? '#38bdf8' : '#475569'; }); const ac = pie.querySelector('.sala-act'); if (ac) ac.textContent = ultAct ? 'Datos de ' + hhmm(ultAct) : '';
+}
+function ciclo() { clearInterval(tSlide); tSlide = setInterval(() => { if (!pausa) { idx++; pintar(); } }, seg * 1000); }
+async function refrescar() { try { if (M().refrescar) await M().refrescar(); } catch (_) { /* se muestra lo que haya */ } ultAct = Date.now(); pintar(); }
+function cerrar() {
+  clearInterval(tSlide); clearInterval(tReloj); clearInterval(tRef); if (onKey) document.removeEventListener('keydown', onKey); onKey = null;
+  try { if (wl) wl.release(); } catch (_) {} wl = null; try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (_) {}
+  if (f) f.remove(); f = null; window.__salaAbierta = false;
+}
+function abrir() {
+  if (!activa()) return; if (f) { cerrar(); return; } diapo = armar(); idx = 0; pausa = false; window.__salaAbierta = true;
+  f = el('div', 'position:fixed;inset:0;z-index:2147483400;background:#020617;color:#e2e8f0;font-family:sans-serif;display:flex;flex-direction:column'); f.id = 'sala-situacion';
+  cab = el('div', 'display:flex;align-items:center;gap:16px;padding:12px 24px'); const tn = (() => { try { return (window.ARES_TEATRO && window.ARES_TEATRO.nombre) || ''; } catch (_) { return ''; } })();
+  cab.appendChild(el('b', 'font-size:clamp(18px,2.4vw,32px);letter-spacing:.06em', 'A.R.E.S. C4I · SALA DE SITUACIÓN')); cab.appendChild(el('span', 'flex:1;font-size:clamp(14px,1.8vw,24px);color:#94a3b8', tn));
+  const rel = el('span', 'font-size:clamp(18px,2.6vw,36px);font-variant-numeric:tabular-nums'); rel.id = 'sala-reloj'; cab.appendChild(rel);
+  const tic = () => { const n = new Date(); rel.textContent = n.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + '  ' + n.toLocaleTimeString('es-AR'); }; tic(); tReloj = setInterval(tic, 1000);
+  cuerpo = el('div', 'flex:1;overflow:hidden;padding:12px 32px'); cuerpo.id = 'sala-cuerpo';
+  pie = el('div', 'display:flex;align-items:center;gap:10px;padding:10px 24px;font-size:13px;color:#94a3b8;flex-wrap:wrap');
+  const bt = (t, tit, fn, id) => { const b = el('button', 'background:#1e293b;border:1px solid #475569;color:#e2e8f0;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:15px', t); b.type = 'button'; b.title = tit; b.onclick = fn; if (id) b.id = id; return b; };
+  const pp = bt('⏸', 'Pausar o seguir', () => { pausa = !pausa; pp.textContent = pausa ? '▶' : '⏸'; }, 'sala-pausa');
+  pie.append(bt('◀', 'Anterior', () => { idx--; pintar(); ciclo(); }, 'sala-ant'), pp, bt('▶', 'Siguiente', () => { idx++; pintar(); ciclo(); }, 'sala-sig'));
+  const sel = el('select', 'background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:4px'); sel.id = 'sala-seg'; [10, 20, 30, 60].forEach(s => { const o = el('option', '', 'cada ' + s + ' s'); o.value = s; sel.appendChild(o); }); sel.value = String(seg); sel.onchange = () => { seg = +sel.value; ciclo(); }; pie.appendChild(sel);
+  diapo.forEach((_, i) => { const p = el('span', 'width:12px;height:12px;border-radius:50%;background:#475569;display:inline-block;cursor:pointer'); p.className = 'sala-punto'; p.onclick = () => { idx = i; pintar(); ciclo(); }; pie.appendChild(p); });
+  pie.appendChild(el('span', 'flex:1;min-width:200px;font-size:11.5px', 'Apoyo a la decisión con datos de fuentes abiertas. No reemplaza los productos oficiales del SMN, la ANA ni el INA.')); const ac = el('span', '', ''); ac.className = 'sala-act'; pie.appendChild(ac); pie.appendChild(bt('✕ Salir', 'Cerrar (Esc)', cerrar, 'sala-salir'));
+  f.append(cab, cuerpo, pie); document.body.appendChild(f);
+  onKey = e => { if (e.key === 'Escape') cerrar(); else if (e.key === 'ArrowRight') { idx++; pintar(); ciclo(); } else if (e.key === 'ArrowLeft') { idx--; pintar(); ciclo(); } else if (e.key === ' ') { e.preventDefault(); pausa = !pausa; const b = document.getElementById('sala-pausa'); if (b) b.textContent = pausa ? '▶' : '⏸'; } };
+  document.addEventListener('keydown', onKey);
+  try { if (f.requestFullscreen) f.requestFullscreen().catch(() => {}); } catch (_) {} try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { wl = w; }).catch(() => {}); } catch (_) {}
+  pintar(); ciclo(); refrescar(); tRef = setInterval(refrescar, 5 * 60e3);
+}
+window.aresSala = { abrir: abrir, cerrar: cerrar, estado: () => ({ abierta: !!f, idx: idx, pausa: pausa, seg: seg, diapositivas: diapo.map(x => x[1]) }) };
+})();
+</script>
+<!-- ===== FIN BLOQUE SALA ===== -->
 
 <!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
