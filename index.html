@@ -326,7 +326,7 @@ let mapTactico, mapRadar, radarCargado = false, modoSeleccionMapa = null;
 // ==========================================
 // SISTEMA DE AUTENTICACIÓN Y SESIÓN
 // ==========================================
-const COP_API_URL = "https://script.google.com/macros/s/AKfycbyjar3iDGsiQCkJmsSD-Vh55TjsjmxLLzNvQuzfo5sJC2l1G5LrK17py_5kDH41CUhkEw/exec";
+const COP_API_URL = "https://script.google.com/macros/s/AKfycbyX1gbHC0RwmjI1fwd1fef_-W6LR8ZvIWPDrHpjwJWs15ClySzGJ7bHdc71nLXU1bBWfw/exec";
 
 
 ;
@@ -8832,6 +8832,173 @@ const BIB = [
 })();
 </script>
 <!-- ===== FIN BLOQUE BIBLIOTECA ===== -->
+<!-- ===== INICIO BLOQUE PLANEAMIENTO ===== -->
+<script>
+/* A.R.E.S.: Planeamiento de despliegue (EJERCICIO). Calculo ORIENTATIVO de un puente aereo, esquema de orden de operaciones, cronograma por fases y lista de verificacion legal.
+   No usa internet ni IA: todo se calcula en el navegador con los datos que se cargan. Distancias en linea recta (con un factor de ruta editable). No reemplaza al Estado Mayor ni al asesoramiento legal.
+   Se abre desde Mariscal (boton «Planeamiento» o escribiendole un pedido de movilizacion) y con aresPlaneamiento.abrir(). */
+(function () {
+'use strict';
+const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt !== undefined && txt !== null) e.textContent = txt; return e; };
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const num = (v, d, mn, mx) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? Math.min(mx, Math.max(mn, n)) : d; };
+const LUG = [   // coordenadas de referencia de aerodromos o ciudades (aprox.)
+  ['sare', 'Resistencia (SARE)', -27.45, -59.05], ['saez', 'Ezeiza (SAEZ)', -34.82, -58.54], ['sadp', 'El Palomar (SADP)', -34.61, -58.60], ['saco', 'Córdoba (SACO)', -31.32, -64.21],
+  ['mdpy', 'Asunción', -25.24, -57.52], ['brasilia', 'Brasilia', -15.87, -47.92], ['manaus', 'Manaos', -3.04, -60.05], ['natal', 'Natal (Brasil)', -5.91, -35.25], ['lima', 'Lima', -12.02, -77.11], ['bogota', 'Bogotá', 4.70, -74.14],
+  ['panama', 'Panamá (Tocumen)', 9.07, -79.38], ['mslp', 'San Salvador (El Salvador)', 13.44, -89.06], ['mtpp', 'Puerto Príncipe (Haití)', 18.58, -72.29], ['mdsd', 'Santo Domingo (R. Dominicana)', 18.43, -69.67], ['otro', 'Otro (cargar coordenadas)', 0, 0]
+];
+const AV = [   // referencias genericas y EDITABLES: capacidad en personas, carga util en toneladas, velocidad km/h, alcance km, tiempo en tierra por escala/rotacion en horas
+  { id: 'c130', n: 'Transporte táctico mediano (tipo C-130H)', pax: 90, t: 19, v: 540, a: 3800, esc: 2.5, nota: 'Valores de la ficha de la Biblioteca (aproximados).' },
+  { id: 'jet', n: 'Jet de pasajeros mediano (tipo B737)', pax: 130, t: 3, v: 830, a: 5000, esc: 1.5, nota: 'La carga va solo en bodega.' },
+  { id: 'lig', n: 'Transporte liviano (tipo CASA 212 / Twin Otter)', pax: 19, t: 2, v: 300, a: 1500, esc: 1, nota: 'Sirve para pistas cortas.' },
+  { id: 'otro', n: 'Personalizada (complete los datos)', pax: 50, t: 8, v: 500, a: 2500, esc: 2, nota: 'Use los datos reales de su aeronave.' }
+];
+const LEGAL = [
+  'Autorización del Congreso para la salida de fuerzas nacionales del territorio (Constitución Nacional, art. 75 inc. 28; Ley 25.880). Verificar el trámite vigente y los plazos.',
+  'Marco de la misión: mandato de un organismo internacional o invitación formal del Estado receptor, y acuerdo sobre el estatuto de las fuerzas (inmunidades, jurisdicción, sanidad).',
+  'Intervención de Cancillería y del Estado Mayor Conjunto: coordinación política, objetivos, duración y condiciones de repliegue.',
+  'Permisos diplomáticos de sobrevuelo y aterrizaje de todos los países de tránsito, con fechas y matrículas.',
+  'Reglas de empeñamiento aprobadas y difundidas; cadena de mando y subordinación definidas.',
+  'Plan de vuelo, NOTAM y coordinación con los servicios de tránsito aéreo y de aeródromos de escala y destino.',
+  'Sanidad: certificados y vacunas exigidas, evacuación aeromédica y hospital de referencia.',
+  'Seguros, haberes y régimen del personal desplegado.',
+  'Seguridad de la información y de las comunicaciones: clasificación, medios cifrados, protección de datos del personal.',
+  'Protección de la fuerza en tránsito y en destino; plan de contingencia y de repliegue de emergencia.'
+];
+const H = (a, b, c, d) => { const R = 6371, r = x => x * Math.PI / 180, dl = r(c - a), dg = r(d - b), h = Math.sin(dl / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const f0 = n => Math.round(n).toLocaleString('es-AR'), f1 = n => (Math.round(n * 10) / 10).toLocaleString('es-AR');
+const hh = h => { const t = Math.round(h * 60), d = Math.floor(t / 1440), r = t % 1440, H2 = Math.floor(r / 60), m = r % 60; return (d ? d + ' d ' : '') + H2 + ' h' + (m ? ' ' + m + ' min' : ''); };
+const lug = id => LUG.filter(l => l[0] === id)[0] || LUG[0];
+
+/* ---------- Calculo (puro: se puede probar sin pantalla) ---------- */
+function calcular(p) {
+  const o = { ok: false, adv: [] };
+  p = p || {}; const pax = Math.round(num(p.pax, 0, 0, 20000)), cargaT = num(p.cargaT, 0, 0, 5000), dias = num(p.dias, 0, 0, 365), kgPD = num(p.kgPD, 15, 0, 100), pesoP = num(p.pesoPers, 0.1, 0.05, 0.3);
+  const nAv = Math.round(num(p.nAv, 1, 1, 50)), fRuta = num(p.fRuta, 1.1, 1, 1.5), reserva = num(p.reserva, 0.8, 0.5, 0.95), prepH = num(p.prepH, 24, 0, 720), autD = num(p.autD, 0, 0, 365), recH = num(p.recH, 24, 0, 720);
+  const av = p.av || AV[0], A = { pax: num(av.pax, 1, 1, 1000), t: num(av.t, 0.1, 0.1, 200), v: num(av.v, 100, 100, 1200), a: num(av.a, 100, 100, 20000), esc: num(av.esc, 1, 0, 24) };
+  const org = p.orig || { lat: 0, lon: 0 }, des = p.dest || { lat: 0, lon: 0 };
+  if (pax + cargaT <= 0) { o.error = 'Cargue al menos personal o carga.'; return o; }
+  [org.lat, org.lon, des.lat, des.lon].forEach(x => { if (x === '' || x === null || x === undefined || !isFinite(Number(x))) o.error = 'Revise las coordenadas de origen y destino.'; }); if (o.error) return o;
+  const directa = H(Number(org.lat), Number(org.lon), Number(des.lat), Number(des.lon)); if (directa < 5) { o.error = 'El origen y el destino son el mismo lugar.'; return o; }
+  const d = directa * fRuta, tramos = Math.max(1, Math.ceil(d / (A.a * reserva))), tr = d / tramos, sust = pax * dias * kgPD / 1000, peso = pax * pesoP + cargaT + sust;
+  const red = Math.min(1, Math.max(0, (tr / A.a - 0.5) / 0.5)) * 0.4, payload = A.t * (1 - red);
+  const porPax = Math.ceil(pax / A.pax), porPeso = Math.ceil(peso / payload), vuelos = Math.max(porPax, porPeso, 1);
+  const ida = d / A.v + 0.5 * tramos + (tramos - 1) * A.esc, ciclo = 2 * ida + 2 * A.esc, olas = Math.ceil(vuelos / nAv), usados = Math.min(nAv, vuelos);
+  const primera = prepH + ida, ultima = prepH + (olas - 1) * ciclo + ida;
+  Object.assign(o, { ok: true, pax, cargaT, dias, kgPD, pesoP, sust, peso, directa, d, fRuta, tramos, tr, escalas: tramos - 1, red, payload, porPax, porPeso, vuelos, limita: porPax >= porPeso ? 'personal (asientos)' : 'peso (carga útil)', nAv, usados, olas, ida, ciclo, prepH, primera, ultima, autD, recH, A, av, org, des, reserva });
+  if (tramos > 1) o.adv.push('La distancia supera el ' + Math.round(reserva * 100) + ' % del alcance: hacen falta ' + (tramos - 1) + ' escala(s) de reabastecimiento. Las escalas hay que definirlas y coordinarlas.');
+  if (red > 0) o.adv.push('A esta distancia por tramo la carga útil baja alrededor de un ' + Math.round(red * 100) + ' % (estimación lineal simple).');
+  if (olas > 3) o.adv.push('El puente aéreo requiere ' + olas + ' rotaciones: considere más aeronaves o dividir en fases.');
+  if (porPeso > porPax * 2 && porPeso > 3) o.adv.push('La carga pesa mucho más que el personal: evalúe transporte marítimo o terrestre para parte del material.');
+  o.adv.push('Cálculo orientativo: distancia en línea recta con factor de ruta ' + f1(fRuta) + '; no considera clima, viento, restricciones de pista ni disponibilidad real de aeronaves.');
+  return o;
+}
+function armar(r, meta) {   // -> secciones [{t, p:[parrafos], cols, filas}]
+  const S = [], dn = meta.destN, on = meta.origN, ej = meta.nombre || 'Ejercicio de despliegue';
+  S.push({ t: '1. Datos y supuestos', filas: [['Ejercicio', ej], ['Origen → destino', on + ' → ' + dn], ['Distancia en línea recta', f0(r.directa) + ' km'], ['Distancia estimada de ruta (×' + f1(r.fRuta) + ')', f0(r.d) + ' km'],
+    ['Personal', f0(r.pax) + ' personas'], ['Carga', f1(r.cargaT) + ' t'], ['Sostenimiento', f1(r.sust) + ' t (' + f0(r.pax) + ' personas × ' + f0(r.dias) + ' días × ' + f0(r.kgPD) + ' kg)'], ['Peso total a mover', f1(r.peso) + ' t (incluye ' + f0(r.pesoP * 1000) + ' kg por persona con su equipo)'],
+    ['Aeronave de referencia', r.av.n || 'Personalizada'], ['Aeronaves disponibles', f0(r.nAv)]], cols: ['Dato', 'Valor'] });
+  S.push({ t: '2. Estimación de transporte aéreo', filas: [['Salidas necesarias', f0(r.vuelos) + ' (limita: ' + r.limita + ')'], ['Por personal / por peso', f0(r.porPax) + ' / ' + f0(r.porPeso)], ['Aeronaves usadas', f0(r.usados) + ' de ' + f0(r.nAv)], ['Rotaciones (olas)', f0(r.olas)],
+    ['Tramos y escalas', r.tramos + ' tramo(s), ' + r.escalas + ' escala(s)'], ['Carga útil por salida', f1(r.payload) + ' t'], ['Tiempo de ida (un vuelo)', hh(r.ida)], ['Ciclo completo ida y vuelta', hh(r.ciclo)], ['Primera llegada a destino', 'H+' + hh(r.primera)], ['Última llegada a destino', 'H+' + hh(r.ultima)]], cols: ['Concepto', 'Estimación'], notas: r.adv });
+  const finPuente = r.ultima, rep = r.ultima + r.recH + r.dias * 24;
+  S.push({ t: '3. Cronograma por fases (H = orden de ejecución, ya autorizada)', cols: ['Fase', 'Inicio', 'Duración', 'Observación'], filas: [
+    ['0. Decisión y autorización', 'H−' + f0(r.autD) + ' d', f0(r.autD) + ' d (a definir)', 'Trámite político y legal. No se puede calcular desde aquí.'],
+    ['1. Alistamiento y carga', 'H+0', hh(r.prepH), 'Preparación del personal, estiba y documentación.'],
+    ['2. Puente aéreo', 'H+' + hh(r.prepH), hh(r.ultima - r.prepH), f0(r.vuelos) + ' salida(s) en ' + f0(r.olas) + ' rotación(es).'],
+    ['3. Recepción e instalación', 'H+' + hh(r.primera), hh(r.recH), 'Se superpone con el puente aéreo; plazo editable.'],
+    ['4. Sostenimiento en destino', 'H+' + hh(finPuente), f0(r.dias) + ' d', 'Según los días de sostenimiento cargados.'],
+    ['5. Repliegue', 'H+' + hh(finPuente + r.dias * 24), hh(r.ultima - r.prepH), 'Se estima igual al puente aéreo de ida.']] });
+  S.push({ t: '4. Esquema de orden de operaciones (completar)', p: [
+    '1. SITUACIÓN. a) Amenazas y condiciones del área: [completar]. b) Fuerzas propias y de apoyo: [completar]. c) Fuerzas agregadas o aliadas: [completar]. d) Marco legal: pendiente de autorización (ver lista de verificación).',
+    '2. MISIÓN. El [unidad/comando] proyecta ' + f0(r.pax) + ' efectivos y ' + f1(r.cargaT) + ' t de material desde ' + on + ' hasta ' + dn + ', mediante puente aéreo, a partir de H, para [propósito: completar].',
+    '3. EJECUCIÓN. a) Concepto: alistamiento y carga (' + hh(r.prepH) + '), puente aéreo con ' + f0(r.usados) + ' aeronave(s) en ' + f0(r.olas) + ' rotación(es)' + (r.escalas ? ' con ' + r.escalas + ' escala(s)' : ' sin escalas') + ', recepción e instalación en destino y sostenimiento por ' + f0(r.dias) + ' días. b) Tareas a unidades subordinadas: [completar]. c) Instrucciones de coordinación: horarios de H, puntos de reunión, escalas y alternativas: [completar].',
+    '4. APOYO LOGÍSTICO. Sostenimiento estimado en ' + f1(r.sust) + ' t. Reabastecimiento de aeronaves en escalas y destino: [completar]. Sanidad, alimentación, agua y alojamiento en destino: [completar]. Mantenimiento de aeronaves: [completar].',
+    '5. MANDO Y COMUNICACIONES. Puesto de comando, enlaces con el comando superior y con el destino, frecuencias y medios cifrados: [completar]. Medidas de seguridad de la información: [completar].'] });
+  S.push({ t: '5. Lista de verificación legal y de coordinación', p: LEGAL.map(x => '☐ ' + x), notas: ['Orientación general para un ejercicio de planeamiento. No es asesoramiento legal: debe verificarla personal competente.'] });
+  return S;
+}
+/* ---------- Pedido en lenguaje natural (lo usa Mariscal) ---------- */
+function esPedido(t) { const n = norm(t); return /\b(moviliz\w*|despl[ie]g\w*|desplaz\w*|proyect\w*|traslad\w*|puente aereo|envi\w*|llev\w*|transport\w*)\b/.test(n) && /\b(tropas?|efectivos?|soldados?|hombres|personal|militares|contingente|unidad(es)?|material|carga|aeronaves?|aviones?)\b/.test(n); }
+function desdeTexto(t) {
+  const n = norm(t), pre = { orig: 'sare', dest: 'mtpp' }; let m = /(\d{1,3}(?: \d{3})+|\d+)\s*(mil\b)?\s*(?:\w+\s){0,2}?(tropas|efectivos|soldados|hombres|personas|militares|integrantes|hombres)/.exec(n);
+  if (!m) m = /(?:de|con|unos|unas)\s+(\d{1,3}(?: \d{3})+|\d+)\s*(mil\b)?/.exec(n);
+  if (m) { let v = parseInt(String(m[1]).replace(/\s/g, ''), 10); if (m[2]) v *= 1000; if (isFinite(v) && v > 0 && v <= 20000) pre.pax = v; }
+  const t2 = [['haiti', 'mtpp'], ['puerto principe', 'mtpp'], ['el salvador', 'mslp'], ['san salvador', 'mslp'], ['panama', 'panama'], ['brasilia', 'brasilia'], ['santo domingo', 'mdsd'], ['dominicana', 'mdsd'], ['bogota', 'bogota'], ['colombia', 'bogota'], ['lima', 'lima'], ['peru', 'lima'], ['manaos', 'manaus'], ['manaus', 'manaus'], ['paraguay', 'mdpy'], ['asuncion', 'mdpy']];
+  for (let i = 0; i < t2.length; i++) if (n.indexOf(t2[i][0]) >= 0) { pre.dest = t2[i][1]; break; }
+  return pre;
+}
+/* ---------- PDF ---------- */
+const latin = s => String(s === null || s === undefined ? '' : s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/☐/g, '[ ]').replace(/→/g, '->').replace(/×/g, 'x').replace(/[^\u0000-ÿ]/g, '?');
+function pdf(S, meta) {
+  if (!(window.jspdf && window.jspdf.jsPDF)) return alert('No se cargó el generador de PDF. Revise la conexión y recargue.');
+  let t = null, quien = 'N/A'; try { t = window.ARES_TEATRO || ARES_TEATRO; } catch (_) {} try { quien = sesionActiva.nombre || sesionActiva.email || 'N/A'; } catch (_) {}
+  const doc = new window.jspdf.jsPDF(), tn = t ? t.nombre : 'Teatro'; let y = 16;
+  const salto = h => { if (y + h > 275) { doc.addPage(); y = 16; } };
+  doc.setFontSize(15); doc.setTextColor(30, 41, 59); doc.text('A.R.E.S. C4I - PLANEAMIENTO DE DESPLIEGUE', 14, y); y += 6;
+  doc.setFontSize(9); doc.setTextColor(180, 83, 9); doc.text('EJERCICIO / ESTIMACION ORIENTATIVA - NO ES UN PLAN OPERATIVO NI REEMPLAZA AL ESTADO MAYOR', 14, y); y += 5;
+  doc.setTextColor(71, 85, 105); doc.text(latin('Teatro: ' + tn + '   |   Emision: ' + new Date().toLocaleString('es-AR') + '   |   Elaboro: ' + quien), 14, y, { maxWidth: 182 }); y += 8;
+  S.forEach(s => {
+    salto(22); doc.setFontSize(11.5); doc.setTextColor(41, 128, 185); doc.text(latin(s.t), 14, y); y += 2;
+    if (s.cols && s.filas) { doc.autoTable({ startY: y, head: [s.cols.map(latin)], body: s.filas.map(f => f.map(latin)), styles: { fontSize: 8.5 }, headStyles: { fillColor: [41, 128, 185] }, margin: { left: 14, right: 14 } }); y = doc.lastAutoTable.finalY + 4; }
+    (s.p || []).forEach(x => { doc.setFontSize(9); doc.setTextColor(30, 41, 59); doc.splitTextToSize(latin(x), 180).forEach(l => { salto(5); doc.text(l, 14, y + 4); y += 4.4; }); y += 1.5; });
+    (s.notas || []).forEach(x => { doc.setFontSize(8.5); doc.setTextColor(120, 53, 15); doc.splitTextToSize(latin('Nota: ' + x), 180).forEach(l => { salto(5); doc.text(l, 14, y + 4); y += 4; }); });
+    y += 6;
+  });
+  const n = doc.internal.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139); doc.text('Estimacion generada por A.R.E.S. C4I con datos cargados por el usuario. A verificar por personal competente (planeamiento, logistica y asesoria legal).', 14, 285, { maxWidth: 182 }); doc.text(latin('A.R.E.S. C4I - ' + tn + ' - pagina ' + i + ' de ' + n), 14, 292); }
+  doc.save('Planeamiento_despliegue_' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+/* ---------- Ventana ---------- */
+let ventana = null;
+function abrir(pre) {
+  pre = pre || {}; if (ventana) { ventana.remove(); ventana = null; }
+  try { if (!(sesionActiva && sesionActiva.autenticado) || sesionActiva.invitado) return; } catch (_) { return; }
+  const f = el('div', 'position:fixed;inset:0;z-index:2147483200;background:rgba(2,6,23,.85);display:flex;align-items:center;justify-content:center;padding:8px'); f.id = 'plan-ventana'; ventana = f;
+  const c = el('div', 'background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:8px;width:min(820px,100%);max-height:96vh;overflow:auto;padding:12px 14px;font-family:sans-serif;font-size:13px'); f.appendChild(c);
+  const cab = el('div', 'display:flex;gap:8px;align-items:center'); cab.appendChild(el('b', 'flex:1;font-size:16px', '🛫 Planeamiento de despliegue'));
+  const x = el('button', 'background:none;border:0;color:#e2e8f0;font-size:20px;cursor:pointer', '✕'); x.type = 'button'; x.onclick = () => { f.remove(); ventana = null; }; cab.appendChild(x); c.appendChild(cab);
+  c.appendChild(el('div', 'background:#78350f;color:#fde68a;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:12px', 'EJERCICIO · ESTIMACIÓN ORIENTATIVA. Distancias en línea recta, sin clima ni restricciones reales. No reemplaza al Estado Mayor ni al asesoramiento legal.'));
+  const g = el('div', 'display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px'); c.appendChild(g);
+  const IN = {}, estiloI = 'width:100%;box-sizing:border-box;padding:5px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff;font-size:13px';
+  const campo = (id, tit, nodo) => { const l = el('label', 'display:block'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:2px', tit)); nodo.style.cssText += ';' + estiloI; nodo.id = 'pl-' + id; IN[id] = nodo; l.appendChild(nodo); g.appendChild(l); return nodo; };
+  const inp = (id, tit, val, tipo) => { const i = el('input'); i.type = tipo || 'text'; i.value = val; if (tipo === 'number') { i.step = 'any'; i.min = '0'; } return campo(id, tit, i); };
+  const sel = (id, tit, lista, val) => { const s = el('select'); lista.forEach(l => { const o = el('option', '', l[1] || l.n); o.value = l[0] || l.id; s.appendChild(o); }); s.value = val; return campo(id, tit, s); };
+  inp('nombre', 'Nombre del ejercicio', pre.nombre || 'Ejercicio de despliegue');
+  inp('pax', 'Personal (personas)', pre.pax || 300, 'number'); inp('carga', 'Carga (toneladas)', pre.cargaT !== undefined ? pre.cargaT : 40, 'number'); inp('dias', 'Días de sostenimiento', pre.dias !== undefined ? pre.dias : 30, 'number');
+  sel('orig', 'Origen', LUG, pre.orig || 'sare'); inp('olat', 'Origen: latitud (si es «Otro»)', '', 'number'); inp('olon', 'Origen: longitud', '', 'number');
+  sel('dest', 'Destino', LUG, pre.dest || 'mtpp'); inp('dlat', 'Destino: latitud (si es «Otro»)', '', 'number'); inp('dlon', 'Destino: longitud', '', 'number');
+  sel('av', 'Aeronave de referencia', AV.map(a => [a.id, a.n]), 'c130'); inp('nav', 'Aeronaves disponibles', pre.nAv || 4, 'number');
+  const det = el('details', 'margin:8px 0'); det.appendChild(el('summary', 'cursor:pointer;color:#7dd3fc', 'Parámetros y supuestos (editables)')); const g2 = el('div', 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:6px'); det.appendChild(g2); c.appendChild(det);
+  const campo2 = (id, tit, val) => { const l = el('label', 'display:block'); l.appendChild(el('div', 'font-size:11px;color:#94a3b8;margin-bottom:2px', tit)); const i = el('input', estiloI); i.type = 'number'; i.step = 'any'; i.value = val; i.id = 'pl-' + id; IN[id] = i; l.appendChild(i); g2.appendChild(l); };
+  campo2('apax', 'Aeronave: personas', 90); campo2('at', 'Aeronave: carga útil (t)', 19); campo2('av2', 'Aeronave: velocidad (km/h)', 540); campo2('aa', 'Aeronave: alcance (km)', 3800); campo2('aesc', 'Tiempo en tierra por escala (h)', 2.5);
+  campo2('ruta', 'Factor de ruta (1,0–1,5)', 1.1); campo2('res', 'Reserva de alcance (0,5–0,95)', 0.8); campo2('kg', 'Sostenimiento (kg/persona/día)', 15); campo2('pp', 'Peso por persona con equipo (t)', 0.1); campo2('prep', 'Alistamiento y carga (h)', 24); campo2('rec', 'Recepción en destino (h)', 24); campo2('aut', 'Plazo de autorización (días)', 5);
+  const cargarAv = () => { const a = AV.filter(x => x.id === IN.av.value)[0]; if (a && a.id !== 'otro') { IN.apax.value = a.pax; IN.at.value = a.t; IN.av2.value = a.v; IN.aa.value = a.a; IN.aesc.value = a.esc; } };
+  IN.av.addEventListener('change', () => { cargarAv(); calc(); });
+  const pie = el('div', 'display:flex;gap:6px;flex-wrap:wrap;margin:8px 0'); const bt = (t, col, fn, id) => { const b = el('button', 'padding:6px 12px;border-radius:5px;border:1px solid #475569;background:' + col + ';color:#fff;cursor:pointer;font-size:13px', t); b.type = 'button'; if (id) b.id = id; b.onclick = fn; pie.appendChild(b); return b; };
+  const sal = el('div'); let ult = null;
+  function datos() {
+    const lo = IN.orig.value, ld = IN.dest.value, L1 = lug(lo), L2 = lug(ld);
+    return { pax: IN.pax.value, cargaT: IN.carga.value, dias: IN.dias.value, kgPD: IN.kg.value, pesoPers: IN.pp.value, fRuta: IN.ruta.value, reserva: IN.res.value, prepH: IN.prep.value, recH: IN.rec.value, autD: IN.aut.value, nAv: IN.nav.value,
+      orig: lo === 'otro' ? { lat: IN.olat.value, lon: IN.olon.value } : { lat: L1[2], lon: L1[3] }, dest: ld === 'otro' ? { lat: IN.dlat.value, lon: IN.dlon.value } : { lat: L2[2], lon: L2[3] },
+      av: { n: (AV.filter(x => x.id === IN.av.value)[0] || AV[0]).n, pax: IN.apax.value, t: IN.at.value, v: IN.av2.value, a: IN.aa.value, esc: IN.aesc.value }, meta: { nombre: IN.nombre.value.trim().slice(0, 80), origN: lo === 'otro' ? 'Origen (' + IN.olat.value + ', ' + IN.olon.value + ')' : L1[1], destN: ld === 'otro' ? 'Destino (' + IN.dlat.value + ', ' + IN.dlon.value + ')' : L2[1] } };
+  }
+  function calc() {
+    sal.textContent = ''; const d = datos(), r = calcular(d); if (!r.ok) { sal.appendChild(el('div', 'color:#fca5a5;margin:8px 0', '⚠ ' + r.error)); ult = null; return; }
+    const S = armar(r, d.meta); ult = { S, meta: d.meta, r };
+    const res = el('div', 'background:#14532d;border-radius:6px;padding:8px 10px;margin:8px 0;font-size:14px'); res.id = 'pl-resumen';
+    res.textContent = '✈ ' + f0(r.vuelos) + ' salida(s) · ' + f0(r.usados) + ' aeronave(s) · ' + f0(r.olas) + ' rotación(es) · ' + r.escalas + ' escala(s) · última llegada a H+' + hh(r.ultima) + ' · ' + f0(r.directa) + ' km en línea recta'; sal.appendChild(res);
+    S.forEach(s => { const b = el('div', 'border:1px solid #334155;border-radius:6px;padding:6px 10px;margin:8px 0'); b.appendChild(el('div', 'font-weight:bold;color:#38bdf8;margin-bottom:4px', s.t));
+      if (s.filas) { const t = el('table', 'width:100%;border-collapse:collapse;font-size:12px'); const th = el('tr'); s.cols.forEach(c2 => th.appendChild(el('th', 'text-align:left;color:#94a3b8;padding:2px 4px', c2))); t.appendChild(th); s.filas.forEach(fl => { const tr = el('tr', 'border-top:1px solid #1e293b'); fl.forEach(v => tr.appendChild(el('td', 'padding:3px 4px;vertical-align:top', v))); t.appendChild(tr); }); b.appendChild(t); }
+      (s.p || []).forEach(x => b.appendChild(el('div', 'margin:4px 0;font-size:12.5px;line-height:1.4', x))); (s.notas || []).forEach(x => b.appendChild(el('div', 'margin-top:4px;font-size:11.5px;color:#fcd34d', 'Nota: ' + x))); sal.appendChild(b); });
+  }
+  bt('Calcular plan', '#1d4ed8', calc, 'pl-calcular'); bt('📄 Descargar PDF', '#0e7490', () => { if (!ult) calc(); if (ult) pdf(ult.S, ult.meta); }, 'pl-pdf');
+  bt('📋 Copiar texto', '#334155', () => { if (!ult) calc(); if (!ult) return; const tx = ult.S.map(s => s.t + '\n' + (s.filas ? s.filas.map(fl => '- ' + fl.join(': ')).join('\n') + '\n' : '') + (s.p || []).join('\n')).join('\n\n'); try { navigator.clipboard.writeText(tx); } catch (_) { /* sin portapapeles */ } });
+  c.appendChild(pie); c.appendChild(sal); document.body.appendChild(f); cargarAv(); IN.nav.value = pre.nAv || 4; calc();
+}
+window.aresPlaneamiento = { abrir: abrir, calcular: calcular, armar: armar, esPedido: esPedido, desdeTexto: desdeTexto, lugares: () => LUG.map(l => l[0]), aeronaves: () => AV.slice() };
+})();
+</script>
+<!-- ===== FIN BLOQUE PLANEAMIENTO ===== -->
+
 <!-- ===== INICIO BLOQUE JEFE DE TEATRO: pegar antes de </body>; el ensamblador lo ubica solo ===== -->
 <script>
 /* A.R.E.S.: Gestión del Jefe de Teatro ("🏛 Mi unidad").
@@ -10485,7 +10652,9 @@ const BIB = [
     } catch (e) { m.remove(); msg('mariscal', 'No pude revisar el teatro: ' + e.message); } finally { ocupado = false; }
   }
   async function preguntar(t) {
-    t = String(t || '').trim(); if (!t || ocupado) return; ocupado = true; msg('yo', t); const m = msg('mariscal', 'Pensando…');
+    t = String(t || '').trim(); if (!t || ocupado) return;
+    if (window.aresPlaneamiento && window.aresPlaneamiento.esPedido(t)) { msg('yo', t); const d = msg('mariscal', '🛫 Es un pedido de planeamiento. Abro la planilla de despliegue con lo que entendí (personal, destino). Revise los datos y pulse «Calcular plan». Es una estimación de ejercicio: no reemplaza al Estado Mayor ni al asesoramiento legal.'); d.className += ' ma-plan'; window.aresPlaneamiento.abrir(window.aresPlaneamiento.desdeTexto(t)); return; }
+    ocupado = true; msg('yo', t); const m = msg('mariscal', 'Pensando…');
     try { const r = await api('MAR_CONSULTAR', { texto: t, historial: hist.slice(-6) }); m.remove(); ia = !!r.ia; modo(); if (r.status !== 'success') { msg('mariscal', r.message || 'No pude responder.'); return; }
       hist.push({ r: 'u', t: t.slice(0, 300) }, { r: 'm', t: String(r.respuesta || '').slice(0, 300) }); if (hist.length > 12) hist = hist.slice(-12);
       const rm = msg('mariscal', r.respuesta); decir(r.respuesta); const vistos = {}; (r.temas || []).forEach(k => { const ib = IR[k] && !vistos[IR[k][1]] && irBtn(k); if (ib) { vistos[IR[k][1]] = 1; ib.style.cssText += ';display:block;margin-top:5px'; rm.appendChild(ib); } }); (r.propuestas || []).forEach(tarjetaPropuesta); }
@@ -10533,7 +10702,7 @@ const BIB = [
     const cab = el('div', 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #334155;background:#1e293b;border-radius:8px 8px 0 0');
     const tt = el('div', 'flex:1'); tt.appendChild(el('b', 'font-size:14px', 'MARISCAL')); tt.firstChild.style.display = 'inline-block'; tt.firstChild.style.verticalAlign = 'middle'; tt.appendChild(el('div', 'font-size:10.5px;color:#94a3b8', 'Guía del Administrador · ')).appendChild(el('span', '', ia ? 'IA conectada' : 'Guía por reglas')).className = 'ma-modo';
     const so = btn('🔇', '#334155', () => { hablar = !hablar; lsSet('ares_mariscal_habla', hablar ? '1' : '0'); if (!hablar) callar(); pintarSonido(); }, 'Mariscal en silencio'); so.className = 'ma-sonido'; so.style.fontSize = '15px'; cab.append(emblema(34), tt, so, btn('✕', '#7f1d1d', cerrar, 'Cerrar')); panel.appendChild(cab);
-    const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado')); barra.appendChild(btn('📋 Checklist', '#0e7490', () => guia('GENERAL'), 'Puesta en marcha: qué está hecho y cuál es el siguiente paso')); barra.appendChild(btn('🧭 Guías', '#0e7490', elegirGuia, 'Armar un teatro paso a paso'));
+    const barra = el('div', 'padding:6px 8px;border-bottom:1px solid #334155'); barra.appendChild(btn('🔍 Revisar mi teatro', '#0e7490', revisar, 'Qué falta o está mal configurado')); barra.appendChild(btn('📋 Checklist', '#0e7490', () => guia('GENERAL'), 'Puesta en marcha: qué está hecho y cuál es el siguiente paso')); barra.appendChild(btn('🧭 Guías', '#0e7490', elegirGuia, 'Armar un teatro paso a paso')); barra.appendChild(btn('🛫 Planeamiento', '#7c3aed', () => { if (window.aresPlaneamiento) window.aresPlaneamiento.abrir(); }, 'Estimar un puente aéreo y armar el esquema de orden de operaciones (ejercicio)'));
     TEMAS.forEach(t => barra.appendChild(btn(t[0], '#334155', () => preguntar(t[1])))); panel.appendChild(barra);
     log = el('div', 'flex:1;overflow:auto;padding:6px 8px'); panel.appendChild(log);
     const pie = el('div', 'display:flex;gap:6px;padding:8px;border-top:1px solid #334155'); const inp = el('input', 'flex:1;padding:7px;border-radius:4px;border:1px solid #475569;background:#0b1220;color:#fff;font-size:12.5px'); inp.type = 'text'; inp.maxLength = 500; inp.placeholder = 'Pregunte a Mariscal…'; inp.className = 'ma-entrada';
